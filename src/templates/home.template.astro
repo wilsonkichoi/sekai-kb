@@ -1,0 +1,183 @@
+---
+import Layout from '../layouts/Layout.astro';
+import HeroSection from '../components/home/HeroSection.astro';
+import ReaderDoors from '../components/home/ReaderDoors.astro';
+import CoverStory from '../components/home/CoverStory.astro';
+import RandomDiscovery from '../components/home/RandomDiscovery.astro';
+import FeatureCards from '../components/FeatureCards.astro';
+import CategoryGrid from '../components/CategoryGrid.astro';
+import HomeEnHalls from '../components/home/HomeEnHalls.astro';
+import RecentUpdates from '../components/home/RecentUpdates.astro';
+import ContributeSection from '../components/home/ContributeSection.astro';
+import { fetchRecentCommits } from '../lib/commits';
+import placeConfig from '../../place.config';
+
+const recentCommits = await fetchRecentCommits();
+const { features, home } = placeConfig;
+---
+
+<Layout title="Home">
+  <HeroSection />
+
+  <ReaderDoors />
+
+  <div id="cover-story">
+    <CoverStory />
+  </div>
+
+  <div id="random-discovery">
+    <RandomDiscovery />
+  </div>
+
+  <FeatureCards
+    sectionTitle={home.features.title}
+    cards={home.features.cards}
+  >
+    <div
+      class="mt-8 flex flex-wrap justify-center gap-4 px-4 max-[480px]:flex-col max-[480px]:items-center"
+    >
+      {
+        features.graph && (
+          <a
+            href="/graph"
+            class="inline-flex items-center gap-2 rounded-lg border-[1.5px] border-[rgba(45,80,22,0.2)] bg-[#f0f9ff] px-6 py-[0.7rem] text-[0.9rem] font-semibold text-[#1e3a5f] no-underline transition-all duration-[250ms] hover:-translate-y-px hover:border-[rgba(45,80,22,0.4)] hover:bg-[rgba(45,80,22,0.1)] hover:shadow-[0_2px_8px_rgba(45,80,22,0.15)]"
+          >
+            {home.features.cta.graph}
+          </a>
+        )
+      }
+      <a
+        href={`${placeConfig.links.repo}/tree/main/knowledge`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 rounded-lg border-[1.5px] border-[#d1d5db] bg-[#f8fafc] px-6 py-[0.7rem] text-[0.9rem] font-semibold text-[#374151] no-underline transition-all duration-[250ms] hover:-translate-y-px hover:border-[#9ca3af] hover:bg-[#f1f5f9] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+        >{home.features.cta.ssot}</a
+      >
+    </div>
+  </FeatureCards>
+
+  <section class="my-24">
+    <div class="mb-8 text-center">
+      <h2
+        class="text-center font-serif text-[2rem] font-light text-[#1f2937]"
+      >
+        {home.exhibitions.heading}
+      </h2>
+    </div>
+
+    <div
+      class="exhibition-halls mx-auto max-w-[var(--container-prose)] px-8 max-[768px]:px-6 max-[480px]:px-4"
+    >
+      <HomeEnHalls />
+    </div>
+
+    <div
+      id="categories"
+      class="mx-auto my-12 flex max-w-[var(--container-prose)] items-center px-8 max-[480px]:px-4"
+    >
+      <div
+        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,#d1d5db,transparent)]"
+      >
+      </div>
+      <span
+        class="whitespace-nowrap px-6 font-[var(--font-title)] text-[1.3rem] font-bold tracking-[0.05em] text-[#0e3a5c]"
+        >{home.exhibitions.divider}</span
+      >
+      <div
+        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,#d1d5db,transparent)]"
+      >
+      </div>
+    </div>
+
+    <CategoryGrid />
+  </section>
+
+  <RecentUpdates commits={recentCommits} />
+
+  <ContributeSection />
+</Layout>
+
+<style>
+  :global(.hall-divider) {
+    display: flex;
+    align-items: center;
+    margin: 4rem 0 2.5rem;
+  }
+  :global(.exhibition-hall:first-child .hall-divider) {
+    margin-top: 1rem;
+  }
+  :global(.hall-line) {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(45, 80, 22, 0.25),
+      transparent
+    );
+  }
+  :global(.hall-label) {
+    padding: 0 1.5rem;
+    font-family: var(--font-title, serif);
+    font-size: 1.15rem;
+    font-weight: 300;
+    color: #0e3a5c;
+    letter-spacing: 0.15em;
+    white-space: nowrap;
+  }
+  :global(.hall-body) {
+    line-height: 2.2;
+  }
+  :global(.hall-body p) {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 1.5rem;
+    text-align: justify;
+  }
+  :global(.hall-body a) {
+    color: #1f2937;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-weight: 700;
+  }
+  :global(.hall-body a.topic-pill) {
+    display: inline-block;
+    background: rgba(45, 80, 22, 0.08);
+    border: 1.5px solid rgba(45, 80, 22, 0.2);
+    border-radius: 6px;
+    padding: 0.15rem 0.6rem;
+    font-weight: 700;
+    color: #1e3a5f;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+  }
+  :global(.hall-body a.topic-pill:hover) {
+    background: rgba(45, 80, 22, 0.15);
+    border-color: rgba(45, 80, 22, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(45, 80, 22, 0.15);
+  }
+  :global(.hall-body a:hover) {
+    color: #1e3a5f;
+  }
+
+  @media (max-width: 768px) {
+    :global(.hall-label) {
+      font-size: 1rem;
+      padding: 0 1rem;
+    }
+  }
+  @media (max-width: 480px) {
+    :global(.hall-body p) {
+      font-size: 1rem;
+    }
+    :global(.hall-label) {
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+    }
+    :global(.hall-divider) {
+      margin: 3rem 0 2rem;
+    }
+  }
+</style>

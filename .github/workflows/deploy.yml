@@ -1,0 +1,109 @@
+name: Deploy to GitHub Pages
+
+# Genericity + build run on every PR and every push to main; deploy runs only on
+# push to main. This is the CI that drives every subsequent task's PR to green
+# (SPEC §Negative requirements) and the structural genericity gate (ADR 002).
+# The fork's deploy.yml is structural reference only — no OG/Playwright/i18n jobs
+# (the scaffold has no content pipeline yet; those arrive with the pages that need
+# them in later phases).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: read-only by default. Only the deploy job gets the Pages
+# write + OIDC scopes, so the genericity/build jobs — which execute PR-authored
+# code (npm ci postinstall, npm run build) — cannot touch Pages or mint tokens.
+permissions:
+  contents: read
+
+# One in-flight run per ref. On a PR, a new push cancels the superseded build
+# (save CI minutes). On main, cancel-in-progress is false so a rapid second push
+# never kills an in-flight production deploy; runs queue instead. The
+# github-pages environment gives the final deploy-race protection.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  genericity:
+    name: Genericity + English-only gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Check for place-specific strings in src/, scripts/, tests/
+        run: bash scripts/ci/check-genericity.sh
+      - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/
+        run: node scripts/ci/check-english-only.mjs
+
+  test:
+    name: Test
+    needs: genericity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci --force
+      - run: npm run test:ci
+      - run: npm run article-health -- --all --profile=ci-deploy
+
+  build:
+    name: Build
+    needs: [genericity, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      # --force: astro 6.4.8's @rolldown/binding-wasm32-wasi declares optional
+      # @emnapi/* sub-deps. npm 10.x's `npm ci` validates these across ALL
+      # platforms in the lockfile (even those skipped on the current OS). When the
+      # lock was generated on macOS, it records the macOS-resolved versions; CI
+      # (ubuntu) resolves a newer patch and rejects the lock. --force bypasses
+      # that cross-platform validation; the build still uses exact locked versions
+      # for all non-optional deps. Remove when npm ships the fix for nodejs/npm#7758.
+      - run: npm ci --force
+      - run: npm run build
+      # Only publish the artifact when we intend to deploy (push to main); PR
+      # builds verify the build compiles but produce nothing to deploy.
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Write scopes live here only (see top-level note): actions/deploy-pages needs
+    # id-token: write for OIDC and pages: write to publish.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

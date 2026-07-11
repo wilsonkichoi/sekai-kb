@@ -1,0 +1,9 @@
+# genericity-denylist.txt — place-specific terms forbidden in framework-owned
+# src/ and scripts/ (see scripts/ci/check-genericity.sh, ADR 002, SPEC
+# §Negative requirements). One term per line, case-insensitive, substring match.
+# Blank lines and lines starting with # are ignored. This file is itself excluded
+# from the scan (it necessarily contains the very terms it forbids).
+laguna
+lagunabeach
+taiwan
+twmd
