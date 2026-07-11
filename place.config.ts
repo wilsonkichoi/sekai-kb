@@ -2,11 +2,17 @@
  * place.config.ts — THE ingress for this instance's place identity.
  *
  * Everything place-specific (name, categories, map, feature toggles, SEO) lives
- * here. `src/` and `scripts/` stay generic and read from this file, so the Phase 5
- * framework cut ("sekai-kb") can strip this one file to re-place the whole site.
- * Init-time fields (place, categories, map) are written once by the `npm run init`
- * wizard; `features` and `languages` are runtime-toggleable. See SPEC.md
- * "place.config.ts" and .fable/STRATEGIC-DIRECTION.md §B.
+ * here. `src/` and `scripts/` stay generic and read from this file, so a single
+ * file re-places the whole site. Init-time fields (place, categories, map) are
+ * written once by the `npm run init` wizard; `features` and `languages` are
+ * runtime-toggleable.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * These are DEMO values for a FICTIONAL town, "Marisol Cove". The sekai-kb
+ * template ships them so the site builds and deploys out of the box; a fictional
+ * place means the template never owes real-place accuracy upkeep. Run
+ * `npm run init` (or the /adopt skill) to overwrite this file with your own place.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 export interface PlaceConfig {
@@ -46,8 +52,6 @@ export interface PlaceConfig {
    * handles feed the footer social row and SEO sameAs, and render ONLY when
    * `features.social` is true. Handles include the leading `@`; component
    * code strips it when building platform URLs.
-   * Added by task 1.1a (shell): §B's schema had no home for these; extending
-   * it was Wilson's call (diverges from STRATEGIC-DIRECTION §B, tracked on LB-3).
    */
   links: {
     repo: string;
@@ -129,10 +133,12 @@ export interface PlaceConfig {
 
 const config: PlaceConfig = {
   place: {
-    name: 'LagunaBeach',
+    // Single-token brand for the "{name}.{tld}" wordmark (renders "MarisolCove.com").
+    // Article prose refers to the town as "Marisol Cove".
+    name: 'MarisolCove',
     tagline:
-      'Open-source, AI-friendly knowledge base about Laguna Beach, California.',
-    domain: 'lagunabeach.md',
+      'Open-source, AI-friendly knowledge base for the fictional coastal town of Marisol Cove — the sekai-kb demo place.',
+    domain: 'sekai-kb.42init.com',
     locale: 'en',
     languages: ['en'],
   },
@@ -142,60 +148,42 @@ const config: PlaceConfig = {
       title: 'History',
       icon: '📜',
       description:
-        'Founding, indigenous peoples, artists colony, historical events',
-    },
-    {
-      slug: 'art-galleries',
-      title: 'Art & Galleries',
-      icon: '🎨',
-      description: 'Plein air painting, galleries, public art, art festivals',
-    },
-    {
-      slug: 'nature-marine-life',
-      title: 'Nature & Marine Life',
-      icon: '🌊',
-      description:
-        'Tide pools, coastal ecology, marine protected areas, wildlife',
-    },
-    {
-      slug: 'food',
-      title: 'Food',
-      icon: '🍽️',
-      description: 'Restaurants, cafes, food history, local specialties',
+        'Founding, the fishing era, the arts revival, and civic milestones',
     },
     {
       slug: 'beaches',
       title: 'Beaches',
       icon: '🏖️',
-      description: 'Individual beaches, access, conditions, surfing',
+      description: 'Coves, tide pools, access points, and swimming conditions',
+    },
+    {
+      slug: 'nature',
+      title: 'Nature',
+      icon: '🌊',
+      description:
+        'Kelp forests, coastal sage, marine life, and the preserve system',
     },
     {
       slug: 'trails',
       title: 'Trails',
       icon: '🥾',
-      description: 'Hiking, coastal walks, trail conditions, views',
+      description: 'Ridge hikes, bluff walks, and canyon routes above the cove',
     },
     {
-      slug: 'events-festivals',
-      title: 'Events & Festivals',
-      icon: '🎭',
-      description:
-        'Pageant of the Masters, Sawdust Art Festival, seasonal events',
-    },
-    {
-      slug: 'neighborhoods',
-      title: 'Neighborhoods',
-      icon: '🏘️',
-      description: 'Top of the World, Village, South Laguna, Canyon areas',
+      slug: 'food',
+      title: 'Food',
+      icon: '🍽️',
+      description: 'Cafes, seafood shacks, markets, and culinary landmarks',
     },
   ],
   map: {
-    center: [33.5427, -117.7854],
+    // Fictional central-coast location; markers in the demo articles cluster here.
+    center: [35.102, -120.658],
     zoom: 13,
-    // City extent (SW → NE corners), keeps panning within Laguna Beach.
+    // Cove extent (SW → NE corners), keeps panning within Marisol Cove.
     maxBounds: [
-      [33.48, -117.83],
-      [33.61, -117.72],
+      [35.05, -120.72],
+      [35.16, -120.58],
     ],
   },
   features: {
@@ -209,31 +197,31 @@ const config: PlaceConfig = {
     analytics: false,
   },
   links: {
-    repo: 'https://github.com/wilsonkichoi/lagunabeach-md',
-    email: 'hello@lagunabeach.md',
+    repo: 'https://github.com/wilsonkichoi/sekai-kb',
+    email: 'hello@sekai-kb.42init.com',
     social: {
-      twitter: '@lagunabeachmd',
-      threads: '@lagunabeachmd',
-      instagram: '@lagunabeachmd',
+      twitter: '@sekaikb',
+      threads: '@sekaikb',
+      instagram: '@sekaikb',
     },
   },
   seo: {
     defaultOgImage: '/og-default.png',
-    twitterHandle: '@lagunabeachmd',
+    twitterHandle: '@sekaikb',
   },
   home: {
     hero: {
       subtitle: 'Knowledge, curated.',
       description:
-        'An open-source, AI-friendly knowledge base covering every facet of this coastal city, from tide pools to art festivals.',
+        'An open-source, AI-friendly knowledge base covering every facet of this small coastal town, from tide pools to ridge trails.',
       highlight: 'Sourced. Verified. Always evolving.',
       cta: { explore: 'Explore Topics', github: 'Star on GitHub' },
     },
     stats: [
-      { icon: '🏝️', number: '7 mi', label: 'of coastline' },
-      { icon: '🌿', number: '30+', label: 'coves & beaches' },
-      { icon: '🎨', number: '100+', label: 'galleries' },
-      { icon: '📚', number: '8', label: 'knowledge domains' },
+      { icon: '🏖️', number: '4 mi', label: 'of shoreline' },
+      { icon: '🌿', number: '12', label: 'coves & beaches' },
+      { icon: '🥾', number: '20+', label: 'miles of trails' },
+      { icon: '📚', number: '5', label: 'knowledge domains' },
     ],
     doors: [
       {
@@ -267,42 +255,42 @@ const config: PlaceConfig = {
     ],
     coverStory: {
       heading: 'The Story So Far',
-      lead: 'Seven miles of coast. Thousands of years of history. One knowledge base to hold it all.',
+      lead: 'Four miles of coast. A century and a half of small-town history. One knowledge base to hold it all.',
       quotes: [
         {
-          era: 'Pre-contact',
+          era: 'Early',
           quote:
-            'The Acjachemen and Tongva peoples lived along these bluffs for millennia, shaping the land before any map named it.',
-          cite: 'Archaeological record, Crystal Cove',
+            'Coastal peoples fished these tide pools and gathered in the sheltered cove for generations before any survey drew a line around it.',
+          cite: 'Regional coastal survey, demo record',
         },
         {
-          era: '1904',
+          era: '1861',
           quote:
-            'Norman St. Claire built a shack on the bluffs and started painting. Within a decade, a colony of plein air artists followed.',
-          cite: 'First Art Colony, historical record',
+            'A handful of fishing families built the first wharf at the north end of the cove, and Marisol had a name on the map.',
+          cite: 'Town founding, demo record',
         },
         {
-          era: '1927',
+          era: '1912',
           quote:
-            'The town incorporated specifically to block oil drilling. Conservation was the founding act, not an afterthought.',
-          cite: 'City Charter, 1927',
+            'When the sardine runs thinned, painters and boatwrights stayed on. The town leaned into craft instead of catch.',
+          cite: 'Local history, demo record',
         },
         {
-          era: '1933',
+          era: '1948',
           quote:
-            'The Festival of Arts opened in a eucalyptus grove. Ninety years later, it still runs every summer.',
-          cite: 'Festival of Arts archives',
+            'The Harborlight Cafe opened on the pier and never closed. It still pours the first coffee before sunrise.',
+          cite: 'Harborlight Cafe, demo record',
         },
         {
-          era: '1993',
+          era: '1979',
           quote:
-            'The firestorm destroyed 441 homes in a single afternoon. The city rebuilt without losing its character.',
-          cite: 'Fire Department records',
+            'The town voted to protect the kelp forest offshore, one of the first community-run marine preserves on this stretch of coast.',
+          cite: 'Preserve charter, demo record',
         },
         {
           era: 'Today',
           quote:
-            'An artist colony that became a city, still governed by the impulse to protect what makes it different.',
+            'A working cove that became a quiet town, still shaped by the impulse to keep what makes it different.',
           cite: 'Contemporary observation',
         },
         {
@@ -313,7 +301,7 @@ const config: PlaceConfig = {
         },
       ],
       closing: [
-        'Every article in this knowledge base traces back to primary sources.',
+        'Every article in this knowledge base traces back to sources.',
         'The goal is not promotion. The goal is the most complete, accurate account of this place that exists anywhere.',
       ],
       aboutLinkText: 'Read the full story',
@@ -322,7 +310,7 @@ const config: PlaceConfig = {
       button: 'Roll the dice',
       subtitle: 'Random deep-dive article',
       description:
-        'Every article has footnotes. Some have dozens. Hit the button and land somewhere you did not expect.',
+        'Every article has footnotes. Hit the button and land somewhere you did not expect.',
     },
     features: {
       title: 'What Makes This Different',
@@ -343,13 +331,13 @@ const config: PlaceConfig = {
           icon: '🔍',
           title: 'Source-Traced',
           description:
-            'Footnotes cite primary sources. Claims link to evidence. Verification dates are visible.',
+            'Footnotes cite sources. Claims link to evidence. Verification dates are visible.',
         },
         {
           icon: '📚',
           title: 'Comprehensive',
           description:
-            'Eight domains covering the full spectrum: history, nature, art, food, beaches, trails, events, neighborhoods.',
+            'Five domains covering the full spectrum: history, beaches, nature, trails, and food.',
         },
       ],
       cta: { graph: 'Explore the Knowledge Graph', ssot: 'View Raw Knowledge' },
@@ -362,18 +350,18 @@ const config: PlaceConfig = {
           label: 'I — The Coast',
           paragraphs: [
             {
-              text: 'Seven miles of coastline, compressed between the Pacific and the San Joaquin Hills. Over 30 coves and beaches, each with a different character. Thousand Steps rewards the descent with tidepools and sea caves. Victoria Beach hides a pirate tower built in 1926.',
+              text: 'Four miles of shoreline folded into a dozen coves, each with a different character. Lantern Cove rewards the descent with tide pools and a sea cave you can walk into at low tide.',
               pillHref: '/beaches',
               pillIcon: '🏖️',
               pillLabel: 'The beaches',
               categorySlug: 'beaches',
             },
             {
-              text: 'Below the tideline, kelp forests shelter garibaldi, sea hares, and octopus. The Marine Protected Area off the coast is one of the most studied in California. Tide pools at Crystal Cove and Shaw\'s Cove hold creatures most aquariums can\'t replicate.',
-              pillHref: '/nature-marine-life',
+              text: 'Below the tideline, a kelp forest shelters garibaldi, sea hares, and octopus. The community-run marine preserve offshore is one of the most closely watched on this coast.',
+              pillHref: '/nature',
               pillIcon: '🌊',
-              pillLabel: 'Nature & marine life',
-              categorySlug: 'nature-marine-life',
+              pillLabel: 'Nature',
+              categorySlug: 'nature',
             },
           ],
         },
@@ -381,18 +369,18 @@ const config: PlaceConfig = {
           label: 'II — The Story',
           paragraphs: [
             {
-              text: 'The Acjachemen people lived here for thousands of years. Then ranchers, then plein air painters who arrived in the 1900s and never left. The town incorporated in 1927 specifically to prevent oil drilling. The 1993 firestorm destroyed 441 homes in a single afternoon.',
+              text: 'Coastal peoples gathered at the cove long before the first wharf. Fishing families named the town in 1861; when the sardine runs thinned, boatwrights and painters stayed on and the town leaned into craft.',
               pillHref: '/history',
               pillIcon: '📜',
               pillLabel: 'History',
               categorySlug: 'history',
             },
             {
-              text: 'The painters stayed and multiplied. The Pageant of the Masters has recreated classical artworks with live actors since 1933. The Sawdust Art Festival fills a eucalyptus grove with working studios every summer. Over 100 galleries line the village streets.',
-              pillHref: '/art-galleries',
-              pillIcon: '🎨',
-              pillLabel: 'Art & Galleries',
-              categorySlug: 'art-galleries',
+              text: 'The Harborlight Cafe has poured coffee on the pier since 1948. The town is not fast-casual chains; it is the kind of place where the cook remembers your order and the bread is baked two doors down.',
+              pillHref: '/food',
+              pillIcon: '🍽️',
+              pillLabel: 'Food',
+              categorySlug: 'food',
             },
           ],
         },
@@ -400,37 +388,18 @@ const config: PlaceConfig = {
           label: 'III — The Land',
           paragraphs: [
             {
-              text: 'Behind the beach, 22,000 acres of protected wilderness. The Top of the World trail gives you the entire Orange County coast in a single glance. The wilderness park holds California gnatcatchers, bobcats, and the last coastal cactus scrub in the county.',
+              text: 'Behind the beach, the ridge climbs fast. The Summit Ridge Trail gives you the whole cove and the open Pacific in a single glance, and the canyon routes below it stay green well into summer.',
               pillHref: '/trails',
               pillIcon: '🥾',
               pillLabel: 'Trails',
               categorySlug: 'trails',
             },
             {
-              text: 'Canyon neighborhoods climb the hillsides in narrow winding roads. Top of the World feels like a mountain village. The Village downtown is walkable galleries and restaurants along PCH. South areas keep an older, quieter character.',
-              pillHref: '/neighborhoods',
-              pillIcon: '🏘️',
-              pillLabel: 'Neighborhoods',
-              categorySlug: 'neighborhoods',
-            },
-          ],
-        },
-        {
-          label: 'IV — The Life',
-          paragraphs: [
-            {
-              text: 'The Pageant of the Masters, Sawdust Art Festival, Festival of Arts, all running since the 1930s. First Thursdays bring the village alive monthly. The Fourth of July parade has been uninterrupted since 1966.',
-              pillHref: '/events-festivals',
-              pillIcon: '🎭',
-              pillLabel: 'Events & Festivals',
-              categorySlug: 'events-festivals',
-            },
-            {
-              text: 'The Cliff Restaurant has served the same ocean view since 1946. Taco Loco has been at the same corner since 1989. The food scene is not fast-casual chains, it is the kind of place where the owner remembers your order.',
-              pillHref: '/food',
-              pillIcon: '🍽️',
-              pillLabel: 'Food',
-              categorySlug: 'food',
+              text: 'Coastal sage scrub covers the slopes, home to gnatcatchers, bobcats, and the last stands of native cactus above the cove. Much of it falls inside the preserve the town voted to protect.',
+              pillHref: '/nature',
+              pillIcon: '🌊',
+              pillLabel: 'Nature',
+              categorySlug: 'nature',
             },
           ],
         },

@@ -1,8 +1,8 @@
 {
-  "name": "lagunabeach-md",
+  "name": "sekai-kb",
   "type": "module",
   "version": "0.0.0",
-  "description": "AI-native open knowledge base — sekai-kb instance #1.",
+  "description": "AI-native place knowledge base — the sekai-kb framework template.",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -32,7 +32,6 @@
     "english-only": "node scripts/ci/check-english-only.mjs",
     "article-health": "uv run python scripts/tools/article-health.py",
     "article-health:test": "uv run pytest tests/article_health",
-    "article-health:baseline": "uv run python scripts/tools/check-article-health-baseline.py",
     "article-health:json": "mkdir -p src/data && uv run python scripts/tools/article-health.py --all --output=json --profile=dashboard > src/data/article-health.json",
     "prebuild:dashboard": "npm run article-health:json || true; node scripts/core/build-dashboard-lite.mjs",
     "test": "node scripts/core/test-frontmatter.mjs",

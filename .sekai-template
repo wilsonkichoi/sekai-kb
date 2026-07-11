@@ -1,0 +1,13 @@
+sekai-kb template marker.
+
+While this file exists, the genericity + English-only gates run in TEMPLATE MODE:
+they scan the WHOLE repository, not just the code trees (src/, scripts/, tests/,
+workers/). The sekai-kb template ships zero real-place strings, so the whole tree —
+including knowledge/, place.config.ts, and docs/ — must stay free of denylisted
+place names and CJK codepoints.
+
+`npm run init` (the adoption wizard) deletes this file when you adopt the template.
+The gates then revert to INSTANCE MODE (code trees only), where knowledge/ and
+place.config.ts legitimately carry your place's identity.
+
+See scripts/ci/check-genericity.sh and scripts/ci/check-english-only.mjs.
