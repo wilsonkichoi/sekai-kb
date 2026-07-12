@@ -1,0 +1,110 @@
+# REWRITE-PIPELINE — Article Write/Rewrite
+
+> All articles (new or rewrite) follow one linear pipeline. Mode is determined
+> in Stage 0; Stages 1-5 are mode-agnostic. The editorial standard the pipeline
+> enforces lives in [ARTICLE-PLAYBOOK.md](ARTICLE-PLAYBOOK.md); this document is
+> the process contract the framework's writing skills execute.
+
+---
+
+## Stage 0: Perspective
+
+Determine scope before research begins.
+
+1. **Mode**: new article or rewrite of existing?
+2. **Angle**: what makes this topic relevant to this place specifically? What's
+   the local memory, cultural context, or geographic connection?
+3. **Existing material** (rewrite only): read the current `knowledge/` file,
+   extract what to keep vs. what to rework.
+4. **Editorial load**: read [ARTICLE-PLAYBOOK.md](ARTICLE-PLAYBOOK.md) in full.
+   It defines voice, structure, and the quality bar — especially §2 (five things
+   to find before you write).
+
+Output: mental model of what you're writing and why. No file written yet.
+
+---
+
+## Stage 1: Research
+
+Gather facts. Every claim must be sourceable.
+
+1. Search for relevant information (web, local files, prior knowledge base
+   articles).
+2. Cross-check any numbers, dates, or names against at least two sources.
+3. Note gaps: if a fact can't be verified, flag it rather than guessing.
+
+**Hard gate — no fabricated facts.** If `knowledge/` has no answer and research
+can't confirm it, write nothing for that claim. A missing fact is a smaller
+problem than an invented one.
+
+---
+
+## Stage 2: Draft
+
+Write the article per [ARTICLE-PLAYBOOK.md](ARTICLE-PLAYBOOK.md) standards.
+
+- Structure: frontmatter → opening paragraph → At a Glance → body → citations
+  (playbook §4).
+- Voice: a local friend, not a brochure and not an encyclopedia (playbook §6).
+- Length: match depth to topic (playbook §1). No padding; no artificial brevity.
+- Target: `knowledge/{Category}/{slug}.md`. Category folders come from
+  `place.config.ts`; the filename is the article's slug (lowercase).
+
+---
+
+## Stage 3: Fact-check
+
+Self-audit the draft against Stage 1 sources.
+
+1. Every named date, number, person, or place: verify against research notes.
+2. Any claim without a source: either source it or cut it.
+3. If web sources were used: confirm URLs are reachable.
+
+For anything beyond a quick self-audit (post-ship audits, contested claims), run
+the full methodology in [FACTCHECK-PIPELINE.md](FACTCHECK-PIPELINE.md).
+
+Machine assist for the prose side of this stage:
+
+```bash
+npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage-3
+```
+
+---
+
+## Stage 4: Quality-checklist gate
+
+Run the article through the quality gate in
+[ARTICLE-PLAYBOOK.md §7](ARTICLE-PLAYBOOK.md) — the five-finger test, the
+structure check, the plastic-language scan, and the automated verification:
+
+```bash
+npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage-4
+```
+
+Check:
+
+- Frontmatter complete and valid (`npm run test` validates all of `knowledge/`)
+- No orphan wikilinks or broken link targets
+- Word count appropriate for the topic's band
+- No playbook violations (voice, structure, sourcing)
+
+Fix any failures before proceeding. **Fail = don't commit.**
+
+---
+
+## Stage 5: Sync
+
+Run the sync to project the new/updated `knowledge/` file into the build:
+
+```bash
+npm run sync
+```
+
+Then verify the article renders:
+
+```bash
+npm run build
+```
+
+`src/content/` is a derived, gitignored projection of `knowledge/` — never edit
+it directly (the SSOT rule). Commit the `knowledge/` file. Done.
