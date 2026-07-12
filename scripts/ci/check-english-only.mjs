@@ -25,7 +25,13 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 // gitignored projections of knowledge/ (place-specific by nature) and are
 // skipped by the content/data dir-name rule below, matching check-genericity.sh.
 const SCAN_ROOTS = ['src', 'scripts', 'tests', 'workers'];
-const SKIP_DIRS = new Set(['node_modules', '__pycache__', '.git', 'content', 'data']);
+// Build/tool caches (.astro, dist, .venv) + the derived gitignored projections of
+// knowledge/ (content, data, kb) are skipped in both modes. .git is skipped so
+// template mode (whole-tree scan) never trips over pre-cut history.
+const SKIP_DIRS = new Set([
+  'node_modules', '__pycache__', '.git', '.astro', 'dist', '.venv',
+  'content', 'data', 'kb',
+]);
 const BINARY_EXT = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.svg',
   '.woff', '.woff2', '.ttf', '.otf', '.eot', '.pdf', '.zip', '.gz', '.pyc',
@@ -63,12 +69,21 @@ function walk(dir) {
   }
 }
 
+// Template mode (LB-26): the `.sekai-template` marker means this checkout is the
+// sekai-kb template, which ships English-only demo content — so the CJK gate runs
+// over the WHOLE tree, not just code trees. `npm run init` removes the marker on
+// adoption, reverting to the code trees only (src/, scripts/, tests/, workers/).
 const scanned = [];
-for (const r of SCAN_ROOTS) {
-  const abs = join(ROOT, r);
-  if (existsSync(abs)) {
-    scanned.push(r);
-    walk(abs);
+if (existsSync(join(ROOT, '.sekai-template'))) {
+  scanned.push('(whole tree — template mode)');
+  walk(ROOT);
+} else {
+  for (const r of SCAN_ROOTS) {
+    const abs = join(ROOT, r);
+    if (existsSync(abs)) {
+      scanned.push(r);
+      walk(abs);
+    }
   }
 }
 

@@ -17,13 +17,10 @@ export interface CategoryConfig {
 
 const COLOR_PALETTE: Record<string, { color: string; colorLight: string }> = {
   history: { color: '#92400e', colorLight: '#f59e0b20' },
-  'art-galleries': { color: '#be185d', colorLight: '#be185d20' },
-  'nature-marine-life': { color: '#0e7490', colorLight: '#0e749020' },
-  food: { color: '#ea580c', colorLight: '#ea580c20' },
   beaches: { color: '#0284c7', colorLight: '#0284c720' },
+  nature: { color: '#0e7490', colorLight: '#0e749020' },
   trails: { color: '#15803d', colorLight: '#15803d20' },
-  'events-festivals': { color: '#7c3aed', colorLight: '#7c3aed20' },
-  neighborhoods: { color: '#b45309', colorLight: '#b4530920' },
+  food: { color: '#ea580c', colorLight: '#ea580c20' },
 };
 
 const DEFAULT_COLOR = { color: '#475569', colorLight: '#47556920' };

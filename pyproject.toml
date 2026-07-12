@@ -1,7 +1,7 @@
 [project]
-name = "lagunabeach-md-tools"
+name = "sekai-kb-tools"
 version = "0.0.0"
-description = "Python tooling for the LagunaBeach.md knowledge base (article-health)."
+description = "Python tooling for a sekai-kb knowledge base (article-health)."
 requires-python = ">=3.12"
 dependencies = []
 

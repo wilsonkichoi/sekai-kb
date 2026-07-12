@@ -1,8 +1,12 @@
-# genericity-denylist.txt — place-specific terms forbidden in framework-owned
-# src/ and scripts/ (see scripts/ci/check-genericity.sh, ADR 002, SPEC
-# §Negative requirements). One term per line, case-insensitive, substring match.
-# Blank lines and lines starting with # are ignored. This file is itself excluded
-# from the scan (it necessarily contains the very terms it forbids).
+# genericity-denylist.txt — place-specific terms that must never appear in
+# framework-owned code (see scripts/ci/check-genericity.sh). One term per line,
+# case-insensitive, substring match. Blank lines and lines starting with # are
+# ignored. This file is itself excluded from the scan (it necessarily contains the
+# very terms it forbids).
+#
+# Scope depends on mode: instance mode scans src/, scripts/, tests/; template mode
+# (the `.sekai-template` marker is present) scans the WHOLE repository. The terms
+# below are the pre-cut place names — they must be absent everywhere in the template.
 laguna
 lagunabeach
 taiwan
