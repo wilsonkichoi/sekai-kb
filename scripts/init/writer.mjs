@@ -30,7 +30,17 @@ import { join } from 'node:path';
 /* ── TypeScript-literal serializer (deterministic, repo code style) ──────── */
 
 function tsString(s) {
-  return `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
+  // \r and U+2028/U+2029 are (parser-vintage) line terminators: raw, they
+  // would truncate the single-quoted literal and break place.config.ts at the
+  // next build, far from the cause. Answers JSON can carry them; readline
+  // cannot.
+  return `'${s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')}'`;
 }
 
 const BARE_KEY_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;

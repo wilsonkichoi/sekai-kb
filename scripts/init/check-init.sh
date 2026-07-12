@@ -5,10 +5,14 @@
 # Tier 1 (always, non-destructive — runs on the COMMITTED tree via git archive):
 #   1. Exports two scratch copies of HEAD and runs `--answers` init in each;
 #      the two place.config.ts outputs must be byte-identical (cmp).
-#   2. Asserts every seeded artifact: FRAMEWORK-VERSION, the CLAUDE.md header,
+#   2. Runs the INTERACTIVE mode (piped stdin) on a third scratch copy with the
+#      same answers; its place.config.ts must be byte-identical to the
+#      `--answers` output. This is the DoD-2/§E contract (the two resolution
+#      paths cannot drift), not just writer determinism.
+#   3. Asserts every seeded artifact: FRAMEWORK-VERSION, the CLAUDE.md header,
 #      knowledge/{Category}/ dirs, INBOX.md, CNAME, the local genericity
 #      denylist, and the removed .sekai-template marker.
-#   3. Plants the test place name in src/ and asserts check-genericity.sh FAILS
+#   4. Plants the test place name in src/ and asserts check-genericity.sh FAILS
 #      (the local denylist is live); removes it and asserts the gate passes.
 #
 # Tier 2 (--build only — DESTRUCTIVE, runs init in THIS working tree, then
@@ -81,10 +85,47 @@ snapshot "$TMP/run2"
 node "$TMP/run1/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 node "$TMP/run2/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 
-# DoD-2: byte-identical place.config.ts across runs.
+# DoD-2 (determinism): byte-identical place.config.ts across --answers runs.
 cmp "$TMP/run1/place.config.ts" "$TMP/run2/place.config.ts" \
   || fail "place.config.ts differs between two --answers runs (not byte-identical)"
 echo "✓ two --answers runs produce byte-identical place.config.ts"
+
+# DoD-2 (cross-mode, the §E acceptance): the INTERACTIVE path with the same
+# answers must produce the same bytes as --answers. resolveInteractive/parseText
+# and resolveFromJson/coerce are parallel per-kind implementations — this is
+# where drift would enter. Lines below mirror answers.json in prompt order;
+# blank lines take the same defaults the JSON path takes for missing keys.
+INPUT="$TMP/interactive-input.txt"
+{
+  printf '%s\n' "$NAME"                                            # place.name
+  printf '%s\n' "Knowledge base for $NAME, the init self-check place."
+  printf '%s\n' "$DOMAIN"                                          # place.domain
+  printf '\n'                                                      # locale -> en
+  printf '4\n'                                                     # categories: custom
+  printf 'history\nHistory\nX\nThe record\n'
+  printf 'harbor\nHarbor\nX\nThe waterfront\n'
+  printf 'nature\nNature\nX\nThe land\n'
+  printf 'food\nFood\nX\nThe table\n'
+  printf 'events\nEvents\nX\nThe calendar\n'
+  printf '\n'                                                      # blank slug: done
+  printf '35.1,-120.65\n'                                          # map.center
+  printf '12\n'                                                    # map.zoom
+  printf '\n'                                                      # maxBounds -> default
+  printf '\n\n\n'                                                  # graph/map/dashboard -> defaults
+  printf 'n\n'                                                     # soundscape (explicit, as in JSON)
+  printf '\n\n'                                                    # feedback/chat -> defaults
+  printf 'y\n'                                                     # social (explicit, as in JSON)
+  printf '\n'                                                      # analytics -> default
+  printf 'https://github.com/example/kb\n'                         # links.repo
+  printf 'kb@example.org\n'                                        # links.email
+  printf '@example\n'                                              # twitter
+  printf '\n\n'                                                    # threads/instagram -> none
+} > "$INPUT"
+snapshot "$TMP/run3"
+node "$TMP/run3/scripts/init/index.mjs" < "$INPUT" >/dev/null
+cmp "$TMP/run3/place.config.ts" "$TMP/run1/place.config.ts" \
+  || fail "interactive-mode place.config.ts differs from --answers output (cross-mode drift)"
+echo "✓ interactive mode with the same answers is byte-identical to --answers"
 
 # DoD-6: seeded artifacts exist.
 R="$TMP/run1"
@@ -96,7 +137,10 @@ for cat_dir in History Harbor Nature Food Events; do
   [ -d "$R/knowledge/$cat_dir" ] || fail "knowledge/$cat_dir/ not seeded"
 done
 [ -f "$R/knowledge/INBOX.md" ] || fail "knowledge/INBOX.md not written"
-[ ! -f "$R/knowledge/About/marisol-cove.md" ] || fail "demo content survived init"
+# The writer's contract is "no articles survive" (rmSync + reseed), so assert
+# it wholesale rather than naming demo files that could be renamed later.
+LEFTOVER_MD="$(find "$R/knowledge" -type f -name '*.md' ! -name 'INBOX.md')"
+[ -z "$LEFTOVER_MD" ] || fail "demo content survived init: $LEFTOVER_MD"
 grep -q "^$DOMAIN$" "$R/CNAME" || fail "CNAME does not contain $DOMAIN"
 [ ! -f "$R/.sekai-template" ] || fail ".sekai-template marker not removed"
 grep -q "^$NAME_LC$" "$R/scripts/ci/genericity-denylist.local.txt" \

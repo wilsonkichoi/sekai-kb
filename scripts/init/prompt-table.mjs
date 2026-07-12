@@ -150,20 +150,39 @@ export function slugify(name) {
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const LOCALE_RE = /^[a-z]{2}(-[a-z0-9]{2,8})?$/i;
 
+/** The title becomes the knowledge/{Title}/ folder name and sync.sh reads
+ * titles back as directory names, so path separators or control characters
+ * in it would silently break the content mapping. */
+const TITLE_UNSAFE_RE = /[\\/\u0000-\u001f]/;
+
+/**
+ * Field/slug validity of ONE category entry, shared by validateCategories and
+ * the interactive custom-entry loop (which validates mid-loop, where the 5-14
+ * count cannot hold yet). `seenSlugs` catches duplicates against earlier
+ * entries.
+ */
+export function validateCategoryEntry(c, seenSlugs = new Set()) {
+  for (const field of ['slug', 'title', 'icon', 'description']) {
+    if (typeof c?.[field] !== 'string' || c[field].trim() === '')
+      return `every category needs a non-empty "${field}"`;
+  }
+  if (TITLE_UNSAFE_RE.test(c.title))
+    return `category title "${c.title}" must not contain path separators or control characters (it becomes the knowledge/ folder name)`;
+  if (!SLUG_RE.test(c.slug)) return `category slug "${c.slug}" must be kebab-case`;
+  if (RESERVED_SLUGS.includes(c.slug))
+    return `category slug "${c.slug}" collides with an existing route`;
+  if (seenSlugs.has(c.slug)) return `duplicate category slug "${c.slug}"`;
+  return null;
+}
+
 export function validateCategories(cats) {
   if (!Array.isArray(cats)) return 'categories must be a preset name or an array';
   if (cats.length < 5 || cats.length > 14)
     return `5-14 categories required (got ${cats.length})`;
   const seen = new Set();
   for (const c of cats) {
-    for (const field of ['slug', 'title', 'icon', 'description']) {
-      if (typeof c?.[field] !== 'string' || c[field].trim() === '')
-        return `every category needs a non-empty "${field}"`;
-    }
-    if (!SLUG_RE.test(c.slug)) return `category slug "${c.slug}" must be kebab-case`;
-    if (RESERVED_SLUGS.includes(c.slug))
-      return `category slug "${c.slug}" collides with an existing route`;
-    if (seen.has(c.slug)) return `duplicate category slug "${c.slug}"`;
+    const err = validateCategoryEntry(c, seen);
+    if (err) return err;
     seen.add(c.slug);
   }
   return null;

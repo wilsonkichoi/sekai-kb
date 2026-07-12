@@ -55,8 +55,9 @@ place-specific copy behind the same human-approval gate as `/seed-articles`.
 ## Answers JSON (the `/adopt` contract)
 
 Keys mirror the prompt ids (dot-paths). Any missing non-required key takes the
-same default an interactive user gets by pressing Enter. Unknown or malformed
-values are hard errors (exit 1) — `/adopt` must not half-initialize.
+same default an interactive user gets by pressing Enter. Unknown **keys** (a
+typo'd path is rejected, never silently defaulted) and malformed values are
+hard errors (exit 1) — `/adopt` must not half-initialize.
 
 ```json
 {
@@ -82,8 +83,9 @@ values are hard errors (exit 1) — `/adopt` must not half-initialize.
 ```
 
 `categories` accepts a preset name (string) or a full array of
-`{ slug, title, icon, description }`. `place.name` and `map.center` are
-required; everything else defaults.
+`{ slug, title, icon, description }`. Titles become `knowledge/{Title}/`
+folder names, so path separators and control characters are rejected.
+`place.name` and `map.center` are required; everything else defaults.
 
 ## Extending (schema-driven prompts)
 
@@ -92,8 +94,12 @@ is **a table entry in `prompt-table.mjs`, not new flow code**: add a row with
 `id` (the config dot-path, which is also the answers-JSON path), `question`,
 `kind` (`text`/`number`/`boolean`/`latlng`/`bounds`/`handle`/`categories`),
 `default`, and optional `validate`. Both input modes, validation, and the
-serializer pick the new field up from the row. New keys must follow the
-absent-safe spec rule: default to feature-off when missing.
+serializer pick the new field up from the row — including a row that opens a
+**new top-level section** (e.g. `analytics.ga4`): the emitted config is
+assembled from the resolved answers, not from a fixed key list, so nothing
+else in the flow needs touching. The one companion edit is the `PlaceConfig`
+interface block in `writer.mjs` (schema, not flow code). New keys must follow
+the absent-safe spec rule: default to feature-off when missing.
 
 ## Self-check (`npm run init:check`)
 
@@ -101,8 +107,11 @@ absent-safe spec rule: default to feature-off when missing.
 
 - **Tier 1** (always; non-destructive; tests the *committed* tree via
   `git archive HEAD`): runs `--answers` init on two scratch copies and
-  byte-compares the two `place.config.ts` outputs; asserts every seeded
-  artifact; plants a place-name string in `src/` and asserts the genericity
-  gate fails via the local denylist, then passes once removed.
+  byte-compares the two `place.config.ts` outputs; runs the **interactive**
+  mode (piped stdin) with the same answers on a third copy and byte-compares
+  it against the `--answers` output (the cross-mode no-drift contract);
+  asserts every seeded artifact; plants a place-name string in `src/` and
+  asserts the genericity gate fails via the local denylist, then passes once
+  removed.
 - **Tier 2** (`--build`; **destructive** — runs init in the current working
   tree, then `npm run build`): CI/disposable clones only.

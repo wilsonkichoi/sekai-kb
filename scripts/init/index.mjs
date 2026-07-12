@@ -24,7 +24,12 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
 
-import { CATEGORY_PRESETS, KINDS, PROMPTS } from './prompt-table.mjs';
+import {
+  CATEGORY_PRESETS,
+  KINDS,
+  PROMPTS,
+  validateCategoryEntry,
+} from './prompt-table.mjs';
 import { buildHomeDefaults } from './home-defaults.mjs';
 import { writeInstance } from './writer.mjs';
 
@@ -117,7 +122,35 @@ function evalDefault(row, cfg) {
   return typeof row.default === 'function' ? row.default(cfg) : row.default;
 }
 
+/**
+ * The /adopt contract: an unknown key in the answers JSON is a hard error,
+ * never a silent default — a typo'd path must not half-initialize an
+ * instance. A path is known when it is a row id or a proper prefix of one;
+ * row-id values themselves (category arrays, [lat, lng] pairs) are opaque
+ * and never descended into.
+ */
+function rejectUnknownKeys(answers) {
+  if (answers === null || typeof answers !== 'object' || Array.isArray(answers))
+    fail('answers JSON must be an object');
+  const ids = PROMPTS.map((r) => r.id);
+  const exact = new Set(ids);
+  const walk = (node, prefix) => {
+    for (const key of Object.keys(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (exact.has(path)) continue;
+      if (!ids.some((id) => id.startsWith(`${path}.`)))
+        fail(`unknown key "${path}" in answers JSON`);
+      const v = node[key];
+      if (v === null || typeof v !== 'object' || Array.isArray(v))
+        fail(`"${path}" must be an object`);
+      walk(v, path);
+    }
+  };
+  walk(answers, '');
+}
+
 function resolveFromJson(answers, cfg) {
+  rejectUnknownKeys(answers);
   for (const row of PROMPTS) {
     const provided = get(answers, row.id);
     let value;
@@ -166,15 +199,15 @@ async function promptCategories(ask, row, cfg) {
         const title = (await ask('    title: ')).trim();
         const icon = (await ask('    icon (emoji): ')).trim();
         const description = (await ask('    description: ')).trim();
-        // Validate the entry by validating the accumulated array; the count
-        // error is expected mid-loop, so only field/slug errors block here.
-        const candidate = [...cats, { slug, title, icon, description }];
-        const fieldErr = row.validate(candidate, cfg);
-        if (fieldErr && !fieldErr.startsWith('5-14 categories')) {
+        // Entry-level validation mid-loop (the 5-14 count cannot hold yet);
+        // the full-array validation runs on the blank-slug finish above.
+        const entry = { slug, title, icon, description };
+        const fieldErr = validateCategoryEntry(entry, new Set(cats.map((c) => c.slug)));
+        if (fieldErr) {
           console.log(`  ${fieldErr}`);
           continue;
         }
-        cats.push({ slug, title, icon, description });
+        cats.push(entry);
         if (cats.length === 14) return cats;
       }
     }
@@ -243,15 +276,12 @@ function deriveConfig(cfg) {
     locale: cfg.place.locale,
     languages: cfg.place.languages,
   };
-  return {
-    place: cfg.place,
-    categories: cfg.categories,
-    map: cfg.map,
-    features: cfg.features,
-    links: cfg.links,
-    seo: cfg.seo,
-    home: cfg.home,
-  };
+  // Emit cfg itself — every resolved answer flows through, so a future table
+  // row that opens a NEW top-level section (e.g. analytics IDs, task 10.1) is
+  // emitted without touching this function. A key whitelist here would drop
+  // such a section silently. Top-level order: table order (place, categories,
+  // map, features, links, + future sections), then derived seo and home.
+  return cfg;
 }
 
 /* ── re-run guard ────────────────────────────────────────────────────────── */
