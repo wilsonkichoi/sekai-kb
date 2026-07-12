@@ -90,9 +90,29 @@ jobs:
         with:
           path: ./dist
 
+  init-check:
+    name: Init wizard self-check
+    needs: genericity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      # --force: same lockfile cross-platform validation issue as the build job.
+      - run: npm ci --force
+      # --build is destructive by design (runs init in this checkout, then a
+      # full build on the initialized instance); the CI checkout is disposable.
+      - name: Init self-check (double-init byte-diff, seeded files, local denylist gate, init → build)
+        run: bash scripts/init/check-init.sh --build
+
   deploy:
     name: Deploy to Pages
-    needs: build
+    needs: [build, init-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Write scopes live here only (see top-level note): actions/deploy-pages needs
