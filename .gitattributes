@@ -1,0 +1,9 @@
+# Instance-owned files: framework tag-merges never overwrite these.
+# Git uses the "ours" merge strategy for any merge (including `git merge <tag>`),
+# keeping the instance's version and discarding the incoming framework change.
+# Adopters: add your own instance-specific files below.
+
+CLAUDE.md merge=ours
+place.config.ts merge=ours
+knowledge/** merge=ours
+public/media/** merge=ours

@@ -5,8 +5,8 @@ that ships with the **sekai-kb** framework template. Built with Astro; content i
 plain Markdown under `knowledge/`. Replace this demo with your own place by running
 `npm run init` (or the `/adopt` skill).
 
-> This file is **instance-owned** (`merge=ours`): framework upgrades never overwrite
-> it. Edit it freely to describe your instance.
+> This file is **instance-owned** (`merge=ours` in `.gitattributes`): framework
+> upgrades never overwrite it. Edit it freely to describe your instance.
 
 ## Where things live
 

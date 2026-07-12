@@ -22,15 +22,16 @@ npm install
 # 2. Run the demo place locally
 npm run dev            # http://localhost:4321
 
-# 3. Make it your own (rewrites place.config.ts, clears the demo content)
+# 3. Make it your own (wizard — landing next release; until then, edit place.config.ts by hand)
 npm run init
 ```
 
-`npm run init` is the adoption wizard: it asks for your place name, categories, map
-center, and feature toggles, writes `place.config.ts`, and removes the
-`.sekai-template` marker so the genericity gates switch from template mode
-(whole-tree scan) to instance mode (code-tree scan). Then add your articles under
-`knowledge/{Category}/` and deploy.
+`npm run init` is the adoption wizard (landing in the next release): it asks for your
+place name, categories, map center, and feature toggles, writes `place.config.ts`,
+and removes the `.sekai-template` marker so the genericity gates switch from template
+mode (whole-tree scan) to instance mode (code-tree scan). Until then, edit
+`place.config.ts` by hand and delete `.sekai-template` yourself. Then add your
+articles under `knowledge/{Category}/` and deploy.
 
 ## What's in the box
 
@@ -42,6 +43,8 @@ center, and feature toggles, writes `place.config.ts`, and removes the
 - **`scripts/tools/`** — the Python `article-health` editorial linter (runs via
   [uv](https://docs.astral.sh/uv/); Python ≥ 3.12).
 - **`docs/diagrams/`** — architecture diagrams (draw.io), the engineering source of truth.
+- **`scripts/visual/`** — visual regression tooling (`npm run visual:baseline` to
+  capture, `npm run visual:check` to diff). Run `visual:baseline` once first.
 - **`.claude/rules/`** — framework engineering rules that keep the build green.
 
 ## Deploying
