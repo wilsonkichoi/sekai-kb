@@ -13,8 +13,15 @@ plain Markdown under `knowledge/`. Replace this demo with your own place by runn
 - **Place identity (the one file to edit):** `place.config.ts` — name, tagline,
   domain, categories, map, feature toggles, links, and home-page copy.
 - **Content (single source of truth):** `knowledge/{Category}/*.md` — plain Markdown.
-  Everything the site renders is derived from this at build time.
+  Everything the site renders is derived from this at build time. Article ideas
+  queue in `knowledge/INBOX.md`.
 - **Media:** `public/media/` and other `public/` assets.
+- **Editorial canon:** `docs/playbook/` — [ARTICLE-PLAYBOOK.md](docs/playbook/ARTICLE-PLAYBOOK.md)
+  (voice, structure, quality bar), [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md)
+  (the write/rewrite process), [FACTCHECK-PIPELINE.md](docs/playbook/FACTCHECK-PIPELINE.md)
+  (fact-check methodology).
+- **Operations:** `docs/runbook/` — [DEPLOY.md](docs/runbook/DEPLOY.md) (install,
+  toolchain, CI, GitHub Pages, custom domain; every command copy-pasteable).
 - **Architecture diagrams (engineering SSOT):** `docs/diagrams/*.drawio`.
 - **Engineering rules:** `.claude/rules/` — framework-owned lessons that keep the
   build green (Astro/Vite gotchas, prebuild ordering, shell portability, lockfile).
@@ -25,6 +32,15 @@ plain Markdown under `knowledge/`. Replace this demo with your own place by runn
 git-info, related, changelog, map-markers, dashboard-lite) → `astro build` →
 post-build contract checks. `src/content/` and `src/data/` are derived, gitignored
 projections of `knowledge/` — never edit them directly.
+
+## Writing an article
+
+Read [docs/playbook/ARTICLE-PLAYBOOK.md](docs/playbook/ARTICLE-PLAYBOOK.md) first,
+then follow [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md) stage by stage.
+The short loop: draft in `knowledge/{Category}/{slug}.md` → self-check against the
+playbook's quality gate →
+`npm run article-health -- <file> --profile=rewrite-stage-4` → `npm run sync` →
+`npm run build` → commit (the pre-commit hook re-validates staged content).
 
 ## Iron rules
 
@@ -38,6 +54,21 @@ projections of `knowledge/` — never edit them directly.
 3. **Framework vs instance:** `src/` and `scripts/` are framework-owned — customize
    through config, content, and media. Anything more is upstreamed to sekai-kb and
    pulled back as a tagged release. The genericity gate is the structural guarantee.
+
+## Language support boundary
+
+UI strings and editorial tooling are English-calibrated; Latin-script content
+largely works (plain word tokenization; article-health prose thresholds may need
+retuning per instance); CJK content is unsupported until the post-project
+multi-language revisit. `place.locale` and `place.languages[]` are declared but
+dormant schema seams — don't build on them.
+
+## Semiont probe
+
+`semiont/config.json` at the repo root configures the autonomous-organ layer
+(memory, routines — arrives in a later framework release). Skills and scripts that
+look for it must **no-op gracefully when it is absent**. It is absent in this
+release; nothing should require it.
 
 ## Template mode
 

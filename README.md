@@ -12,32 +12,57 @@ with your own place.
 > **🚧 Early framework.** sekai-kb is being cut from its first instance and is still
 > stabilizing. Interfaces may move between tagged releases.
 
-## Quick start
+## Prerequisites
 
-```sh
-# 1. Create your repo from this template (GitHub "Use this template"), then:
-git clone <your-repo> && cd <your-repo>
-npm install
+- **Node.js ≥ 22.12** (and npm)
+- **[uv](https://docs.astral.sh/uv/)** — runs the Python editorial tooling; it
+  fetches Python ≥ 3.12 itself
+- **[gh](https://cli.github.com/)** — the GitHub CLI, for Pages setup and CI
 
-# 2. Run the demo place locally
-npm run dev            # http://localhost:4321
+Full install table with version checks:
+[`docs/runbook/DEPLOY.md`](./docs/runbook/DEPLOY.md).
 
-# 3. Make it your own (wizard — landing next release; until then, edit place.config.ts by hand)
-npm run init
-```
+## From template to deployed site (< 1 hour)
 
-`npm run init` is the adoption wizard (landing in the next release): it asks for your
-place name, categories, map center, and feature toggles, writes `place.config.ts`,
-and removes the `.sekai-template` marker so the genericity gates switch from template
-mode (whole-tree scan) to instance mode (code-tree scan). Until then, edit
-`place.config.ts` by hand and delete `.sekai-template` yourself. Then add your
-articles under `knowledge/{Category}/` and deploy.
+1. **Create your repo** — GitHub "Use this template", then:
+
+   ```sh
+   git clone <your-repo> && cd <your-repo>
+   npm ci --force && uv sync
+   npm run dev            # the demo place, at http://localhost:4321
+   ```
+
+2. **Make it your place.** The primary path is AI-assisted, in an agent CLI
+   (Claude Code or codex-cli — see [`AGENTS.md`](./AGENTS.md)):
+
+   - **`/adopt`** — an interview about your place; writes `place.config.ts`
+     (name, categories, map, links) and swaps out the demo content.
+   - **`/seed-articles`** — drafts your first articles from source material you
+     supply, following the editorial playbook, behind your approval.
+
+   The no-AI path is the wizard: **`npm run init`** asks the same core questions
+   at the terminal, writes `place.config.ts`, and seeds empty category folders —
+   you write the articles yourself.
+
+3. **Deploy.** Enable GitHub Pages (Source: GitHub Actions) and push — the
+   included workflow builds and publishes on every push to `main`. Custom domain
+   and Cloudflare DNS steps: [`docs/runbook/DEPLOY.md`](./docs/runbook/DEPLOY.md).
+
+## Writing articles
+
+The editorial canon lives in [`docs/playbook/`](./docs/playbook/):
+[ARTICLE-PLAYBOOK.md](./docs/playbook/ARTICLE-PLAYBOOK.md) (voice, structure, the
+quality bar), [REWRITE-PIPELINE.md](./docs/playbook/REWRITE-PIPELINE.md) (the
+write/rewrite process), and
+[FACTCHECK-PIPELINE.md](./docs/playbook/FACTCHECK-PIPELINE.md) (fact-check
+methodology). The `article-health` linter machine-enforces the mechanical parts.
 
 ## What's in the box
 
 - **`place.config.ts`** — the single ingress for place identity (name, categories,
   map, features, links, home-page copy).
 - **`knowledge/`** — your content, one folder per category. The single source of truth.
+- **`docs/playbook/` + `docs/runbook/`** — editorial canon and operations runbook.
 - **`src/` + `scripts/`** — the framework: templates, build pipeline, prebuild/postbuild
   contract checks. Framework-owned; customize through config and content, not by editing.
 - **`scripts/tools/`** — the Python `article-health` editorial linter (runs via
@@ -47,19 +72,19 @@ articles under `knowledge/{Category}/` and deploy.
   capture, `npm run visual:check` to diff). Run `visual:baseline` once first.
 - **`.claude/rules/`** — framework engineering rules that keep the build green.
 
-## Deploying
-
-The site deploys as a static build to GitHub Pages via the included Actions workflow
-(`.github/workflows/deploy.yml`). Point a custom domain at the repo in the Pages
-settings and set `place.domain` in `place.config.ts` to match; the site is designed
-to serve from the domain root.
-
 ## Genericity
 
 `src/`, `scripts/`, and `tests/` carry **zero place-specific strings** — all place
 identity flows through `place.config.ts`, `knowledge/`, and `public/media/`. This is
 machine-enforced (`npm run genericity`) and is the structural guarantee that one
 config file re-places the whole site.
+
+## Language support
+
+UI strings and editorial tooling are English-calibrated; Latin-script content
+largely works (plain word tokenization; article-health prose thresholds may need
+retuning per instance); CJK content is unsupported until the post-project
+multi-language revisit.
 
 ## License
 

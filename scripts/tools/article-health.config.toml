@@ -1,7 +1,7 @@
 # article-health.config.toml — declarative config for the SSOT article-health tool.
 #
 # Design proposal: reports/article-health-ssot-design-2026-05-04.md
-# Canonical writing-quality rules: docs/editorial/EDITORIAL.md
+# Canonical writing-quality rules: docs/playbook/ARTICLE-PLAYBOOK.md
 #
 # Checks are auto-discovered from lib/article_health/checks/ (run
 # `article-health --list-checks` for the live list). This repo is English-only;
@@ -28,7 +28,7 @@
 
 [meta]
 version = 1
-canonical_doc = "docs/editorial/EDITORIAL.md"
+canonical_doc = "docs/playbook/ARTICLE-PLAYBOOK.md"
 phase = "7-pre-commit-wired"
 
 # ── Per-check severity / options ─────────────────────────────────────────────
