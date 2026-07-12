@@ -24,15 +24,23 @@ set -euo pipefail
 unset CDPATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)"
 DENYLIST="$ROOT/scripts/ci/genericity-denylist.txt"
+# Instance-owned additions (written by `npm run init` with the adopter's place
+# name, LB-27). Read ADDITIVELY: the framework denylist above stays
+# framework-owned, so upgrades never conflict with local terms.
+LOCAL_DENYLIST="$ROOT/scripts/ci/genericity-denylist.local.txt"
 
 if [ ! -f "$DENYLIST" ]; then
   echo "genericity: denylist not found at $DENYLIST" >&2
   exit 2
 fi
 
-# Build an alternation pattern from the denylist (drop comments/blank lines, join
-# with |). Avoids `mapfile` so the script runs on macOS bash 3.2 as well as CI.
-PATTERN="$(grep -vE '^[[:space:]]*(#|$)' "$DENYLIST" | paste -sd '|' -)"
+DENYLIST_FILES=("$DENYLIST")
+[ -f "$LOCAL_DENYLIST" ] && DENYLIST_FILES+=("$LOCAL_DENYLIST")
+
+# Build an alternation pattern from the denylists (drop comments/blank lines,
+# join with |). Avoids `mapfile` so the script runs on macOS bash 3.2 as well as
+# CI; grep -h suppresses filename prefixes when reading multiple files.
+PATTERN="$(grep -vhE '^[[:space:]]*(#|$)' "${DENYLIST_FILES[@]}" | paste -sd '|' -)"
 if [ -z "$PATTERN" ]; then
   echo "genericity: denylist is empty — nothing to check" >&2
   exit 0
@@ -67,8 +75,8 @@ fi
 #  - content, data, kb: the derived, gitignored projections of knowledge/
 #    (src/content via sync.sh; src/data via prebuild JSON; public/kb via
 #    build-kb-index) — place-specific by nature, never framework code.
-#  - the denylist file itself (it necessarily contains the forbidden terms) and
-#    the template marker.
+#  - the denylist files themselves (they necessarily contain the forbidden
+#    terms) and the template marker.
 HITS="$(grep -rniIE "$PATTERN" "${SCAN_ROOTS[@]}" \
   --exclude-dir=node_modules \
   --exclude-dir=.git \
@@ -80,6 +88,7 @@ HITS="$(grep -rniIE "$PATTERN" "${SCAN_ROOTS[@]}" \
   --exclude-dir=data \
   --exclude-dir=kb \
   --exclude="genericity-denylist.txt" \
+  --exclude="genericity-denylist.local.txt" \
   --exclude=".sekai-template" || true)"
 
 if [ -n "$HITS" ]; then
