@@ -25,7 +25,7 @@ Scope:
     the CLI boundary (loader.is_article_path).
 
 Canonical:
-  - docs/editorial/EDITORIAL.md §subheadings
+  - docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "chronicle-lead"
 DIMENSION = "subheading"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §subheadings (no chronicle-style H2)"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings: No Date-Led Timeline Headers"
 
 
 _MONTHS = (

@@ -1,6 +1,6 @@
 """viz-health — visualization module credibility + AI readability gate (REWRITE Stage 4).
 
-Two machine-checkable items from graph.md visualization checklist:
+Two machine-checkable visualization-credibility items:
 
   A. Data visualization modules must cite source
      tw-bars / tw-waffle / tw-line / tw-heatmap etc. — each needs a source line
@@ -26,7 +26,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "viz-health"
 DIMENSION = "visualization"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "graph.md §7 source citation + §6 AI readability"
+EDITORIAL_REF = "docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate + docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations"
 
 # Data-relationship chart modules requiring source citation.
 # tw-bar is LB's module name; keep both tw-bar and tw-bars for compat.

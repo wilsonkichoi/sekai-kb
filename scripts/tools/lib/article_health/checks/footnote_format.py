@@ -20,7 +20,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "footnote-format"
 DIMENSION = "citation"
 DEFAULT_SEVERITY = Severity.HARD
-EDITORIAL_REF = ".husky/pre-commit footnote format gate"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations"
 
 # Canonical (one of these forms):
 #   1. With URL:  [^id]: [Title](URL) — description (≥6 chars)

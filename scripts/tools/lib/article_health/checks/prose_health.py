@@ -5,18 +5,17 @@ dimensions (bullet density, year count, citation density, em-dash overuse,
 template-H2, list-dump, thin sections, quality-decay) are language-agnostic and
 carry over directly. The prose-tell dimensions are rewritten from the LB canon:
 
-Canonical sources:
-  - docs/editorial/EDITORIAL.md §6 "Voice: A Local Friend, Not a Brochure"
-    — the concrete lists: Travel-Brochure Tells (L256), the "Not Just X, It's Y"
-      pattern (L270), Em Dash Discipline (L280), Canned Endings (L284).
-  - docs/semiont/MANIFESTO.md Belief #11 "Writing discipline" (L53) — the
-    principle behind the lists: false-contrast structures, em-dash chains, and
-    generic travel adjectives doing work concrete detail should do.
+Canonical source:
+  - docs/playbook/ARTICLE-PLAYBOOK.md §6 "Voice: A Local Friend, Not a Brochure"
+    — the concrete lists: Not Wanted: Travel-Brochure Tells, the "Not Just X,
+      It's Y" Pattern, Em Dash Discipline, Canned Endings. The principle behind
+      the lists: false-contrast structures, em-dash chains, and generic travel
+      adjectives doing work concrete detail should do.
 
-prose-tell dimensions (rewritten English ← EDITORIAL §6):
+prose-tell dimensions (ARTICLE-PLAYBOOK §6):
   - plastic phrases     → §6 "Travel-Brochure Tells" multi-word constructions
   - hollow words        → §6 generic brochure adjectives (stunning / scenic / …)
-  - "Not Just X, It's Y" → §6 false-contrast pattern (was MANIFESTO Tier 1)
+  - "Not Just X, It's Y" → §6 false-contrast pattern
   - AI metaphor tells   → delve / tapestry / testament to / beacon / … (was Tier 2)
   - AI ritual phrases   → in conclusion / at the end of the day / … (was Tier 3)
   - stock opening       → §6 "Whether you're a local or a first-time visitor"
@@ -47,10 +46,10 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "prose-health"
 DIMENSION = "prose-quality"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §6 + MANIFESTO.md Belief #11"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §6 Voice"
 
 
-# ── Travel-brochure plastic phrases (EDITORIAL §6 "Travel-Brochure Tells") ────
+# ── Travel-brochure plastic phrases (ARTICLE-PLAYBOOK §6 "Travel-Brochure Tells") ────
 # Multi-word constructions that could be glued onto any beach town and still
 # parse. The single-adjective tells live in _RE_HOLLOW below.
 _RE_PLASTIC = re.compile(
@@ -64,7 +63,7 @@ _RE_PLASTIC = re.compile(
     re.IGNORECASE,
 )
 
-# ── Hollow brochure adjectives (EDITORIAL §6 — single words doing a fact's job) ─
+# ── Hollow brochure adjectives (ARTICLE-PLAYBOOK §6 — single words doing a fact's job) ─
 _RE_HOLLOW = re.compile(
     r"\b(?:stunning|breathtaking|picturesque|charming|idyllic|iconic|"
     r"scenic|gorgeous|beautiful|lovely|vibrant|pristine|quaint|serene|"
@@ -73,12 +72,12 @@ _RE_HOLLOW = re.compile(
     re.IGNORECASE,
 )
 
-# ── Em-dash overuse (EDITORIAL §6 "Em Dash Discipline") ───────────────────────
+# ── Em-dash overuse (ARTICLE-PLAYBOOK §6 "Em Dash Discipline") ───────────────────────
 # English em dash is the single U+2014 character.
 # Normal punctuation, but AI prose reaches for it as a tic.
 _RE_EMDASH = re.compile(r"—")
 
-# ── "Not Just X, It's Y" false-contrast pattern (EDITORIAL §6 L270) ───────────
+# ── "Not Just X, It's Y" false-contrast pattern (ARTICLE-PLAYBOOK §6) ───────────
 # The English fingerprint the source corpus flags as "not-just-X" pattern. In nearly every case the
 # "X" half is a strawman the reader never assumed; delete the setup, state Y.
 _TIER1_PATTERNS = [
@@ -91,7 +90,7 @@ _TIER1_PATTERNS = [
     re.compile(r"\bnot just\b.{0,30}[,—]\s*but\b", re.IGNORECASE),
 ]
 
-# ── AI metaphor tells (was MANIFESTO Tier 2; English ← ROADMAP §3.4) ──────────
+# ── AI metaphor tells (English ← ROADMAP §3.4) ──────────
 _TIER2_WORDS = [
     "delve", "tapestry", "testament to", "beacon", "realm",
     "navigate the complexities", "weave", "weaving", "treasure trove",
@@ -99,7 +98,7 @@ _TIER2_WORDS = [
     "tucked away", "stands as a", "serves as a reminder",
 ]
 
-# ── AI ritual phrases (was MANIFESTO Tier 3; English ← ROADMAP §3.4) ──────────
+# ── AI ritual phrases (English ← ROADMAP §3.4) ──────────
 _TIER3_PHRASES = [
     "in conclusion", "it's worth noting", "it is worth noting",
     "needless to say", "at the end of the day", "when it comes to",
@@ -107,7 +106,7 @@ _TIER3_PHRASES = [
     "last but not least", "in this day and age",
 ]
 
-# ── Stock opening (EDITORIAL §6 — "Whether you're a local …" stock opener) ────
+# ── Stock opening (ARTICLE-PLAYBOOK §6 — "Whether you're a local …" stock opener) ────
 _RE_TEXTBOOK_OPENING = re.compile(
     r"^\s*(?:whether you(?:'re| are) a local"
     r"|nestled (?:in|on|along|between)"
@@ -116,7 +115,7 @@ _RE_TEXTBOOK_OPENING = re.compile(
     re.IGNORECASE,
 )
 
-# ── Canned ending (EDITORIAL §6 "Canned Endings" L284) ────────────────────────
+# ── Canned ending (ARTICLE-PLAYBOOK §6 "Canned Endings") ────────────────────────
 _RE_FORMULAIC_ENDING = re.compile(
     r"\bmust[- ]see stop on your\b.{0,30}\bitinerary\b"
     r"|\bwill continue to (?:charm|delight|draw|attract|enchant)\b"
@@ -173,7 +172,7 @@ def _source_count(target: FileTarget) -> int:
 
 # Reference-apparatus + functional-close headings. Bullets under these are
 # structural by design (one per source/image; the `## Practical Information`
-# functional close per EDITORIAL §4.4 is a sanctioned bullet list of parking /
+# functional close per ARTICLE-PLAYBOOK §4.4 Practical Information is a sanctioned bullet list of parking /
 # hours / access facts), not prose padding. Bullet-density / repeated-bullet /
 # list-dump checks scan only the prose body and truncate at the first such
 # heading. Without the functional-close exemption every place/business article
@@ -299,7 +298,7 @@ def _count_thin_blocks(body: str) -> int:
          zero prose lines — the bullets ARE the content.
     So a section counts as thin only when it has zero content of any kind
     (prose OR bullets OR a table/quote) under the heading — a true skeleton.
-    EDITORIAL §8 sanctions relaxing source-corpus thresholds for short-form.
+    ARTICLE-PLAYBOOK §8 sanctions relaxing source-corpus thresholds for short-form.
 
     Structural / functional-close sections (References / Further Reading /
     Image Sources / Practical Information) are exempted regardless.
@@ -389,7 +388,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
     Skips if file is too short (lines < 20).
 
     Frontmatter requirement: knowledge/ articles must have frontmatter. For
-    docs/ canonical SSOT files (EDITORIAL.md / MANIFESTO.md / pipeline files /
+    docs/ canonical SSOT files (docs/playbook/*.md / pipeline files /
     cognitive layer), prose-health still applies — these don't have frontmatter
     but should be held to the same writing discipline.
     """
@@ -504,7 +503,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             message=f"Brochure tell (§6 Travel-Brochure Tells): {ctx}",
             line=line_no,
             snippet=m.group(0)[:80],
-            editorial_ref="EDITORIAL.md §6 Travel-Brochure Tells",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 Not Wanted: Travel-Brochure Tells",
             fix_suggestion="Three-second swap test: cut it, or name the specific thing only true of this place.",
         )
 
@@ -513,7 +512,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
     dash_n = len(dash_matches)
     # Thresholds raised for LB: the em dash is normal English punctuation, so a
     # handful across a whole article is fine. Only genuine overuse — the AI tic
-    # EDITORIAL §6 warns about — is penalized.
+    # ARTICLE-PLAYBOOK §6 warns about — is penalized.
     if dash_n > 25:
         score += 3
         reasons.append(f"{dash_n} em dashes")
@@ -533,7 +532,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
                 message=f"Em-dash overuse (§6 Em Dash Discipline, {dash_matches.index(m)+1}/{dash_n}): {ctx}",
                 line=line_no,
                 snippet="—",
-                editorial_ref="EDITORIAL.md §6 Em Dash Discipline + MANIFESTO Belief #11",
+                editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 Em Dash Discipline",
                 fix_suggestion="Ask whether each dash does something a period, semicolon, or parenthetical couldn't.",
             )
 
@@ -564,7 +563,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
     # short locals-guide articles (a single 6-item vista list spikes the
     # back-half ratio purely because the body is small), so it only applies
     # once each half has enough lines to compare. Deferred for short-form per
-    # EDITORIAL §8; bullet density (#1) still guards genuine bullet-skeletons.
+    # ARTICLE-PLAYBOOK §8; bullet density (#1) still guards genuine bullet-skeletons.
     front_b, back_b, front_t, back_t = _bullet_ratios_split(body)
     if front_t >= 12 and back_t >= 12:
         front_ratio = front_b * 100 // front_t
@@ -632,7 +631,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
                     message=f"Not-Just-X-It's-Y false contrast (§6): {ctx}",
                     line=line_no,
                     snippet=m.group(0)[:80],
-                    editorial_ref="EDITORIAL.md §6 \"Not Just X, It's Y\" Pattern",
+                    editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 The \"Not Just X, It's Y\" Pattern",
                     fix_suggestion=(
                         "Is the 'X' half a strawman the reader never assumed? "
                         "Delete the setup and state 'Y' directly."
@@ -649,7 +648,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.WARN,
             message=f"AI metaphor-tell density: {tier2_total} occurrence(s) (delve / tapestry / testament to / …)",
-            editorial_ref="EDITORIAL.md §6 + MANIFESTO Belief #11",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 Voice",
             fix_suggestion="Replace the metaphor with the concrete fact, name, or number it stands in for.",
         )
 
@@ -661,7 +660,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.WARN,
             message=f"AI ritual phrase: {tier3_total} occurrence(s) (in conclusion / at the end of the day / …)",
-            editorial_ref="EDITORIAL.md §6 + MANIFESTO Belief #11",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 Voice",
             fix_suggestion="Cut the filler transition; start the sentence with the fact.",
         )
 

@@ -1,7 +1,7 @@
 """image_health — article image references + frontmatter coherence + count gate.
 
 Migrated from `scripts/tools/article-image-health.sh` (REWRITE-PIPELINE
-Stage 4.5f hard gate per REFLEXES #30).
+Stage 4 hard gate).
 
 Dimensions:
   1. inline `![alt](path)` references — `path` must exist on disk
@@ -14,7 +14,7 @@ Dimensions:
      depth article ideal: hero + 1-2 scene-mid = 2-3 images, min_images=3 default
      soft-launch WARN (legacy heal), rewrite-stage-4 profile severity_override
      escalates to HARD. Triggered when Step 4.3.1 narrative rhythm instrumentation
-     was missing from article-health (REFLEXES #15 pattern).
+     was missing from article-health.
 
 Severity: HARD for missing files / hot-links, WARN for missing Image Sources section,
 configurable WARN/HARD for min-count gate via options.
@@ -31,7 +31,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "image-health"
 DIMENSION = "media"
 DEFAULT_SEVERITY = Severity.HARD
-EDITORIAL_REF = "REWRITE-PIPELINE Stage 1 Step 1.14 + Stage 4 Step 4.3 / REFLEXES #30"
+EDITORIAL_REF = "docs/playbook/REWRITE-PIPELINE.md Stage 1 Research + Stage 4 Quality-checklist gate"
 
 # Defaults — overridable via profile options
 DEFAULT_MIN_IMAGES = 3
@@ -188,7 +188,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=line_no,
             snippet="</div>↵_caption_  (should be </div>↵↵_caption_)",
-            editorial_ref="REWRITE-PIPELINE Step 4.3.6 iframe caption format",
+            editorial_ref="docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate",
             fix_suggestion="Add a blank line between </div> and _caption_.",
         )
 
@@ -249,13 +249,13 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             severity=sev,
             message=msg_detail,
             fix_suggestion=(
-                "Follow REWRITE-PIPELINE Stage 1 Step 1.14 media research: "
+                "Follow REWRITE-PIPELINE Stage 1 Research media research: "
                 "(1) cache PD/CC images to public/article-images/{category}/ "
                 "(2) pass check-aspect.sh hero 0.9-2.0 / inline 0.75-2.5 guardrails "
-                "(3) Stage 4 Step 4.3 insert into article (hero + scene-mid rhythm) "
+                "(3) Stage 4 insert into article (hero + scene-mid rhythm) "
                 "(4) ## Image Sources section with CC license + photographer. "
                 "No PD/CC available → fair use editorial commentary scope "
-                "(per Step 1.14.2)"
+                "(per REWRITE-PIPELINE Stage 1 Research)"
             ),
             editorial_ref=EDITORIAL_REF,
         )

@@ -4,7 +4,7 @@ Detects chronicle-style H2 subheadings that turn articles into
 Wikipedia-style timelines (REWRITE Stage 2 #4 / #11). The check targets
 English articles and English chronicle patterns.
 
-Canonical: docs/editorial/EDITORIAL.md §subheadings
+Canonical: docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings
 """
 
 from pathlib import Path

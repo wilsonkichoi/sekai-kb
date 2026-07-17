@@ -18,7 +18,7 @@
 # P0 gap from TOOL-INVENTORY. Both default WARN (soft-launch for legacy heal):
 # image-alt catches empty/generic/filename alt text; seo-meta catches frontmatter
 # title/desc length + brand-prefix + title-desc duplication (canonical
-# EDITORIAL §Description four principles, 120-160 chars).
+# ARTICLE-PLAYBOOK §5 SEO Metadata four principles, 120-160 chars).
 #
 # link-target added 2026-05-04 jovial-feistel session — Phase 1 (casing,
 # HARD, auto-fix) caught 649 `]( /lang/UpperCase/...)` broken-routing
@@ -69,7 +69,7 @@ fail_on = "hard"
 # REWRITE-PIPELINE Stage 3 (Verify): prose-health score ≤ 3 budget. The English
 # port (2026-06-29) recalibrated the score thresholds to LB's short locals-guide
 # corpus — all 18 legacy en articles land ≤ 2, so the gate stays advisory for
-# them while still failing genuine AI-slop. Canonical rules: EDITORIAL.md §6.
+# them while still failing genuine AI-slop. Canonical rules: ARTICLE-PLAYBOOK §6 Voice.
 checks = ["prose-health"]
 fail_on = "score-budget"
 
@@ -104,7 +104,7 @@ fail_on = "hard"
 # rich-media exemplar corpus; media-richness adds a length-scaled count target
 # (images+video ~1 per 1.1k words, long pieces toward ≥8, INFO) + a multimodal
 # nudge. NOTE: these numeric thresholds were calibrated on a long-form corpus and
-# are uncalibrated for short-form content (see EDITORIAL §8).
+# are uncalibrated for short-form content (see ARTICLE-PLAYBOOK §8 Numeric Thresholds).
 # Legacy heal path: the sub-list below accumulates audit findings into batched heal commits.
 checks = ["frontmatter-format", "format-structure", "wikilink-target", "link-target", "chronicle-lead", "word-count", "image-health", "paragraph-rhythm", "media-richness", "viz-health"]
 fail_on = "hard"

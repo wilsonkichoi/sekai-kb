@@ -1,7 +1,7 @@
 """Tests for the prose_health plugin.
 
 Structural dimensions are language-agnostic; prose-tell dimensions are sourced
-from EDITORIAL §6 (brochure tells, the "Not Just X, It's Y" pattern, canned
+from ARTICLE-PLAYBOOK §6 (brochure tells, the "Not Just X, It's Y" pattern, canned
 endings, AI metaphor/ritual phrases). Thresholds are calibrated for the short
 locals-guide format.
 """
@@ -266,7 +266,7 @@ def test_last_human_review_false_scores_1(tmp_path):
 
 
 # ════════════════════════════════════════════════════════════════════════
-# Prose-tell dimensions (EDITORIAL §6)
+# Prose-tell dimensions (ARTICLE-PLAYBOOK §6)
 # ════════════════════════════════════════════════════════════════════════
 
 
@@ -477,7 +477,7 @@ def test_clean_article_passes_budget(tmp_path):
 def test_plugin_metadata():
     assert prose_health.CHECK_NAME == "prose-health"
     assert prose_health.DEFAULT_SEVERITY == Severity.WARN
-    assert "MANIFESTO" in prose_health.EDITORIAL_REF
+    assert "docs/playbook/ARTICLE-PLAYBOOK.md" in prose_health.EDITORIAL_REF
     assert callable(prose_health.check)
 
 

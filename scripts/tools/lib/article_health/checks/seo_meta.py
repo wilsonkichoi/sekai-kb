@@ -22,7 +22,7 @@ Skip:
   - About category — meta/site pages, not knowledge articles
 
 Canonical:
-  - EDITORIAL.md §SEO metadata
+  - docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "seo-meta"
 DIMENSION = "seo"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §SEO metadata (title <=60 chars, description 50-160 chars)"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata (title <=60 chars, description 50-160 chars)"
 
 # Thresholds — measured in char count, standard English SEO conventions.
 TITLE_MIN_CHARS = 10

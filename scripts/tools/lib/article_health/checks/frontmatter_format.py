@@ -54,7 +54,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "frontmatter-format"
 DIMENSION = "frontmatter"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "REWRITE-PIPELINE.md Stage 4 Frontmatter completeness"
+EDITORIAL_REF = "docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate"
 
 REQUIRED_FIELDS = [
     "title",

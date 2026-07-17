@@ -22,7 +22,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "cross-reference"
 DIMENSION = "structure"
 DEFAULT_SEVERITY = Severity.INFO  # informational — not block-grade
-EDITORIAL_REF = "EDITORIAL.md §wikilink"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading"
 
 _RE_WIKILINK = re.compile(r"\[\[([^\]|\n]+?)(?:\|[^\]\n]+)?\]\]")
 _RE_MD_LINK_INTERNAL = re.compile(r"\]\(/([a-z]+)/([^)\n]+?)\)")

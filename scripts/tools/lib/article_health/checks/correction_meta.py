@@ -1,4 +1,4 @@
-"""correction_meta — errata-as-prose detection (REWRITE Stage 3.2-bis).
+"""correction_meta — errata-as-prose detection (REWRITE-PIPELINE Stage 3 Fact-check).
 
 Detects "correction anxiety" patterns: sentences that exist solely to correct
 a previous version's mistake rather than stating facts positively. These leak
@@ -20,7 +20,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "correction-meta"
 DIMENSION = "editorial-voice"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "REWRITE-PIPELINE.md §Step 3.2-bis correction-anxiety scan"
+EDITORIAL_REF = "docs/playbook/REWRITE-PIPELINE.md Stage 3 Fact-check"
 
 
 # ── Errata / correction-anxiety patterns ─────────────────────────────────────

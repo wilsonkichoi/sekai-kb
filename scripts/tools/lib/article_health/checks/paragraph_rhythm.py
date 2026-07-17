@@ -24,7 +24,7 @@ Runs on knowledge/{Category}/*.md articles; non-articles are filtered at the
 CLI boundary (loader.is_article_path).
 
 Canonical:
-  - docs/editorial/EDITORIAL.md §paragraph rhythm + §media weaving
+  - docs/playbook/ARTICLE-PLAYBOOK.md §8 Numeric Thresholds
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "paragraph-rhythm"
 DIMENSION = "depth"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §paragraph rhythm + §media weaving"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §8 Numeric Thresholds"
 
 # Thresholds — see module docstring: placeholders pending a real corpus.
 PARA_MEDIAN_WARN = 40  # words — below this = atomization signal
@@ -62,7 +62,7 @@ _RE_H2 = re.compile(r"^##\s+(?!#)", re.MULTILINE)  # H2 only, not H3+
 _RE_IFRAME = re.compile(r"<iframe\s", re.IGNORECASE)
 _RE_IMAGE_MD = re.compile(r"!\[[^\]]*\]\([^\)]+\)")
 _RE_HERO_IMAGE_FRONTMATTER = re.compile(r"^image:\s*['\"]?/", re.MULTILINE)
-# tw-* fenced viz modules (graph.md / article-modules.css) — counted toward media density
+# tw-* fenced viz modules (src/styles/article-modules.css) — counted toward media density
 _RE_TW_MODULE = re.compile(r"(?m)^```tw-[a-z]+")
 # Frontmatter delimiters
 _RE_FRONTMATTER = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
@@ -204,11 +204,11 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"para_median={para_median} para_count={para_count}",
-            editorial_ref="EDITORIAL.md §paragraph rhythm",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "Merge paragraphs: one fact per paragraph -> one point per paragraph "
                 "(with causal chain + detail + scene). Or: keep prose paragraphs per "
-                "H2 section <= 8 (per EDITORIAL §paragraph rhythm)."
+                "H2 section <= 8 (per ARTICLE-PLAYBOOK §8 Numeric Thresholds)."
             ),
         )
 
@@ -226,7 +226,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"over_h2_count={len(over_h2)}",
-            editorial_ref="EDITORIAL.md §paragraph rhythm",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "Over-fragmented H2 may mean (a) it should split into two sections "
                 "(b) too many paragraphs should be merged (c) structural footer / "
@@ -249,7 +249,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"walls={len(walls)} max={walls[0][0]}",
-            editorial_ref="EDITORIAL.md §paragraph rhythm (R4)",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "Split the long paragraph at a natural turn (topic shift / causal "
                 "step / before a quote); each half should still be >= "
@@ -287,7 +287,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"density={density:.2f} media={visual_count}",
-            editorial_ref="EDITORIAL.md §media weaving (media density band)",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "(a) Add hero + scene-mid image to reach ~1 per 1k words "
                 "(b) For nature/marine topics, add an official video iframe"
@@ -307,7 +307,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"ceiling_density={ceiling_density:.2f} para_median={para_median}",
-            editorial_ref="EDITORIAL.md §media weaving + §paragraph rhythm",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "(a) Merge paragraphs to restore prose rhythm to median 75-90 words "
                 "(b) Cut iframes to <= 1.0/1k words "
@@ -326,7 +326,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=1,
             snippet=f"ceiling_density={ceiling_density:.2f} visual={visual_count}",
-            editorial_ref="EDITORIAL.md §media weaving",
+            editorial_ref=EDITORIAL_REF,
             fix_suggestion=(
                 "Consider: (a) let prose paragraphs carry the rhythm instead of "
                 "outsourcing to iframes (b) keep 3-5 representative iframes, drop "

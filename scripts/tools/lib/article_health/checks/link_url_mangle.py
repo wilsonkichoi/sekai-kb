@@ -36,7 +36,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "link-url-mangle"
 DIMENSION = "structure"
 DEFAULT_SEVERITY = Severity.HARD
-EDITORIAL_REF = "EDITORIAL media-weaving (no percent-encoded Commons-URL links in captions, links go in image-sources section) + REWRITE Step 4.3.6"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.7 Image Sources + docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate"
 
 # HARD: a markdown image link whose destination contains a literal `*` (mangled).
 # `\S*\*\S*` lets the URL include balanced internal parens (houtong `(cropped*2022).jpg`).

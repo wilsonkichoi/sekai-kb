@@ -25,7 +25,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "footnote-url"
 DIMENSION = "citation"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "FACTCHECK-PIPELINE Phase 3 SOURCE AUTHORITY"
+EDITORIAL_REF = "docs/playbook/FACTCHECK-PIPELINE.md Phase 3 Source Authority Audit"
 
 _RE_FOOTNOTE_URL = re.compile(
     r"^\[\^[0-9a-zA-Z_-]+\]:\s*\[[^\]]+\]\((https?://[^)\s]+)\)",
