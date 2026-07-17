@@ -16,6 +16,8 @@ source:
 
 Lantern Cove is a small, rocky beach at the north end of Marisol Cove, named for the wrought-iron lantern that once hung over the top of its bluff stairway. It is quieter than the main town beach because access is on foot only, down a steep public stair from Bluff Road.[^1]
 
+> **At a glance:** The sea cave floods completely at high tide and the bluff stair closes during high-surf advisories, so check the tide chart and the surf before you make the trip down.
+
 ## The Sea Cave
 
 At the south end of the cove, a shallow sea cave cuts about forty feet into the sandstone bluff. It is walkable at low tide and floods completely at high tide, so the tide chart is not optional here. The cave opens toward the west, and on clear evenings the setting sun reaches the back wall for a few minutes.[^2]

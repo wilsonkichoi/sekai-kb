@@ -14,6 +14,8 @@ source:
 
 Marisol Cove is a small, fictional coastal town, and this knowledge base is its demo. It ships with **sekai-kb**, an open-source template for building place knowledge bases: fast, static, and readable by both people and AI agents.
 
+> **At a glance:** Every place name here is a placeholder — when you adopt the template, `npm run init` rewrites `place.config.ts` and your own articles under `knowledge/` replace the entire demo corpus.
+
 ## Why a fictional place
 
 The town, its wharf, its cafe, and its kelp preserve are invented. That is deliberate. A demo built on a real place would owe real-place accuracy forever; a fictional one lets the template stay a template. Every article here exists to show the shape of a good entry, not to be correct about anywhere in particular.

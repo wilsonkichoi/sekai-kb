@@ -21,6 +21,8 @@ source:
 
 Marisol Cove began as a landing, not a town. The cove's north end is the only stretch of this coast sheltered enough to beach a boat in most weather, and coastal peoples used it long before it had a name.[^1]
 
+> **At a glance:** The town's whole identity turns on one pivot — when the sardine runs failed in the 1910s, the fishing families who stayed became boatwrights and painters, and Marisol has explained itself as a craft town ever since.
+
 ## The First Wharf
 
 In 1861 a handful of fishing families built a timber wharf at the north end of the cove and began shipping catch up the coast. The settlement that grew behind it took the cove's name, Marisol, and appeared on the regional survey a few years later. For a generation the town ran on sardines and rockfish, and the wharf was the center of everything.[^2]

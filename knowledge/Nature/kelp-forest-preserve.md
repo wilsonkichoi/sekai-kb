@@ -16,6 +16,8 @@ source:
 
 The Marisol Kelp Forest Preserve is a community-run marine protected area covering roughly a square mile of reef and giant-kelp canopy off the mouth of the cove. The town voted to establish it in 1979, making it one of the earliest locally governed preserves on this stretch of coast.[^1]
 
+> **At a glance:** The best views are from the Lantern Cove tide pools at low tide or by kayak from the town pier, but diving and fishing are restricted inside the boundary.
+
 ## The Kelp Forest
 
 Giant kelp anchors to the rocky reef and grows toward the surface fast enough to form a floating canopy by late spring. The forest shelters garibaldi, señorita, sea hares, and a resident population of octopus in the deeper cracks. Sea otters pass through in winter but do not den here.[^2]
