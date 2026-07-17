@@ -1,6 +1,6 @@
 """cross_reference — bidirectional further-reading / wikilink reciprocity.
 
-Migrated from `scripts/tools/cross-link.sh` (Stage 5 cross-link analysis).
+REWRITE-PIPELINE Stage 5 cross-link analysis.
 
 For each `[[X]]` or further-reading `- [Y](/cat/Y)` link in this article,
 check whether the TARGET article links back. Asymmetric links are flagged

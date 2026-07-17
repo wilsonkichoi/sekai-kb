@@ -1,13 +1,10 @@
 """footnote_format — canonical footnote definition format.
 
-Migrated from `scripts/tools/footnote-format-fix.py` + the inline regex
-in `.husky/pre-commit:78-95`.
-
 Canonical: `[^N]: [Title](URL) — desc{10+ chars}`
 
 Hard error: definitions that don't match canonical format.
 
-Editorial reference: pre-commit footnote format gate.
+Editorial reference: docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations.
 """
 
 from __future__ import annotations

@@ -113,3 +113,39 @@ def test_inline_editorial_ref_paths_exist(src: str, ref: str):
             f"{src}: inline editorial_ref points at missing path "
             f"'{token}' (full ref: {ref!r})"
         )
+
+
+# Reference rot is not confined to editorial_ref: B1 (PR #4 review) was a dead
+# `check-aspect.sh` pointer in a fix_suggestion, and fork provenance lines cited
+# scripts/tools/*.sh that do not exist here. These two guards scan the whole
+# check-module source so those classes fail the suite instead of shipping.
+
+_CHECK_SOURCES = sorted(_CHECKS_DIR.glob("*.py"))
+
+# Script-file references anywhere in the source: *.sh / *.mjs (any path), and
+# scripts/…*.py (a bare `foo.py` may be prose, but a repo-pathed one is a claim).
+_SCRIPT_REF = re.compile(r"(?:[\w./-]+/)?[\w.-]+\.(?:sh|mjs)\b|scripts/[\w./-]+\.py\b")
+
+# Fork-era sub-step numbering (Step/Stage/Phase N.N). The shipped playbook uses
+# integer stages/phases and `§N.N` section anchors, never `Stage 4.3.1`.
+_FORK_SUBSTEP = re.compile(r"(?:Step|Stage|Phase) \d+\.\d")
+
+
+@pytest.mark.parametrize("py", _CHECK_SOURCES, ids=lambda p: p.name)
+def test_check_sources_reference_no_missing_scripts(py: Path):
+    """No check module names a script file that does not exist in the repo."""
+    text = py.read_text(encoding="utf-8")
+    for token in _SCRIPT_REF.findall(text):
+        assert _resolve(token).exists(), (
+            f"{py.name} references missing script '{token}'"
+        )
+
+
+@pytest.mark.parametrize("py", _CHECK_SOURCES, ids=lambda p: p.name)
+def test_check_sources_have_no_fork_substep_numbering(py: Path):
+    """No check module carries fork-era Step/Stage/Phase N.N sub-numbering."""
+    hits = _FORK_SUBSTEP.findall(py.read_text(encoding="utf-8"))
+    assert not hits, (
+        f"{py.name} carries fork sub-step numbering {hits}; the shipped playbook "
+        f"uses integer stages/phases and §N.N section anchors"
+    )

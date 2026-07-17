@@ -43,7 +43,7 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
-    """Detect errata-as-prose (correction anxiety) — REWRITE Stage 3.2-bis backstop.
+    """Detect errata-as-prose (correction anxiety) — REWRITE-PIPELINE Stage 3 Fact-check backstop.
 
     Scans body with protected regions (code / link-url / html) masked so URLs
     and code never false-match. Line numbers align with file (body is padded).

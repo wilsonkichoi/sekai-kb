@@ -1,7 +1,6 @@
 """wikilink_target — verify [[X]] / [[X|Y]] targets resolve to real articles.
 
-Migrated from `scripts/tools/wikilink-validate.sh` (HARD pre-commit gate
-since 2026-04-04).
+HARD pre-commit gate.
 
 Resolution rule: target name must equal the basename (without .md) of an
 existing source-language article under `knowledge/{Category}/`.

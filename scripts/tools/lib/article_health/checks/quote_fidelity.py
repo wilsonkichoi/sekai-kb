@@ -1,4 +1,4 @@
-"""quote_fidelity — verbatim quote fidelity + superlative-claim list (REWRITE Stage 3.6.1).
+"""quote_fidelity — verbatim quote fidelity + superlative-claim list (REWRITE-PIPELINE Stage 3 Fact-check).
 
 Ported from the source corpus. QF1 (verbatim quote check against a `researchReport`
 SSOT) requires a citation convention this project hasn't adopted yet:

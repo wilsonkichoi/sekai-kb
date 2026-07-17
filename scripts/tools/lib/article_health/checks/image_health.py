@@ -1,7 +1,6 @@
 """image_health — article image references + frontmatter coherence + count gate.
 
-Migrated from `scripts/tools/article-image-health.sh` (REWRITE-PIPELINE
-Stage 4 hard gate).
+REWRITE-PIPELINE Stage 4 hard gate.
 
 Dimensions:
   1. inline `![alt](path)` references — `path` must exist on disk
@@ -13,7 +12,7 @@ Dimensions:
   5. **image count gate (added 2026-05-11)** —
      depth article ideal: hero + 1-2 scene-mid = 2-3 images, min_images=3 default
      soft-launch WARN (legacy heal), rewrite-stage-4 profile severity_override
-     escalates to HARD. Triggered when Step 4.3.1 narrative rhythm instrumentation
+     escalates to HARD. Triggered when Stage 4 narrative rhythm instrumentation
      was missing from article-health.
 
 Severity: HARD for missing files / hot-links, WARN for missing Image Sources section,
@@ -193,7 +192,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
         )
 
     # ── 4. Min image count gate (depth article media rhythm) ──────────────────
-    # Per REWRITE-PIPELINE Step 4.3.1 — depth article ideal hero + 1-2 scene-mid
+    # Per REWRITE-PIPELINE Stage 4 — depth article ideal hero + 1-2 scene-mid
     # = 2-3 images. default min_images=3, soft-launch WARN, rewrite-stage-4 HARD.
     min_images = int(options.get("min_images", DEFAULT_MIN_IMAGES))
     # length-scaled media floor (v6.8): longer articles need more media.
@@ -232,7 +231,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             )
             msg_detail = (
                 f"0 media — depth article needs at least hero + scene-mid / video = "
-                f"{min_images} (per REWRITE-PIPELINE Step 4.3.1)"
+                f"{min_images} (per REWRITE-PIPELINE Stage 4)"
             )
         else:
             sev = _parse_severity(
@@ -242,7 +241,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             msg_detail = (
                 f"Insufficient media: images {total_images} + videos {iframe_count} = {media_total} "
                 f"< {min_images} minimum (depth article needs hero + 1-2 scene-mid / "
-                f"video, per REWRITE-PIPELINE Step 4.3.1)"
+                f"video, per REWRITE-PIPELINE Stage 4)"
             )
         yield Violation(
             check=CHECK_NAME,
@@ -251,7 +250,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             fix_suggestion=(
                 "Follow REWRITE-PIPELINE Stage 1 Research media research: "
                 "(1) cache PD/CC images to public/article-images/{category}/ "
-                "(2) pass check-aspect.sh hero 0.9-2.0 / inline 0.75-2.5 guardrails "
+                "(2) keep hero 0.9-2.0 / inline 0.75-2.5 aspect ratios "
                 "(3) Stage 4 insert into article (hero + scene-mid rhythm) "
                 "(4) ## Image Sources section with CC license + photographer. "
                 "No PD/CC available → fair use editorial commentary scope "
