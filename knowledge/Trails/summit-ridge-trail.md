@@ -16,6 +16,8 @@ source:
 
 The Summit Ridge Trail is the shortest way from the town to a big view. It climbs about seven hundred feet in a little under a mile from the trailhead on upper Bluff Road to the ridge crest above Marisol Cove.[^1]
 
+> **At a glance:** There's no shade and no water anywhere on the route — carry your own and hike early or late in summer, because the climb back up in afternoon sun is the hard part.
+
 ## The Climb
 
 The trail starts in coastal sage scrub and gains height quickly on a series of switchbacks. There is no shade, so early morning or late afternoon is the reasonable choice in summer. Coastal gnatcatchers nest in the scrub along the lower section, and the town asks hikers to stay on tread through the spring nesting window.[^2]

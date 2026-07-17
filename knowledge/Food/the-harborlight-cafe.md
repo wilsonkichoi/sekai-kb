@@ -16,6 +16,8 @@ source:
 
 The Harborlight Cafe sits at the landward end of the Marisol Cove pier, in a low clapboard building that has held a kitchen since 1948. It opens before sunrise and, by long habit, pours the first coffee in town.[^1]
 
+> **At a glance:** It's cash-friendly with a short, barely-changed menu, and it closes for winter pier maintenance — come on a summer morning and expect a wait on weekends.
+
 ## A Working-Town Kitchen
 
 The Harborlight opened at the seam between the fishing and craft eras of the town's [[founding-of-marisol-cove|history]], and it kept the habits of both. Fishermen came in before the boats went out; the boatwrights and painters who replaced them kept the early hours. The menu is short and has barely changed: eggs, cured fish on toast, and bread baked two doors down.
