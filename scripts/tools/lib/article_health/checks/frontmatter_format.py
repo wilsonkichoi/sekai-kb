@@ -37,8 +37,8 @@ Auto-fix (--fix):
   - `date` / `lastVerified` wrapped in quotes → unquoted
   - Bool fields with quoted true/false → unquoted
 
-  Together these turn frontmatter format conflicts (the 5/7 #884 root cause)
-  from manual rebase work into a one-shot pre-commit auto-fix.
+  Together these turn frontmatter format conflicts from manual rebase work
+  into a one-shot pre-commit auto-fix.
 """
 
 from __future__ import annotations

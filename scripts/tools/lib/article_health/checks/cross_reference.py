@@ -1,6 +1,6 @@
 """cross_reference — bidirectional further-reading / wikilink reciprocity.
 
-REWRITE-PIPELINE Stage 5 cross-link analysis.
+Canonical: docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading.
 
 For each `[[X]]` or further-reading `- [Y](/cat/Y)` link in this article,
 check whether the TARGET article links back. Asymmetric links are flagged

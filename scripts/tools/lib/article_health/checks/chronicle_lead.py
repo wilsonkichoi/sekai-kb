@@ -1,4 +1,4 @@
-"""chronicle_lead — chronicle-style subheading detection (REWRITE Stage 2 #4 + #11).
+"""chronicle_lead — chronicle-style subheading detection (ARTICLE-PLAYBOOK §4.3 Subheadings).
 
 Most patterns are language-agnostic (ISO date formats); this check also covers
 English-specific patterns (Month Year, Year: Title).
@@ -98,7 +98,7 @@ def _detect_chronicle_violation(line: str) -> str | None:
 
 
 def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
-    """Detect chronicle-style H2 subheadings (REWRITE Stage 2 #4 / #11).
+    """Detect chronicle-style H2 subheadings (ARTICLE-PLAYBOOK §4.3 Subheadings).
 
     HARD violation: any subheading matching chronicle date patterns.
     """
