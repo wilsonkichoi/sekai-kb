@@ -1,7 +1,7 @@
 """Tests for chronicle_lead plugin.
 
 Detects chronicle-style H2 subheadings that turn articles into
-Wikipedia-style timelines (REWRITE Stage 2 #4 / #11). The check targets
+Wikipedia-style timelines (ARTICLE-PLAYBOOK §4.3 Subheadings). The check targets
 English articles and English chronicle patterns.
 
 Canonical: docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings

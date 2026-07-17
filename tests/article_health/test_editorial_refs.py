@@ -2,9 +2,9 @@
 
 Every `EDITORIAL_REF` constant and inline `editorial_ref="..."` literal in the
 check plugins points a finding at the editorial canon. When the canon moves
-(as it did in LB-28, EDITORIAL.md / MANIFESTO.md → docs/playbook/), those
-pointers silently rot into dead ends shown in `--list-checks` and every
-violation message.
+(as it did in LB-28, when the pre-cut editorial docs were replaced by
+docs/playbook/), those pointers silently rot into dead ends shown in
+`--list-checks` and every violation message.
 
 This test asserts the file-path component of every reference resolves to a real
 path in the repo, so the next doc move fails the suite instead of shipping dead
@@ -115,37 +115,56 @@ def test_inline_editorial_ref_paths_exist(src: str, ref: str):
         )
 
 
-# Reference rot is not confined to editorial_ref: B1 (PR #4 review) was a dead
-# `check-aspect.sh` pointer in a fix_suggestion, and fork provenance lines cited
-# scripts/tools/*.sh that do not exist here. These two guards scan the whole
-# check-module source so those classes fail the suite instead of shipping.
+# Reference rot is not confined to editorial_ref. The PR #4 review chain found a
+# dead `check-aspect.sh` pointer in a fix_suggestion, fork provenance citing
+# scripts/tools/*.sh, fork stage-item numbers (`Stage 2 #4`), fork issue numbers
+# (`#884`), and a dead `ROADMAP §3.4` attribution — none of which editorial_ref
+# scanning covers, and each hiding in a different file (checks/ source, module
+# docstrings, and test docstrings alike). These guards scan every lib AND test
+# source so those classes fail the suite instead of shipping. This guard file is
+# excluded from its own scan: its comments and regexes legitimately name the
+# banned shapes.
 
-_CHECK_SOURCES = sorted(_CHECKS_DIR.glob("*.py"))
+_LIB_DIR = _REPO_ROOT / "scripts" / "tools" / "lib" / "article_health"
+_SCANNED_SOURCES = sorted(
+    p
+    for p in (*_LIB_DIR.rglob("*.py"), *Path(__file__).parent.glob("*.py"))
+    if p.name != Path(__file__).name
+)
 
 # Script-file references anywhere in the source: *.sh / *.mjs (any path), and
 # scripts/…*.py (a bare `foo.py` may be prose, but a repo-pathed one is a claim).
 _SCRIPT_REF = re.compile(r"(?:[\w./-]+/)?[\w.-]+\.(?:sh|mjs)\b|scripts/[\w./-]+\.py\b")
 
-# Fork-era sub-step numbering (Step/Stage/Phase N.N). The shipped playbook uses
-# integer stages/phases and `§N.N` section anchors, never `Stage 4.3.1`.
-_FORK_SUBSTEP = re.compile(r"(?:Step|Stage|Phase) \d+\.\d")
+# Fork-era references the shipped template does not contain:
+#   - Step/Stage/Phase N.N sub-numbering (shipped docs use integer stages/phases
+#     and section anchors, never a decimal sub-step)
+#   - Step/Stage/Phase N #M fork checklist-item numbers
+#   - #NNN fork issue-tracker numbers
+#   - ROADMAP — the framework template ships no roadmap (docs/ is diagrams/,
+#     playbook/, runbook/ only)
+_FORK_REF = re.compile(
+    r"(?:Step|Stage|Phase) \d+\.\d"
+    r"|(?:Step|Stage|Phase) \d+ #\d"
+    r"|#\d{3,}"
+    r"|\bROADMAP\b"
+)
 
 
-@pytest.mark.parametrize("py", _CHECK_SOURCES, ids=lambda p: p.name)
-def test_check_sources_reference_no_missing_scripts(py: Path):
-    """No check module names a script file that does not exist in the repo."""
-    text = py.read_text(encoding="utf-8")
-    for token in _SCRIPT_REF.findall(text):
+@pytest.mark.parametrize("py", _SCANNED_SOURCES, ids=lambda p: p.name)
+def test_sources_reference_no_missing_scripts(py: Path):
+    """No lib/test source names a script file that does not exist in the repo."""
+    for token in _SCRIPT_REF.findall(py.read_text(encoding="utf-8")):
         assert _resolve(token).exists(), (
             f"{py.name} references missing script '{token}'"
         )
 
 
-@pytest.mark.parametrize("py", _CHECK_SOURCES, ids=lambda p: p.name)
-def test_check_sources_have_no_fork_substep_numbering(py: Path):
-    """No check module carries fork-era Step/Stage/Phase N.N sub-numbering."""
-    hits = _FORK_SUBSTEP.findall(py.read_text(encoding="utf-8"))
+@pytest.mark.parametrize("py", _SCANNED_SOURCES, ids=lambda p: p.name)
+def test_sources_carry_no_fork_references(py: Path):
+    """No lib/test source carries fork sub-numbering, item/issue numbers, or ROADMAP."""
+    hits = _FORK_REF.findall(py.read_text(encoding="utf-8"))
     assert not hits, (
-        f"{py.name} carries fork sub-step numbering {hits}; the shipped playbook "
-        f"uses integer stages/phases and §N.N section anchors"
+        f"{py.name} carries fork references {hits}; the shipped template uses "
+        f"integer stages/phases, §N.N section anchors, and ships no ROADMAP"
     )

@@ -16,8 +16,8 @@ prose-tell dimensions (ARTICLE-PLAYBOOK §6):
   - plastic phrases     → §6 "Travel-Brochure Tells" multi-word constructions
   - hollow words        → §6 generic brochure adjectives (stunning / scenic / …)
   - "Not Just X, It's Y" → §6 false-contrast pattern
-  - AI metaphor tells   → delve / tapestry / testament to / beacon / … (was Tier 2)
-  - AI ritual phrases   → in conclusion / at the end of the day / … (was Tier 3)
+  - AI metaphor tells   → delve / tapestry / testament to / beacon / …
+  - AI ritual phrases   → in conclusion / at the end of the day / …
   - stock opening       → §6 "Whether you're a local or a first-time visitor"
   - canned ending       → §6 Canned Endings ("must-see stop on your itinerary")
   - em-dash overuse     → §6 Em Dash Discipline (single U+2014 —)
@@ -90,7 +90,7 @@ _TIER1_PATTERNS = [
     re.compile(r"\bnot just\b.{0,30}[,—]\s*but\b", re.IGNORECASE),
 ]
 
-# ── AI metaphor tells (English ← ROADMAP §3.4) ──────────
+# ── AI metaphor tells (English ← ARTICLE-PLAYBOOK §6) ──────────
 _TIER2_WORDS = [
     "delve", "tapestry", "testament to", "beacon", "realm",
     "navigate the complexities", "weave", "weaving", "treasure trove",
@@ -98,7 +98,7 @@ _TIER2_WORDS = [
     "tucked away", "stands as a", "serves as a reminder",
 ]
 
-# ── AI ritual phrases (English ← ROADMAP §3.4) ──────────
+# ── AI ritual phrases (English ← ARTICLE-PLAYBOOK §6) ──────────
 _TIER3_PHRASES = [
     "in conclusion", "it's worth noting", "it is worth noting",
     "needless to say", "at the end of the day", "when it comes to",
