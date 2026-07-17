@@ -1,8 +1,6 @@
 """footnote_density — citation density grading (A-F).
 
-Migrated from `scripts/tools/footnote-scan.sh` grade calculation.
-
-Grade rules (matches shell):
+Grade rules:
   A: ≥3 footnotes AND density ≤300 (1 fn per ≤300 words)
   B: ≥1 footnote (lower density / count)
   C: ≥3 URLs (no formal footnotes but has external sources)
@@ -23,7 +21,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "footnote-density"
 DIMENSION = "citation"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md citation density A-F grading"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations"
 
 _RE_DEF = re.compile(r"^\[\^[0-9a-zA-Z_-]+\]:", re.MULTILINE)
 

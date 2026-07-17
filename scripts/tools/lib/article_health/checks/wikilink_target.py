@@ -1,7 +1,6 @@
 """wikilink_target — verify [[X]] / [[X|Y]] targets resolve to real articles.
 
-Migrated from `scripts/tools/wikilink-validate.sh` (HARD pre-commit gate
-since 2026-04-04).
+HARD pre-commit gate.
 
 Resolution rule: target name must equal the basename (without .md) of an
 existing source-language article under `knowledge/{Category}/`.
@@ -19,7 +18,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "wikilink-target"
 DIMENSION = "structure"
 DEFAULT_SEVERITY = Severity.HARD
-EDITORIAL_REF = "EDITORIAL.md §wikilink + REWRITE-PIPELINE Stage 4"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading + docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate"
 
 _RE_WIKILINK = re.compile(r"\[\[([^\]|\n]+?)(?:\|[^\]\n]+)?\]\]")
 _RE_WIKILINK_FULL = re.compile(
@@ -84,7 +83,7 @@ def fix(target: FileTarget, config: dict[str, Any]) -> int:
     """Auto-fix broken wikilinks — convert `[[X]]` → `X` (or `[[X|Y]]` → `Y`)
     when target slug doesn't exist. Resolved (valid) wikilinks are NOT touched.
 
-    Per EDITORIAL §wikilink: an unresolved target degrades to plain text. This
+    Per ARTICLE-PLAYBOOK §4.5 Further Reading: an unresolved target degrades to plain text. This
     is the safest transform — preserves visible text without introducing dead
     `/cat/slug` links that may not exist.
 

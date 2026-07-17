@@ -1,6 +1,6 @@
 """cross_reference — bidirectional further-reading / wikilink reciprocity.
 
-Migrated from `scripts/tools/cross-link.sh` (Stage 5 cross-link analysis).
+Canonical: docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading.
 
 For each `[[X]]` or further-reading `- [Y](/cat/Y)` link in this article,
 check whether the TARGET article links back. Asymmetric links are flagged
@@ -22,7 +22,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "cross-reference"
 DIMENSION = "structure"
 DEFAULT_SEVERITY = Severity.INFO  # informational — not block-grade
-EDITORIAL_REF = "EDITORIAL.md §wikilink"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading"
 
 _RE_WIKILINK = re.compile(r"\[\[([^\]|\n]+?)(?:\|[^\]\n]+)?\]\]")
 _RE_MD_LINK_INTERNAL = re.compile(r"\]\(/([a-z]+)/([^)\n]+?)\)")

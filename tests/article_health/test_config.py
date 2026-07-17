@@ -10,7 +10,7 @@ def test_load_default_config():
     """Default config exists at scripts/tools/article-health.config.toml."""
     cfg = load_config("scripts/tools/article-health.config.toml")
     assert cfg.version == 1
-    assert "EDITORIAL" in cfg.canonical_doc
+    assert cfg.canonical_doc == "docs/playbook/ARTICLE-PLAYBOOK.md"
     # Phase 1: profiles defined but checks lists are empty
     assert "pre-commit" in cfg.profiles
     assert "release-pr" in cfg.profiles

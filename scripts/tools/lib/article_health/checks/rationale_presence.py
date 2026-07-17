@@ -1,6 +1,6 @@
 """rationale_presence — check that frontmatter rationale block has 4 required keys present.
 
-Per RATIONALE-SPEC.md + issue #851 Comment 8 Build 3:
+Per docs/playbook/ARTICLE-PLAYBOOK.md §4.9 Rationale Block:
   - rationale must contain 4 required keys: why_this_hook / whats_excluded /
     where_it_hedges / whos_pushing_back
   - which_framing is optional (5th key)
@@ -39,7 +39,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "rationale-presence"
 DIMENSION = "rationale"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "docs/editorial/RATIONALE-SPEC.md + REWRITE-PIPELINE.md Step 1.4.5"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.9 Rationale Block"
 
 
 REQUIRED_KEYS = [

@@ -26,7 +26,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "image-alt"
 DIMENSION = "media-quality"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §5 SEO Metadata + REWRITE-PIPELINE §Stage 4.3"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata + docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate"
 
 _RE_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)\n]+)\)")
 

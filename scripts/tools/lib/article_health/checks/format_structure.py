@@ -2,10 +2,10 @@
 
 Ported from the source corpus. Note: dimensions 1, 2, and 6 (Further Reading,
 References H2, overview blockquote) check for editorial conventions now
-canonical in docs/editorial/EDITORIAL.md §structure / §at a glance /
+canonical in docs/playbook/ARTICLE-PLAYBOOK.md §4 Structure / §4.1 At a Glance /
 §citation (localized 2026-06-21). 0/18 this project articles adopt them
 yet — retrofitting the existing corpus is a separate, larger task than the
-EDITORIAL.md localization itself, so these stay WARN soft-launch until
+ARTICLE-PLAYBOOK.md localization itself, so these stay WARN soft-launch until
 that retrofit happens.
 
 Dimensions ported:
@@ -30,7 +30,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "format-structure"
 DIMENSION = "structure"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §structure"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4 Structure"
 
 # Further Reading markers (canonical accepted): `## Further Reading` or `**Further Reading**:`
 _RE_FURTHER_READING = re.compile(
@@ -72,7 +72,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.WARN,
             message="Missing `> **At a glance:**` blockquote",
-            editorial_ref="EDITORIAL.md §at a glance",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §4.1 The Opening Paragraph + At a Glance",
         )
 
     # 2. Further Reading missing (only flag for substantive articles)
@@ -81,7 +81,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.WARN,
             message="Missing Further Reading section (`## Further Reading` or `**Further Reading**:`)",
-            editorial_ref="EDITORIAL.md §structure",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §4 Structure",
         )
 
     # 3. References H2 missing despite footnotes used / defined
@@ -90,7 +90,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.WARN,
             message="Footnotes used but missing `## References` H2",
-            editorial_ref="EDITORIAL.md §citation",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations",
         )
 
     # 4. List items containing raw [[wikilink]] (HARD — Astro won't render)
@@ -110,7 +110,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             ),
             line=line_no,
             snippet=snippet,
-            editorial_ref="EDITORIAL.md §wikilink",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §4.5 Further Reading",
         )
 
     # 5. Footnote ref count vs def count parity
@@ -121,7 +121,7 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             check=CHECK_NAME,
             severity=Severity.HARD,
             message=f"Uses {use_count} footnote ref(s) `[^N]` but has no `[^N]:` definitions",
-            editorial_ref="EDITORIAL.md §citation",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §4.6 Citations",
         )
 
 

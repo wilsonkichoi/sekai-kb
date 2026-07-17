@@ -58,6 +58,7 @@ jobs:
           python-version: "3.12"
       - run: npm ci --force
       - run: npm run test:ci
+      - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
 
   build:

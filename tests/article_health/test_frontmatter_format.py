@@ -141,7 +141,7 @@ def test_plugin_registered():
     assert "frontmatter-format" in found, list(found.keys())
 
 
-# ── fix() tests (2026-05-08 #884 root-cause fix) ──────────────────────────
+# ── fix() tests (frontmatter format-conflict root-cause fix) ──────────────
 
 
 def _fix_and_reload(tmp_path: Path, frontmatter: str) -> tuple[int, str]:
@@ -218,7 +218,7 @@ def test_fix_unquotes_quoted_boolean(tmp_path):
 
 
 def test_fix_combined_reorder_and_flow_conversion(tmp_path):
-    """The original 5/7 #884 conflict pattern: contributor PR has subcategory
+    """The original frontmatter conflict pattern: contributor PR has subcategory
     before tags AND list-mode tags. Our fix must handle both in one pass."""
     fm = GOOD_FRONTMATTER.replace(
         "category: 'Society'\ntags: ['media', 'science']\nsubcategory: 'media and speech'\n",

@@ -1,6 +1,6 @@
 """frontmatter_title — title format checks.
 
-Canonical: docs/editorial/EDITORIAL.md §5 SEO Metadata + §6 Voice
+Canonical: docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata + §6 Voice
 
 Yields multiple violations (different severities) from a single check:
   - WARN: vague / puffery adjective in title
@@ -18,9 +18,9 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "frontmatter-title"
 DIMENSION = "frontmatter"
 DEFAULT_SEVERITY = Severity.WARN  # most checks are warn; HARD ones override per-violation
-EDITORIAL_REF = "EDITORIAL.md §5 SEO Metadata"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata"
 
-# Vague / puffery adjectives (EDITORIAL §6 Voice — conservative subset)
+# Vague / puffery adjectives (ARTICLE-PLAYBOOK §6 Voice — conservative subset)
 TITLE_VAGUE_ADJECTIVES_EN: list[str] = [
     "iconic",
     "legendary",
@@ -50,10 +50,10 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             severity=Severity.WARN,
             message=(
                 f"Title contains puffery adjective '{m.group(0)}'"
-                " (EDITORIAL §6 Voice — avoid brochure-style tells in titles)"
+                " (ARTICLE-PLAYBOOK §6 Voice — avoid brochure-style tells in titles)"
             ),
             snippet=title,
-            editorial_ref="EDITORIAL.md §6 Voice",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §6 Voice",
         )
 
     # 2. Length (WARN) — raw chars > 60 (SERP truncation)
@@ -66,11 +66,11 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
                 " — Google SERP truncates around 60 characters"
             ),
             snippet=title,
-            editorial_ref="EDITORIAL.md §5 SEO Metadata",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §5 SEO Metadata",
         )
 
     # 3. Subcategory required (HARD) — non-About articles must declare
-    # subcategory per docs/taxonomy/SUBCATEGORY.md.
+    # subcategory per docs/playbook/ARTICLE-PLAYBOOK.md §7.2 Structure check.
     sub = target.frontmatter.get("subcategory")
     if target.category != "About" and (not isinstance(sub, str) or not sub.strip()):
         yield Violation(
@@ -78,8 +78,8 @@ def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
             severity=Severity.HARD,
             message=(
                 f"Missing 'subcategory' in frontmatter"
-                f" — {target.category} articles require a subcategory per docs/taxonomy/SUBCATEGORY.md"
+                f" — {target.category} articles require a subcategory per docs/playbook/ARTICLE-PLAYBOOK.md §7.2 Structure check"
             ),
             snippet=str(sub) if sub is not None else "(missing)",
-            editorial_ref="docs/taxonomy/SUBCATEGORY.md",
+            editorial_ref="docs/playbook/ARTICLE-PLAYBOOK.md §7.2 Structure check",
         )

@@ -37,8 +37,8 @@ Auto-fix (--fix):
   - `date` / `lastVerified` wrapped in quotes → unquoted
   - Bool fields with quoted true/false → unquoted
 
-  Together these turn frontmatter format conflicts (the 5/7 #884 root cause)
-  from manual rebase work into a one-shot pre-commit auto-fix.
+  Together these turn frontmatter format conflicts from manual rebase work
+  into a one-shot pre-commit auto-fix.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "frontmatter-format"
 DIMENSION = "frontmatter"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "REWRITE-PIPELINE.md Stage 4 Frontmatter completeness"
+EDITORIAL_REF = "docs/playbook/REWRITE-PIPELINE.md Stage 4 Quality-checklist gate"
 
 REQUIRED_FIELDS = [
     "title",

@@ -1,14 +1,12 @@
 """footnote_url — verify footnote URL reachability via HEAD.
 
-Migrated from `scripts/tools/check-footnote-urls.sh`.
-
 **Network-bound — disabled by default.** Enable per-run via:
   python3 scripts/tools/article-health.py file.md --check=footnote-url
   ARTICLE_HEALTH_NETWORK=1 python3 ...  (env var)
   options.network=true (config)
 
 Reason: blind HEAD on every commit slows pre-commit by 10-30s and
-fails on flaky links. Best run as Stage 3.5 manual check or scheduled
+fails on flaky links. Best run as a FACTCHECK-PIPELINE Phase 3 manual check or scheduled
 cron sweep, not as gate.
 
 Severity: WARN by default. 4xx/5xx surface as warnings (won't block PR).
@@ -25,7 +23,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "footnote-url"
 DIMENSION = "citation"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "FACTCHECK-PIPELINE Phase 3 SOURCE AUTHORITY"
+EDITORIAL_REF = "docs/playbook/FACTCHECK-PIPELINE.md Phase 3 Source Authority Audit"
 
 _RE_FOOTNOTE_URL = re.compile(
     r"^\[\^[0-9a-zA-Z_-]+\]:\s*\[[^\]]+\]\((https?://[^)\s]+)\)",

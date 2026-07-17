@@ -1,4 +1,4 @@
-"""quote_fidelity — verbatim quote fidelity + superlative-claim list (REWRITE Stage 3.6.1).
+"""quote_fidelity — verbatim quote fidelity + superlative-claim list (REWRITE-PIPELINE Stage 3 Fact-check).
 
 Ported from the source corpus. QF1 (verbatim quote check against a `researchReport`
 SSOT) requires a citation convention this project hasn't adopted yet:
@@ -26,7 +26,7 @@ Boundaries:
       the CLI boundary (loader.is_article_path).
 
 Canonical:
-  - docs/editorial/EDITORIAL.md §citation fidelity
+  - docs/playbook/ARTICLE-PLAYBOOK.md §4.8 Quote Fidelity
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "quote-fidelity"
 DIMENSION = "factcheck"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §citation fidelity"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.8 Quote Fidelity"
 
 # Direct quote: ".." with >= 12 words, [^n] footnote within 12 chars after the close quote.
 _QUOTE_RX = re.compile(r'"([^"]{12,})"(?P<tail>[^"]{0,12}?)\[\^\d+\]')

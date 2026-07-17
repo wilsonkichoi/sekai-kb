@@ -1,4 +1,4 @@
-"""chronicle_lead — chronicle-style subheading detection (REWRITE Stage 2 #4 + #11).
+"""chronicle_lead — chronicle-style subheading detection (ARTICLE-PLAYBOOK §4.3 Subheadings).
 
 Most patterns are language-agnostic (ISO date formats); this check also covers
 English-specific patterns (Month Year, Year: Title).
@@ -25,7 +25,7 @@ Scope:
     the CLI boundary (loader.is_article_path).
 
 Canonical:
-  - docs/editorial/EDITORIAL.md §subheadings
+  - docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "chronicle-lead"
 DIMENSION = "subheading"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §subheadings (no chronicle-style H2)"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §4.3 Subheadings: No Date-Led Timeline Headers"
 
 
 _MONTHS = (
@@ -98,7 +98,7 @@ def _detect_chronicle_violation(line: str) -> str | None:
 
 
 def check(target: FileTarget, config: dict[str, Any]) -> Iterator[Violation]:
-    """Detect chronicle-style H2 subheadings (REWRITE Stage 2 #4 / #11).
+    """Detect chronicle-style H2 subheadings (ARTICLE-PLAYBOOK §4.3 Subheadings).
 
     HARD violation: any subheading matching chronicle date patterns.
     """

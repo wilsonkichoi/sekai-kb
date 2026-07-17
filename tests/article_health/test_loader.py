@@ -168,6 +168,6 @@ def test_is_article_path_contract():
     assert not is_article_path("knowledge/Nature/_index.md")
     assert not is_article_path("knowledge/Nature/_Nature Hub.md")
     # outside a knowledge/ tree
-    assert not is_article_path("docs/editorial/EDITORIAL.md")
+    assert not is_article_path("docs/playbook/ARTICLE-PLAYBOOK.md")
     # not markdown
     assert not is_article_path("knowledge/Nature/photo.jpg")

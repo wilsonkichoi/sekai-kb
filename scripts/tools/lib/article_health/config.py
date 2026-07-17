@@ -3,7 +3,7 @@
 Schema:
     [meta]
     version = 1
-    canonical_doc = "docs/editorial/EDITORIAL.md"
+    canonical_doc = "docs/playbook/ARTICLE-PLAYBOOK.md"
 
     [checks.<name>]
     severity = "hard" | "warn" | "info"   # override default

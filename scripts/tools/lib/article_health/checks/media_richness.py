@@ -20,7 +20,7 @@ Threshold:
       adopted. Kept WARN per explicit decision rather than downgrading.
 
 Canonical:
-    - EDITORIAL.md §media weaving baseline
+    - docs/playbook/ARTICLE-PLAYBOOK.md §8 Numeric Thresholds
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "media-richness"
 DIMENSION = "media-quality"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §media weaving baseline"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §8 Numeric Thresholds"
 
 DEFAULT_MIN_IFRAMES = 1
 DEFAULT_MIN_IMAGES = 3
@@ -43,7 +43,7 @@ DEFAULT_MIN_IMAGES = 3
 # count target (denominator-free) + multimodal (image AND video) nudge.
 DEFAULT_WORDS_PER_MEDIA = 400
 # Topics that typically have official video footage available (nudge to add
-# one when 0 iframes found, per EDITORIAL §media weaving baseline).
+# one when 0 iframes found, per ARTICLE-PLAYBOOK §8 Numeric Thresholds).
 VIDEO_RICH_CATEGORIES = {"Nature & Marine Life"}
 
 # `<iframe` followed by whitespace or `>` — accommodates `<iframe src=...>` and

@@ -29,7 +29,7 @@ from ..types import FileTarget, Severity, Violation
 CHECK_NAME = "word-count"
 DIMENSION = "depth"
 DEFAULT_SEVERITY = Severity.WARN
-EDITORIAL_REF = "EDITORIAL.md §depth"
+EDITORIAL_REF = "docs/playbook/ARTICLE-PLAYBOOK.md §1 Length + §8 Numeric Thresholds"
 
 DEFAULT_MIN_WORDS = 250
 
