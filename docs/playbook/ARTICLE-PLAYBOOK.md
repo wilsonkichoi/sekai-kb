@@ -464,11 +464,15 @@ Two article-health profiles matter here, and they are different bars:
   runs over the whole corpus; it runs every check and blocks on HARD violations
   only. A text-first article passes it.
 - **`rewrite-stage-4` — the media-complete self-check.** The aspirational bar for
-  depth/long-form articles once images are supplied: on top of `ci-deploy` it
-  additionally HARD-requires a media-complete article (hero + scene images, ≥3).
-  It is **not** the universal new-article gate — the framework's own text-first
-  demo corpus clears `ci-deploy`, not `rewrite-stage-4`. Its image/media
-  thresholds are long-form-calibrated and tunable per instance (§8).
+  depth/long-form articles once images are supplied: it HARD-requires a
+  media-complete article (hero + scene images, ≥3 length-scaled). It is **not**
+  the universal new-article gate, and it is run **in addition to `ci-deploy`, not
+  instead of it**: `ci-deploy` runs the full check set (`checks = "*"`) while
+  `rewrite-stage-4` runs only a media/structure subset, so passing it does **not**
+  imply passing `ci-deploy` (e.g. `footnote-format`, `link-url-mangle` are HARD in
+  `ci-deploy` but don't run here). The framework's own text-first demo corpus
+  clears `ci-deploy`, not `rewrite-stage-4`. Its image/media thresholds are
+  long-form-calibrated and tunable per instance (§8).
 
 ```bash
 # 1. Sync knowledge/ into the build (SSOT rule: edit knowledge/ only)

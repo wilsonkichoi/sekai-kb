@@ -67,8 +67,8 @@ npm run sync
 # Validate frontmatter across all of knowledge/
 npm run test
 
-# Editorial lint on one article (see docs/playbook/ARTICLE-PLAYBOOK.md)
-npm run article-health -- knowledge/Beaches/lantern-cove-beach.md --profile=rewrite-stage-4
+# Editorial lint on one article — mandatory ship gate (see docs/playbook/ARTICLE-PLAYBOOK.md)
+npm run article-health -- knowledge/Beaches/lantern-cove-beach.md --profile=ci-deploy
 ```
 
 The writing process itself — research, drafting, quality gate — is
@@ -85,8 +85,8 @@ manual virtualenv.
 # One-time (and after pulling dependency changes)
 uv sync
 
-# Lint one article
-npm run article-health -- knowledge/History/founding-of-marisol-cove.md --profile=rewrite-stage-4
+# Lint one article — mandatory ship gate
+npm run article-health -- knowledge/History/founding-of-marisol-cove.md --profile=ci-deploy
 
 # Lint the whole corpus with the CI gate's profile
 npm run article-health -- --all --profile=ci-deploy
