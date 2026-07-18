@@ -44,6 +44,6 @@ adding stages.
   article with supplied images — run it in addition, never instead, and never
   fabricate images to clear it.
 
-Write only to `knowledge/{Category}/{slug}.md` (the `{Category}` folder name and
-`{slug}` come from `place.config.ts`). Stage 5 syncs, builds, and commits the
-`knowledge/` file.
+Write only to `knowledge/{Category}/{slug}.md` — `{Category}` is a folder name
+from `place.config.ts`; `{slug}` is the article's own lowercase filename slug.
+Stage 5 syncs, builds, and commits the `knowledge/` file.

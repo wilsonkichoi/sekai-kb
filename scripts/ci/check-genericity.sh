@@ -70,28 +70,35 @@ else
   fi
 fi
 
-# grep -I skips binary files. Excludes:
-#  - node_modules, .git, and the build/tool caches (dist, .astro, .venv,
-#    __pycache__): third-party or generated, never framework source. .git is
-#    critical in template mode — commit messages carry the pre-cut place name.
-#  - content, data, kb: the derived, gitignored projections of knowledge/
-#    (src/content via sync.sh; src/data via prebuild JSON; public/kb via
-#    build-kb-index) — place-specific by nature, never framework code.
-#  - the denylist files themselves (they necessarily contain the forbidden
-#    terms) and the template marker.
-HITS="$(grep -rniIE "$PATTERN" "${SCAN_ROOTS[@]}" \
-  --exclude-dir=node_modules \
-  --exclude-dir=.git \
-  --exclude-dir=dist \
-  --exclude-dir=.astro \
-  --exclude-dir=.venv \
-  --exclude-dir=__pycache__ \
-  --exclude-dir=content \
-  --exclude-dir=data \
-  --exclude-dir=kb \
-  --exclude="genericity-denylist.txt" \
-  --exclude="genericity-denylist.local.txt" \
-  --exclude=".sekai-template" || true)"
+# Build the file list with `find` (prune dirs, then grep the survivors), rather
+# than `grep -r --exclude-dir`. `--exclude-dir` matches on the directory BASENAME
+# on both GNU and BSD grep, so the derived projection `public/kb/` and the
+# `.claude/skills/kb/` router share the name `kb` and would be excluded together
+# — silently exempting the router from the gate (LB-30 review blocker). The two
+# exclusion classes are therefore matched differently:
+#  - Vendor/tool caches (node_modules, .git, dist, .astro, .venv, __pycache__):
+#    pruned by basename — no legitimate framework dir ever carries these names,
+#    anywhere in the tree. .git is critical in template mode — commit messages
+#    carry the pre-cut place name.
+#  - The derived, gitignored projections of knowledge/ (src/content via sync.sh,
+#    src/data via prebuild JSON, public/kb via build-kb-index): pruned by PATH,
+#    so a same-basename dir elsewhere (the .claude/skills/kb router) is still
+#    scanned.
+#  - The denylist files (they necessarily contain the forbidden terms) and the
+#    template marker are dropped by filename.
+# grep -I skips binary files. -print0/xargs -0 handle any spaces in paths.
+HITS="$(find "${SCAN_ROOTS[@]}" \
+  \( -type d \( \
+       -name node_modules -o -name .git -o -name dist -o -name .astro \
+       -o -name .venv -o -name __pycache__ \
+       -o -path '*/src/content' -o -path '*/src/data' -o -path '*/public/kb' \
+     \) -prune \) \
+  -o \( -type f \
+       ! -name genericity-denylist.txt \
+       ! -name genericity-denylist.local.txt \
+       ! -name .sekai-template \
+       -print0 \) \
+  | xargs -0 grep -HniIE "$PATTERN" 2>/dev/null || true)"
 
 if [ -n "$HITS" ]; then
   echo "❌ genericity gate FAILED [$MODE] — denylisted place strings found:" >&2

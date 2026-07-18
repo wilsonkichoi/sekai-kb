@@ -9,6 +9,11 @@ author: 'Marisol Cove'
 featured: false
 lastVerified: 2026-07-17
 lastHumanReview: false
+rationale:
+  why_this_hook: 'A navigation tool made obsolete but kept lit is the cleanest way to show the town choosing memory over utility.'
+  whats_excluded: 'Lighthouse engineering detail and Fresnel-lens optics theory; kept to the civic arc.'
+  where_it_hedges: 'Dates and the decommission year follow the demo record; a real instance would cite the harbor commission archives.'
+  whos_pushing_back: 'None — fictional demo content, no contested claims.'
 geo: Marisol Point Lighthouse,35.108,-120.661,Marisol Point Light
 source:
   - https://example.com/marisol-cove/history/marisol-point-lighthouse
