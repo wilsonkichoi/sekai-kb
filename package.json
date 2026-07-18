@@ -31,6 +31,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "genericity": "bash scripts/ci/check-genericity.sh && node scripts/ci/check-english-only.mjs",
+    "genericity:selftest": "bash scripts/ci/check-skills-gated.sh",
     "english-only": "node scripts/ci/check-english-only.mjs",
     "article-health": "uv run python scripts/tools/article-health.py",
     "article-health:test": "uv run pytest tests/article_health",
