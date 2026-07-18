@@ -39,8 +39,11 @@ Read [docs/playbook/ARTICLE-PLAYBOOK.md](docs/playbook/ARTICLE-PLAYBOOK.md) firs
 then follow [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md) stage by stage.
 The short loop: draft in `knowledge/{Category}/{slug}.md` → self-check against the
 playbook's quality gate →
-`npm run article-health -- <file> --profile=rewrite-stage-4` → `npm run sync` →
-`npm run build` → commit (the pre-commit hook re-validates staged content).
+`npm run article-health -- <file> --profile=ci-deploy` (the mandatory ship gate;
+for a media-complete depth article also run the `--profile=rewrite-stage-4`
+self-check per [ARTICLE-PLAYBOOK.md §7.4](docs/playbook/ARTICLE-PLAYBOOK.md)) →
+`npm run sync` → `npm run build` → commit (the pre-commit hook re-validates staged
+content).
 
 ## Iron rules
 

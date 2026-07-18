@@ -6,10 +6,11 @@
 > a real source? Does the opening earn the second sentence?
 >
 > The mechanical stuff — frontmatter shape, footnote format, word count, SEO length,
-> wikilink syntax — is enforced by the `article-health` tool. Run it after writing:
+> wikilink syntax — is enforced by the `article-health` tool. Run the mandatory ship gate
+> after writing (§7.4 covers the media-complete `rewrite-stage-4` self-check too):
 >
 > ```bash
-> npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage-4
+> npm run article-health -- knowledge/{Category}/{slug}.md --profile=ci-deploy
 > ```
 >
 > This document is for what the tool can't catch: **craft, voice, judgment, warmth**.
@@ -456,22 +457,45 @@ re-verify.**
 
 ### 7.4 Automated verification (must run)
 
+Two article-health profiles matter here, and they are different bars:
+
+- **`ci-deploy` — the mandatory ship gate.** Every article (and the demo corpus)
+  must clear this to commit and deploy. It is the exact profile the instance's CI
+  runs over the whole corpus; it runs every check and blocks on HARD violations
+  only. A text-first article passes it.
+- **`rewrite-stage-4` — the media-complete self-check.** The aspirational bar for
+  depth/long-form articles once images are supplied: it HARD-requires a
+  media-complete article (hero + scene images, ≥3 length-scaled). It is **not**
+  the universal new-article gate, and it is run **in addition to `ci-deploy`, not
+  instead of it**: `ci-deploy` runs the full check set (`checks = "*"`) while
+  `rewrite-stage-4` runs only a media/structure subset, so passing it does **not**
+  imply passing `ci-deploy` (e.g. `footnote-format`, `link-url-mangle` are HARD in
+  `ci-deploy` but don't run here). The framework's own text-first demo corpus
+  clears `ci-deploy`, not `rewrite-stage-4`. Its image/media thresholds are
+  long-form-calibrated and tunable per instance (§8).
+
 ```bash
 # 1. Sync knowledge/ into the build (SSOT rule: edit knowledge/ only)
 npm run sync
 
-# 2. Article health — the full new-article gate
+# 2. Article health — the mandatory ship gate every article must clear
+npm run article-health -- knowledge/{Category}/{slug}.md --profile=ci-deploy
+
+# 2b. Optional: media-complete self-check for a depth article with supplied images
 npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage-4
 
 # 3. Build (includes post-build contract checks)
 npm run build
 ```
 
-| Result                        | Action                             |
-| ----------------------------- | ---------------------------------- |
-| health passes + build OK      | ✅ proceed to commit               |
-| HARD violations               | ❌ fix, rerun                      |
-| build fails                   | ❌ fix frontmatter/syntax, rerun   |
+| Result                                   | Action                             |
+| ---------------------------------------- | ---------------------------------- |
+| `ci-deploy` passes + build OK            | ✅ proceed to commit               |
+| `ci-deploy` HARD violations              | ❌ fix, rerun                      |
+| build fails                              | ❌ fix frontmatter/syntax, rerun   |
+
+Do not fabricate images to satisfy `rewrite-stage-4`; for a text-first article
+`ci-deploy` is the honest blocking gate.
 
 The pre-commit hook re-runs frontmatter validation and `article-health
 --profile=pre-commit` on staged files as a backstop; don't rely on it as the first check.

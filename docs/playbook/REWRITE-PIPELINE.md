@@ -75,7 +75,34 @@ npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage
 
 Run the article through the quality gate in
 [ARTICLE-PLAYBOOK.md §7](ARTICLE-PLAYBOOK.md) — the five-finger test, the
-structure check, the plastic-language scan, and the automated verification:
+structure check, the plastic-language scan, and the automated verification.
+
+There are two article-health bars here, and they are not the same gate:
+
+**Mandatory ship gate — `ci-deploy`.** This is the bar every article must clear
+to commit and deploy; it is the exact profile the instance's CI runs over the
+whole corpus (`article-health --all --profile=ci-deploy`). It runs every check
+and blocks on HARD violations only. A text-first article passes it.
+
+```bash
+npm run article-health -- knowledge/{Category}/{slug}.md --profile=ci-deploy
+```
+
+**Media-complete self-check — `rewrite-stage-4`.** This is the aspirational
+depth-article self-check for long-form pieces once images are supplied. It runs a
+media/structure-focused check list and HARD-promotes the depth checks
+(`image-health` with a hero + scene images floor of ≥3 length-scaled,
+`word-count`, `chronicle-lead`, `viz-health`). It is a self-check, **not** the
+universal new-article gate, and it is **run in addition to `ci-deploy`, never
+instead of it**: `ci-deploy` runs the full check set (`checks = "*"`) while
+`rewrite-stage-4` runs only its named subset, so passing `rewrite-stage-4` does
+**not** imply passing `ci-deploy` (e.g. `footnote-format` and `link-url-mangle`
+are HARD in `ci-deploy` but don't run under `rewrite-stage-4`). The framework's
+own demo corpus is text-first and clears `ci-deploy`, not `rewrite-stage-4`. Run
+it when you have supplied media and want to hold a depth article to the stricter
+media bar — after, not instead of, the `ci-deploy` gate above. Its image/media
+thresholds are long-form-calibrated and tunable per instance — see
+[ARTICLE-PLAYBOOK.md §8](ARTICLE-PLAYBOOK.md).
 
 ```bash
 npm run article-health -- knowledge/{Category}/{slug}.md --profile=rewrite-stage-4
@@ -88,7 +115,8 @@ Check:
 - Word count appropriate for the topic's band
 - No playbook violations (voice, structure, sourcing)
 
-Fix any failures before proceeding. **Fail = don't commit.**
+Fix any `ci-deploy` HARD failures before proceeding. **`ci-deploy` fail = don't
+commit.** Do not fabricate images to satisfy `rewrite-stage-4`.
 
 ---
 
