@@ -36,10 +36,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Check for place-specific strings in src/, scripts/, tests/
+      - name: Check for place-specific strings in src/, scripts/, tests/, .claude/skills/
         run: bash scripts/ci/check-genericity.sh
-      - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/
+      - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/, .claude/skills/
         run: node scripts/ci/check-english-only.mjs
+      - name: Self-test — both gates scan .claude/skills/ in instance mode
+        run: bash scripts/ci/check-skills-gated.sh
 
   test:
     name: Test

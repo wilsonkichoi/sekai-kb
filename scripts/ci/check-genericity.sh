@@ -3,17 +3,18 @@
 # check-genericity.sh — the genericity gate.
 #
 # Fails if any place-specific string leaks into framework-owned code (src/,
-# scripts/, or tests/). Place identity must flow ONLY through place.config.ts,
-# knowledge/, and public/media/ — never hardcoded in code trees (ADR 002, SPEC
-# §Negative requirements, §G risk 2). This is the structural mitigation for the
-# trap that motivated the whole rebuild.
+# scripts/, tests/, or .claude/skills/). Place identity must flow ONLY through
+# place.config.ts, knowledge/, and public/media/ — never hardcoded in code trees
+# (ADR 002, SPEC §Negative requirements, §G risk 2). This is the structural
+# mitigation for the trap that motivated the whole rebuild.
 #
-# Scan scope: src/, scripts/, and tests/ (test fixtures are code — the
-# whole-project doctrine, STRATEGIC-DIRECTION 2026-07-11 (b)). place.config.ts
-# (repo root), knowledge/, public/media/, and docs/ hold place identity
-# legitimately and are outside the scan roots by construction; the denylist file
-# itself is inside scripts/ and is excluded explicitly (it necessarily contains
-# the forbidden terms).
+# Scan scope: src/, scripts/, tests/, and .claude/skills/ (test fixtures are
+# code, and framework skills are agent-executed prose that is code for doctrine
+# purposes — the whole-project doctrine, STRATEGIC-DIRECTION 2026-07-11 (b),
+# task 5.6). place.config.ts (repo root), knowledge/, public/media/, and docs/
+# hold place identity legitimately and are outside the scan roots by
+# construction; the denylist file itself is inside scripts/ and is excluded
+# explicitly (it necessarily contains the forbidden terms).
 #
 # Usage: bash scripts/ci/check-genericity.sh   (run from anywhere; exit 1 on hit)
 
@@ -61,9 +62,10 @@ else
   [ -d "$ROOT/src" ] && SCAN_ROOTS+=("$ROOT/src")
   [ -d "$ROOT/scripts" ] && SCAN_ROOTS+=("$ROOT/scripts")
   [ -d "$ROOT/tests" ] && SCAN_ROOTS+=("$ROOT/tests")
-  MODE="instance (src/, scripts/, tests/)"
+  [ -d "$ROOT/.claude/skills" ] && SCAN_ROOTS+=("$ROOT/.claude/skills")
+  MODE="instance (src/, scripts/, tests/, .claude/skills/)"
   if [ "${#SCAN_ROOTS[@]}" -eq 0 ]; then
-    echo "✓ genericity gate passed — no src/, scripts/, or tests/ to scan"
+    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .claude/skills/ to scan"
     exit 0
   fi
 fi

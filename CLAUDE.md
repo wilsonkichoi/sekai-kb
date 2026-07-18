@@ -58,6 +58,25 @@ content).
    through config, content, and media. Anything more is upstreamed to sekai-kb and
    pulled back as a tagged release. The genericity gate is the structural guarantee.
 
+## Skill ownership
+
+The skills under `.claude/skills/` — `/write`, `/validate`, `/factcheck`, the
+`/kb` router, plus `/adopt`, `/seed-articles` (and `/upgrade` when it ships) — are
+**framework-owned**, the same class as `src/` and `scripts/`. They are managed
+through framework upgrades; customize them the way you customize `src/`: through
+`place.config.ts`, `knowledge/`, and the playbook, not by editing the skill
+bodies.
+
+- **Adding a skill is free.** A new skill is a new directory under
+  `.claude/skills/`, so it never conflicts on `/upgrade`. The `/kb` router lists
+  it automatically (it enumerates the directory, not a hardcoded set).
+- **Overriding a framework skill** means either upstreaming the change to
+  sekai-kb first (so every instance gets it), or accepting a conflict-managed
+  local fork that `/upgrade` flags on each release.
+
+Both machine gates (`npm run genericity`) scan `.claude/skills/` — agent-executed
+prose is code for the genericity + English-only doctrine.
+
 ## Language support boundary
 
 UI strings and editorial tooling are English-calibrated; Latin-script content

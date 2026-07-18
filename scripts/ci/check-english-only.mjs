@@ -2,8 +2,10 @@
 // check-english-only.mjs — the English-only CJK-codepoint gate.
 //
 // Fails if any CJK-range codepoint appears in a committed code tree (src/,
-// scripts/, tests/, workers/). The site ships English-only through the current
-// roadmap; a CJK codepoint in code or a test fixture is dead fork content
+// scripts/, tests/, workers/, .claude/skills/). The site ships English-only
+// through the current roadmap; a CJK codepoint in code, a test fixture, or a
+// framework skill (agent-executed prose is code for doctrine purposes) is dead
+// fork content
 // (STRATEGIC-DIRECTION 2026-07-11 (b); SPEC §Negative requirements). This is the
 // machine complement to check-genericity.sh, which greps a place-name denylist
 // over the same trees. Test fixtures are code — the doctrine is whole-project.
@@ -24,7 +26,9 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 // Present and future code trees. src/content and src/data are derived,
 // gitignored projections of knowledge/ (place-specific by nature) and are
 // skipped by the content/data dir-name rule below, matching check-genericity.sh.
-const SCAN_ROOTS = ['src', 'scripts', 'tests', 'workers'];
+// .claude/skills holds the framework skills (agent-executed prose is code for
+// doctrine purposes — task 5.6).
+const SCAN_ROOTS = ['src', 'scripts', 'tests', 'workers', '.claude/skills'];
 // Build/tool caches (.astro, dist, .venv) + the derived gitignored projections of
 // knowledge/ (content, data, kb) are skipped in both modes. .git is skipped so
 // template mode (whole-tree scan) never trips over pre-cut history.
