@@ -89,8 +89,10 @@ articles so only its own `knowledge/` remains:
 ```bash
 git rm --ignore-unmatch .sekai-template
 # Demo articles added by the merge = present in the tag's knowledge/, absent from
-# your pre-merge tree. List and remove them (yours are untouched by merge=ours):
-comm -13 <(git ls-tree -r --name-only HEAD@{1} -- knowledge/ | sort) \
+# your pre-merge tree. `git merge` set ORIG_HEAD to that pre-merge tree at merge
+# start (correct whether or not the merge is committed yet — unlike HEAD@{1}).
+# List and remove them (yours are untouched by merge=ours):
+comm -13 <(git ls-tree -r --name-only ORIG_HEAD -- knowledge/ | sort) \
          <(git ls-tree -r --name-only sekai-kb-v1.0.0 -- knowledge/ | sort) \
   | while read -r f; do git rm -f -- "$f"; done
 ```
@@ -125,7 +127,7 @@ git tag -l 'sekai-kb-v*' | sort -V
 cat FRAMEWORK-VERSION
 
 # 3. Read the target's CHANGELOG entry first — especially its Upgrade note.
-git show sekai-kb-v1.0.1:CHANGELOG.md | sed -n '/## \[1.0.1\]/,/## \[/p'
+git show sekai-kb-v1.0.1:CHANGELOG.md | awk '/^## \[1\.0\.1\]/{p=1;print;next} p&&/^## \[/{exit} p'
 
 # 4. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff sekai-kb-v1.0.1 -m "chore: upgrade framework to sekai-kb-v1.0.1"

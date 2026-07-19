@@ -13,3 +13,6 @@ README.md merge=ours
 place.config.ts merge=ours
 knowledge/** merge=ours
 public/media/** merge=ours
+CNAME merge=ours
+docs/baselines/** merge=ours
+scripts/ci/genericity-denylist.local.txt merge=ours

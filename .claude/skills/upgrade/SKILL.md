@@ -67,7 +67,8 @@ section from the framework CHANGELOG and show it to the user, in particular the
 **Upgrade note** (breaking config changes, new required fields):
 
 ```bash
-git show sekai-kb-vX.Y.Z:CHANGELOG.md | sed -n '/## \[X.Y.Z\]/,/## \[/p'
+# Prints the target version's entry only (stops before the next `## [` heading):
+git show sekai-kb-vX.Y.Z:CHANGELOG.md | awk '/^## \[X\.Y\.Z\]/{p=1;print;next} p&&/^## \[/{exit} p'
 ```
 
 If the Upgrade note names a new `place.config` key, remember: new keys default to

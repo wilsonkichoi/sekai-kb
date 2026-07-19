@@ -32,7 +32,20 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- Template `.gitattributes` now ships the full 8-path `merge=ours` baseline the
+  docs promise: added `CNAME`, `docs/baselines/**`, and
+  `scripts/ci/genericity-denylist.local.txt` (all wizard-written), so a
+  template-cloned adopter's `CNAME` + local denylist are protected without hand
+  edits (LB-33 review S1).
+- `docs/runbook/UPGRADE.md` demo-article cleanup uses `ORIG_HEAD` (the pre-merge
+  tree `git merge` records at merge start) instead of `HEAD@{1}`, which resolved
+  to an arbitrary reflog entry while the establishment merge was still uncommitted
+  and could `git rm` an instance's own article (LB-33 review S2).
+- `/upgrade` skill + `UPGRADE.md` CHANGELOG-excerpt command uses an `awk` range
+  that stops before the next `## [` heading instead of a `sed` range that printed
+  it as trailing noise (LB-33 review N1).
 
 ## [1.0.1] — 2026-07-18
 
