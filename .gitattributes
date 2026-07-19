@@ -4,6 +4,7 @@
 # Adopters: add your own instance-specific files below.
 
 CLAUDE.md merge=ours
+README.md merge=ours
 place.config.ts merge=ours
 knowledge/** merge=ours
 public/media/** merge=ours

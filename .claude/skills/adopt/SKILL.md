@@ -40,7 +40,21 @@ node --version
   category folders and overwrites `place.config.ts`. Only continue if they
   explicitly confirm, and pass `--force` to the wizard in step 4.
 
-Read `scripts/init/README.md` — it is the SSOT for the answers-JSON schema,
+**Install dependencies before anything else.** A fresh template clone has no
+`node_modules`, so `npm run init` and `npm run build` (step 4) fail with
+`run-p: command not found`. Install both toolchains from the repo root now:
+
+```bash
+npm ci --force && uv sync
+```
+
+Both must succeed before you continue. If either fails (e.g. `uv` or Node not
+installed), **hard-stop** and give the user the exact missing prerequisite and
+command — do not proceed to the interview only to hit the failure at build. The
+prerequisites and version floor are in `docs/runbook/DEPLOY.md` (Node ≥ 22.12,
+`uv`, `gh`).
+
+Then read `scripts/init/README.md` — it is the SSOT for the answers-JSON schema,
 per-field validation, and defaults. Do not duplicate its rules here; follow it
 when a value is questioned.
 

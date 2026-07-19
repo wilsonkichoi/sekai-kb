@@ -159,6 +159,45 @@ anything in it.
 
 ## 4. Structure
 
+### 4.0 Frontmatter: The Required Shape
+
+Every article opens with a YAML frontmatter block. Copy this skeleton and fill it
+in — the field **order**, quoting, and types below are exactly what `article-health`
+enforces (`frontmatter-format`), so a copy of this passes the `ci-deploy` gate with
+zero frontmatter violations:
+
+```yaml
+---
+title: 'Article Title'
+description: 'One plain sentence describing the article (≤ 160 chars for SEO).'
+date: 2026-07-18
+category: 'History'
+tags: ['tag-one', 'tag-two']
+subcategory: 'Optional grouping within the category'
+author: 'Your Place Name'
+featured: false
+lastVerified: 2026-07-18
+lastHumanReview: false
+---
+```
+
+Rules the linter checks:
+
+- **Field order is canonical** — the ten fields above in exactly that order.
+- **String scalars are single-quoted** (`title`, `description`, `category`,
+  `subcategory`, `author`).
+- **Dates are unquoted ISO** `YYYY-MM-DD` (`date`, `lastVerified`).
+- **`tags` is a flow array** — `['a', 'b']`, not a `- a` / `- b` list.
+- **`featured` and `lastHumanReview` are booleans** — unquoted `true`/`false`.
+  `lastHumanReview` is a **boolean**, not a date: `false` until a human has
+  reviewed the article, `true` after.
+- **`category` must match the folder** the file lives in under `knowledge/`.
+
+Optional fields go **after** `lastHumanReview`, in this order when present:
+`researchReport`, then the image set (`image`, `imageAlt`, `imageCredit`,
+`imageLicense`, `imageSource`), then instance conventions (`source`, `geo`,
+`rationale` — the `rationale` block is required for contested categories, §4.9).
+
 ### 4.1 The Opening Paragraph + At a Glance
 
 Every article opens with a short prose paragraph (identify the subject, plant the anchor
@@ -236,6 +275,12 @@ For Standard and Deep Dive articles, add a closing section:
 - [[founding-of-marisol-cove|The Founding of Marisol Cove]]
 - [[kelp-forest-preserve|Marisol Kelp Forest Preserve]]
 ```
+
+Use `[[wikilink]]` syntax in the list — it renders to a normal link and, unlike a plain
+`[text](/category/slug)` link, it feeds the knowledge graph. Wikilinks in list items
+render correctly (the same as inline ones); `article-health` accepts them there. A
+wikilink whose target article does not exist is a HARD failure (`wikilink-target`), so
+every entry must point at a real article.
 
 This is different from an inline wikilink. An inline link
 (`[[lantern-cove-beach|Lantern Cove]]`) belongs at the exact sentence where the
