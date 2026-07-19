@@ -388,9 +388,11 @@ export function writeInstance(root, cfg) {
   // README.md: the instance repo front page (replaces the template's README).
   write('README.md', renderReadme(cfg));
 
-  // FRAMEWORK-VERSION: the framework version this instance adopted.
+  // FRAMEWORK-VERSION: the framework version this instance adopted. Written
+  // `v`-prefixed to match the release-tag form (sekai-kb-vX.Y.Z) that the
+  // /upgrade skill records, so wizard-written and upgrade-written values agree.
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  write('FRAMEWORK-VERSION', `${pkg.version}\n`);
+  write('FRAMEWORK-VERSION', `v${pkg.version}\n`);
 
   // Local genericity denylist: create or append (idempotent per term). The
   // framework denylist file is never touched.

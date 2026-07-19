@@ -1,10 +1,18 @@
 # Instance-owned files: framework tag-merges never overwrite these.
 # Git uses the "ours" merge strategy for any merge (including `git merge <tag>`),
 # keeping the instance's version and discarding the incoming framework change.
-# Adopters: add your own instance-specific files below.
+#
+# REQUIRED once per clone (not version-controlled, so it cannot ship here):
+#   git config merge.ours.driver true
+# The `ours` driver is not built into git; without that config line every
+# `merge=ours` below silently no-ops. `/upgrade` and docs/runbook/UPGRADE.md set
+# it. Adopters: add your own instance-specific files below.
 
 CLAUDE.md merge=ours
 README.md merge=ours
 place.config.ts merge=ours
 knowledge/** merge=ours
 public/media/** merge=ours
+CNAME merge=ours
+docs/baselines/** merge=ours
+scripts/ci/genericity-denylist.local.txt merge=ours
