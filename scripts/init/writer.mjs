@@ -253,8 +253,6 @@ Knowledge base for **${name}** (${domain}), built on the
   Everything the site renders is derived from this at build time.
 - **Media:** \`public/media/\` and other \`public/\` assets.
 - **Architecture diagrams (engineering SSOT):** \`docs/diagrams/*.drawio\`.
-- **Engineering rules:** \`.claude/rules/\` — framework-owned lessons that keep the
-  build green (Astro/Vite gotchas, prebuild ordering, shell portability, lockfile).
 
 ## How the site builds
 
@@ -421,6 +419,32 @@ export function writeInstance(root, cfg) {
   if (existsSync(marker)) {
     unlinkSync(marker);
     actions.push('removed .sekai-template (instance mode)');
+  }
+
+  // Dev-plugin strip: the framework's own dev-workflow state (config + engineering
+  // rules under .agent-toolkit/, and the reference line that points at it) is
+  // framework-development state, never adopter content. A fresh instance ships zero
+  // dev-plugin state; an adopter who wants the dev workflow runs `dev:setup` to
+  // create their own. Strip the tree and the AGENTS.md reference block here;
+  // check-init.sh asserts both are absent post-init.
+  const agentToolkit = join(root, '.agent-toolkit');
+  if (existsSync(agentToolkit)) {
+    rmSync(agentToolkit, { recursive: true, force: true });
+    actions.push('removed .agent-toolkit/ (dev-plugin state not shipped to adopters)');
+  }
+  // AGENTS.md is instance-owned but seeded from the framework starter; remove only
+  // the sentinel-delimited dev-plugin block, leaving the rest of the file intact.
+  const agentsPath = join(root, 'AGENTS.md');
+  if (existsSync(agentsPath)) {
+    const before = readFileSync(agentsPath, 'utf8');
+    const after = before.replace(
+      /\n+<!-- dev-plugin:start[\s\S]*?dev-plugin:end -->[ \t]*\n?/,
+      '\n',
+    );
+    if (after !== before) {
+      writeFileSync(agentsPath, after);
+      actions.push('stripped dev-plugin reference block from AGENTS.md');
+    }
   }
 
   return actions;

@@ -84,8 +84,9 @@ git merge --no-ff sekai-kb-vX.Y.Z -m "chore: upgrade framework to sekai-kb-vX.Y.
 
 `.gitattributes merge=ours` keeps every instance-owned file
 (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
-`README.md`, `docs/baselines/**`, `scripts/ci/genericity-denylist.local.txt`)
-automatically — those never conflict.
+`AGENTS.md`, `README.md`, `docs/baselines/**`,
+`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) automatically —
+those never conflict.
 
 - **Merge clean** → go to step 5.
 - **Conflicts reported** → step 4. Conflicts can only be in framework-owned files
@@ -129,17 +130,57 @@ resolve it now — do not commit a red merge. If the merge is still in progress
 git commit --no-edit
 ```
 
-## 6. Bump FRAMEWORK-VERSION
+## 6. Reconcile instance-owned starter files (conversational diff)
+
+`merge=ours` is deliberately blunt: it keeps the instance's version of every
+instance-owned file and **silently discards the framework's changes** to those
+same files. That is correct for `place.config.ts`, `knowledge/**`, and
+`public/media/**` — pure instance content. But the *starter* files the wizard
+seeded (`AGENTS.md`, and secondarily `CLAUDE.md`, `README.md`) began as framework
+boilerplate the instance lightly edited; a release that improves that boilerplate
+(a new agent instruction, a corrected pointer) would vanish under `merge=ours`
+with no signal. Surface those improvements instead of dropping them.
+
+For each instance-owned **starter** file — at minimum `AGENTS.md` — diff the
+instance's committed version against the incoming tag's version and, if they
+differ, walk the difference WITH the user:
+
+```bash
+# AGENTS.md is the primary case; add CLAUDE.md / README.md if the CHANGELOG
+# entry mentions changes to them.
+for f in AGENTS.md CLAUDE.md README.md; do
+  git diff --no-index --exit-code -- "$f" <(git show sekai-kb-vX.Y.Z:"$f" 2>/dev/null) >/dev/null 2>&1 \
+    || echo "starter divergence: $f"
+done
+```
+
+For each divergent starter file, show the user the framework's side
+(`git show sekai-kb-vX.Y.Z:AGENTS.md`) next to theirs and propose adopting only
+the framework improvements that do not clobber the user's own edits — never a
+blind overwrite (the whole point of `merge=ours` is that the user's edits win by
+default). Apply only what the user approves, then stage it:
+
+```bash
+git add <starter-file>   # only the files the user chose to update
+```
+
+Note: the dev-plugin reference line and `.agent-toolkit/**` are instance-owned by
+the same mechanism, but they are stripped from adopter clones by the wizard, so a
+pure adopter has nothing to reconcile there; a framework/first-instance checkout
+that carries its own `.agent-toolkit/` keeps it as-is.
+
+## 7. Bump FRAMEWORK-VERSION
 
 Record the version just adopted (the tag's `vX.Y.Z`, matching the wizard's
-`v`-prefixed form):
+`v`-prefixed form). Fold any starter-file updates approved in step 6 into this
+commit (or a preceding one):
 
 ```bash
 printf 'vX.Y.Z\n' > FRAMEWORK-VERSION
 git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> vX.Y.Z"
 ```
 
-## 7. Report
+## 8. Report
 
 Tell the user: the version moved from → to, which files (if any) conflicted and
 how each was resolved, the build result, and any Upgrade-note opt-ins they

@@ -167,10 +167,37 @@ merges keep the instance's version:
 | `public/media/**` | the place's images and media |
 | `CNAME` | the instance's custom domain |
 | `CLAUDE.md` | instance header (rendered by the wizard) |
+| `AGENTS.md` | instance-owned agent instructions from clone time |
 | `README.md` | instance repo front page (rendered by the wizard) |
 | `docs/baselines/**` | instance-captured health/visual baselines |
 | `scripts/ci/genericity-denylist.local.txt` | the place's own denylisted terms |
+| `.agent-toolkit/**` | dev-plugin state (config + promoted rules) — each repo owns its own |
 
 Adopters add their own instance-specific files to `.gitattributes` the same way.
 The list is append-only from the framework baseline; the framework never removes a
 `merge=ours` entry, so an upgrade cannot start overwriting a file you own.
+
+`AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files. A wizard-adopted
+instance has `.agent-toolkit/` and the `AGENTS.md` dev-plugin reference line stripped
+at adoption (they are framework-development state, not adopter content); it therefore
+carries no dev config to be overwritten. A framework or first-instance checkout that
+keeps its own `.agent-toolkit/` relies on `merge=ours` so a framework tag never
+replaces its dev config with the framework's.
+
+## Reconciling instance-owned starter files (every upgrade)
+
+`merge=ours` keeps your version of an instance-owned file and **silently drops the
+framework's changes** to it. That is what you want for `place.config.ts`,
+`knowledge/**`, and media. But the *starter* files the wizard seeded — `AGENTS.md`
+above all, and to a lesser degree `CLAUDE.md` / `README.md` — started as framework
+boilerplate; a release that improves that boilerplate would vanish with no signal.
+After a merge, diff your version against the tag and decide, file by file, whether to
+pull any framework improvement in (the `/upgrade` skill does this conversationally):
+
+```bash
+# Show where your AGENTS.md diverges from the tag you just merged, then read both
+# sides and hand-pick improvements — never a blind overwrite (your edits win by
+# default; that is the point of merge=ours).
+git diff --no-index -- AGENTS.md <(git show sekai-kb-v1.0.2:AGENTS.md)
+# Apply only the lines you want, then: git add AGENTS.md
+```

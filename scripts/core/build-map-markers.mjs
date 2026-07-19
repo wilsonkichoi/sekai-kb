@@ -23,7 +23,7 @@
  *   geometry   = { type: 'Point', coordinates: [lng, lat] }
  *
  * Runs in the run-p prebuild group and writes ONLY its own file
- * (.claude/rules/prebuild-parallel-no-sibling-rm.md). Consumed at build time by
+ * (.agent-toolkit/rules/prebuild-parallel-no-sibling-rm.md). Consumed at build time by
  * src/templates/map.template.astro; the public sibling public/data/boundary.geojson
  * feeds the same page and, downstream, 5.5's SystemDiagram. Non-fatal on error,
  * but always writes a valid (possibly empty) FeatureCollection so the map page's

@@ -157,7 +157,18 @@ grep -q "^$DOMAIN$" "$R/CNAME" || fail "CNAME does not contain $DOMAIN"
 [ ! -f "$R/.sekai-template" ] || fail ".sekai-template marker not removed"
 grep -q "^$NAME_LC$" "$R/scripts/ci/genericity-denylist.local.txt" \
   || fail "local denylist does not contain $NAME_LC"
-echo "✓ seeded artifacts present (FRAMEWORK-VERSION, CLAUDE.md header, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed)"
+# Dev-plugin strip (LB-41): a fresh instance ships zero dev-plugin state — the
+# .agent-toolkit/ tree and the AGENTS.md reference block are removed by the wizard.
+# Non-vacuous only because the committed tree (git archive HEAD, snapshotted above)
+# carries .agent-toolkit/ and the reference block.
+[ ! -d "$R/.agent-toolkit" ] || fail ".agent-toolkit/ not stripped from adopted instance"
+if grep -q "@.agent-toolkit/dev.md" "$R/AGENTS.md"; then
+  fail "AGENTS.md dev-plugin reference line not stripped"
+fi
+if grep -q "dev-plugin:start" "$R/AGENTS.md"; then
+  fail "AGENTS.md dev-plugin sentinel block not stripped"
+fi
+echo "✓ seeded artifacts present (FRAMEWORK-VERSION, CLAUDE.md header, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ + AGENTS.md reference stripped)"
 
 # DoD-4: a planted place-name string in src/ fails the gate; framework denylist
 # untouched.
