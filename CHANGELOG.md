@@ -34,6 +34,23 @@ tags, never framework `main`** (ADR 004, SPEC
 
 _Nothing yet._
 
+## [1.0.1] — 2026-07-18
+
+### Changed
+
+- **`docs/runbook/UPGRADE.md`** — the merge-base establishment step now covers
+  demo-content cleanup: `merge=ours` protects files an instance already has but
+  does not stop theirs-only `knowledge/` articles from being *added*, so an
+  existing instance re-basing onto the framework must strip the template's demo
+  articles. Documents the `comm`-based list-and-remove and clarifies the
+  `merge=ours` add-vs-overwrite distinction.
+
+### Upgrade note
+
+Docs only — no config or code contract changes. Nothing to do.
+
+[1.0.1]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.1
+
 ## [1.0.0] — 2026-07-18
 
 First tagged framework release: the complete Phase-5 sekai-kb template, cut from
@@ -78,5 +95,5 @@ onto this tag.
 First release — nothing to upgrade from. The first instance establishes its merge
 base against this tag per `docs/runbook/UPGRADE.md` §Establishing the merge base.
 
-[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.0...HEAD
+[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.1...HEAD
 [1.0.0]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.0

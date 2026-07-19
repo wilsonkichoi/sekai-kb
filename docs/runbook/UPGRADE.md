@@ -62,7 +62,11 @@ git merge --allow-unrelated-histories sekai-kb-v1.0.0
 The merge outcome, file by file:
 
 - **Instance-owned files** (`place.config.ts`, `knowledge/**`, `CLAUDE.md`, …) —
-  kept as yours automatically by `merge=ours`. No conflict.
+  kept as yours automatically by `merge=ours`. No conflict. **Caveat:** `merge=ours`
+  protects files you *already have* from being overwritten; it does **not** stop a
+  theirs-only file under those paths from being *added*. If the template ships demo
+  content (`knowledge/` articles for its example place), that content lands in your
+  instance on the first merge — strip it in the cleanup step below.
 - **Files only the framework has** (e.g. `.claude/skills/`, `SystemDiagram.astro`)
   — added to your instance.
 - **Files only you have** (your docs, research, tracker config) — untouched; a
@@ -77,11 +81,18 @@ The merge outcome, file by file:
 for f in $(git diff --name-only --diff-filter=U); do git checkout --theirs "$f" && git add "$f"; done
 ```
 
-Then remove the template-only marker (an instance is not the template) and, if you
-came from "Use this template", drop any stray template files you do not want:
+Then remove the template-only marker (an instance is not the template) and any
+demo content the merge added. A "Use this template" adopter reseeds via `/adopt`;
+an existing instance re-basing onto the framework strips the template's demo
+articles so only its own `knowledge/` remains:
 
 ```bash
 git rm --ignore-unmatch .sekai-template
+# Demo articles added by the merge = present in the tag's knowledge/, absent from
+# your pre-merge tree. List and remove them (yours are untouched by merge=ours):
+comm -13 <(git ls-tree -r --name-only HEAD@{1} -- knowledge/ | sort) \
+         <(git ls-tree -r --name-only sekai-kb-v1.0.0 -- knowledge/ | sort) \
+  | while read -r f; do git rm -f -- "$f"; done
 ```
 
 Build-verify, finalize, record the version:
