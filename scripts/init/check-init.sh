@@ -19,6 +19,13 @@
 # `npm run build`): for CI and disposable clones only. The CI job passes
 # --build; never pass it in a working tree you care about.
 #
+# Both tiers also run on ADOPTED INSTANCES (instances keep the init-check CI
+# job, since they carry the wizard and receive framework upgrades). An adopted
+# tree has no .sekai-template marker and has articles in knowledge/, so the
+# wizard's re-run guard (index.mjs) would refuse it. The self-check tests the
+# wizard, not the checkout's adoption state: it replants the marker before
+# every init it runs, and init removes it again (asserted in tier 1).
+#
 # The test place name is assembled by concatenation below so that this script
 # never contains it as a literal substring — post-init, the name is on the
 # instance's local denylist, and this script lives inside the scanned scripts/
@@ -77,6 +84,9 @@ fail() {
 snapshot() {
   mkdir -p "$1"
   git -C "$ROOT" archive HEAD | tar -x -C "$1"
+  # Replant the marker (see header): on an adopted instance, HEAD has no
+  # .sekai-template and the re-run guard would refuse the scratch init.
+  touch "$1/.sekai-template"
 }
 
 echo "── tier 1: double init on scratch copies of HEAD ──"
@@ -167,6 +177,10 @@ if [ "$BUILD" = false ]; then
 fi
 
 echo "── tier 2 (--build): in-place init + full build in $ROOT ──"
+# Same replant as snapshot(): the CI checkout of an adopted instance has no
+# marker and the in-place init would hit the re-run guard. This checkout is
+# disposable (see header); init removes the marker.
+touch "$ROOT/.sekai-template"
 node "$ROOT/scripts/init/index.mjs" --answers "$ANSWERS"
 bash "$ROOT/scripts/ci/check-genericity.sh" \
   || fail "post-init genericity gate failed in instance mode"
