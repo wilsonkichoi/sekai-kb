@@ -173,7 +173,7 @@ description: 'One plain sentence describing the article (≤ 160 chars for SEO).
 date: 2026-07-18
 category: 'History'
 tags: ['tag-one', 'tag-two']
-subcategory: 'Optional grouping within the category'
+subcategory: 'A grouping within the category'
 author: 'Your Place Name'
 featured: false
 lastVerified: 2026-07-18
@@ -192,6 +192,10 @@ Rules the linter checks:
   `lastHumanReview` is a **boolean**, not a date: `false` until a human has
   reviewed the article, `true` after.
 - **`category` must match the folder** the file lives in under `knowledge/`.
+- **All ten fields are required** — a missing one is a HARD failure. `subcategory` is
+  mandatory too (its *value* is a loose grouping of your choosing, but the field must be
+  present); the sole exception is articles in the `About` category, which are exempt from
+  this check.
 
 Optional fields go **after** `lastHumanReview`, in this order when present:
 `researchReport`, then the image set (`image`, `imageAlt`, `imageCredit`,
