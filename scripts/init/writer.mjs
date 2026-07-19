@@ -13,6 +13,9 @@
  *   FRAMEWORK-VERSION                          framework version at init time
  *   scripts/ci/genericity-denylist.local.txt   adopter place-name terms
  *   .sekai-template                            removed (template → instance)
+ *   .agent-toolkit/                            removed (dev-plugin state, not
+ *                                              shipped to adopters)
+ *   AGENTS.md                                  dev-plugin reference block stripped
  *
  * Writing is a pure function of the resolved config, with no timestamps or
  * environment reads, so the same answers always produce byte-identical output.

@@ -43,9 +43,11 @@ governs work committed here.
   `sekai-kb-vX.Y.Z` → push the tag.** Tags are immutable and never re-pointed
   (CHANGELOG release rules). Tagging is a `dev:verify`-time step, after merge.
 - **Framework-upgrade PRs in instances merge with a real merge commit, never
-  squash** (see `upgrade-prs-merge-commit-never-squash.md`). Framework-repo feature
-  PRs use `merge_policy: squash` unless their branch history is itself the
-  deliverable.
+  squash** — the mechanics (Merge-instructions block in the PR body, post-merge
+  `git merge-base --is-ancestor` ancestry assertion) live in the instance-side rule
+  `upgrade-prs-merge-commit-never-squash.md`, carried in each instance's own
+  `rules_dir`, not shipped in this framework repo. Framework-repo feature PRs use
+  `merge_policy: squash` unless their branch history is itself the deliverable.
 - **Dev-plugin state is instance-owned and adopter-stripped.** `.agent-toolkit/**`
   and `AGENTS.md` carry `merge=ours`; the init wizard strips `.agent-toolkit/` and
   the `AGENTS.md` reference line from adopter clones (ADR 006). Rules here are
@@ -60,7 +62,7 @@ build gotcha that a session opens only when its trigger matches, not standing
 doctrine to inline every session. Open the file when its hook fires.
 
 - `.agent-toolkit/rules/astro-geojson-import-raw.md` — build-time import of a `.geojson` (or other non-JSON data extension): use `?raw` + `JSON.parse`; Vite has no loader for the bare extension.
-- `.agent-toolkit/rules/astro-json-island-escape.md` — emitting build-time JSON into a `set:html` `<script type="application/json">` island: escape every `<` to `<` or a `</script>` in a value breaks out.
+- `.agent-toolkit/rules/astro-json-island-escape.md` — emitting build-time JSON into a `set:html` `<script type="application/json">` island: escape every `<` to its `\u003c` form (`JSON.stringify` does not), or a `</script>` inside a string value breaks out of the island.
 - `.agent-toolkit/rules/astro-static-paths-scope.md` — `getStaticPaths` helpers must be inlined or exported; non-exported frontmatter helpers are tree-shaken from the prerender chunk and throw at build.
 - `.agent-toolkit/rules/external-link-arrow-exclusion.md` — adding a `target="_blank"` link inside an article surface: give it `class="no-external-icon"` or global CSS appends a stray ↗.
 - `.agent-toolkit/rules/github-actions-least-privilege.md` — a workflow that runs PR code sets `permissions: contents: read` top-level; grant write scopes only on the job that needs them.

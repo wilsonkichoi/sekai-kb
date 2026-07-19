@@ -149,7 +149,12 @@ differ, walk the difference WITH the user:
 # AGENTS.md is the primary case; add CLAUDE.md / README.md if the CHANGELOG
 # entry mentions changes to them.
 for f in AGENTS.md CLAUDE.md README.md; do
-  git diff --no-index --exit-code -- "$f" <(git show sekai-kb-vX.Y.Z:"$f" 2>/dev/null) >/dev/null 2>&1 \
+  # Skip a starter file the tag does not carry — nothing to reconcile, and an
+  # empty `git show` stream would otherwise report a spurious divergence.
+  git cat-file -e "sekai-kb-vX.Y.Z:$f" 2>/dev/null || continue
+  # `--no-index` already sets diff's exit status (1 = differ), so `--quiet` alone
+  # suffices; no `--exit-code`, no output redirection.
+  git diff --no-index --quiet -- "$f" <(git show "sekai-kb-vX.Y.Z:$f") \
     || echo "starter divergence: $f"
 done
 ```
