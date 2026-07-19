@@ -37,6 +37,24 @@ def test_wikilink_with_alias(write_article, monkeypatch, tmp_path):
     assert list(wikilink_target.check(target, {})) == []
 
 
+def test_unresolved_wikilink_in_list_item_still_flagged(write_article, monkeypatch, tmp_path):
+    """LB-37 boundary: format-structure accepts wikilinks in list items, so
+    wikilink-target is the sole guard against unresolved targets there. A
+    Further Reading list pointing at a missing article must still be HARD."""
+    monkeypatch.chdir(tmp_path)
+    write_article("target body", name="Founding.md")
+    wikilink_target._reset_cache()
+    src = write_article(
+        "## Further Reading\n\n- [[Founding|The Founding]]\n- [[Missing Article]]\n",
+        name="x.md",
+    )
+    target = load_target(src)
+    violations = list(wikilink_target.check(target, {}))
+    assert len(violations) == 1
+    assert violations[0].severity == Severity.HARD
+    assert "Missing Article" in violations[0].message
+
+
 def test_wikilink_target_registered():
     registry.reset_registry()
     assert "wikilink-target" in registry.discover_checks()

@@ -70,8 +70,11 @@ there):
 - Target path `knowledge/{Category}/{slug}.md` (`{Category}` is the folder name
   from `place.config.ts`; `{slug}` is the lowercase filename slug).
 - Frontmatter, opening + At a Glance, body structure, and citations exactly per
-  the playbook (§4, §5). Frontmatter completeness is checked in step 4; the
-  `rationale` block is required for the instance's strict categories (§4.9).
+  the playbook (§4, §5). Copy the frontmatter skeleton from §4.0 (canonical field
+  order, single-quoted scalars, unquoted ISO dates, flow-array `tags`,
+  `lastHumanReview: false` as a boolean); frontmatter completeness is checked in
+  step 4; the `rationale` block is required for the instance's strict categories
+  (§4.9).
 - Voice: a local friend, not a brochure (§6). Length matches the topic's band
   (§1) — do not pad.
 

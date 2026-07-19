@@ -10,8 +10,8 @@
 #      `--answers` output. This is the DoD-2/§E contract (the two resolution
 #      paths cannot drift), not just writer determinism.
 #   3. Asserts every seeded artifact: FRAMEWORK-VERSION, the CLAUDE.md header,
-#      knowledge/{Category}/ dirs, INBOX.md, CNAME, the local genericity
-#      denylist, and the removed .sekai-template marker.
+#      the README.md header, knowledge/{Category}/ dirs, INBOX.md, CNAME, the
+#      local genericity denylist, and the removed .sekai-template marker.
 #   4. Plants the test place name in src/ and asserts check-genericity.sh FAILS
 #      (the local denylist is live); removes it and asserts the gate passes.
 #
@@ -143,6 +143,8 @@ R="$TMP/run1"
 [ -s "$R/FRAMEWORK-VERSION" ] || fail "FRAMEWORK-VERSION is empty"
 head -1 "$R/CLAUDE.md" | grep -q "^# $NAME$" \
   || fail "CLAUDE.md header is not '# $NAME'"
+head -1 "$R/README.md" | grep -q "^# $NAME$" \
+  || fail "README.md header is not '# $NAME' (template README left on the instance)"
 for cat_dir in History Harbor Nature Food Events; do
   [ -d "$R/knowledge/$cat_dir" ] || fail "knowledge/$cat_dir/ not seeded"
 done
@@ -155,7 +157,7 @@ grep -q "^$DOMAIN$" "$R/CNAME" || fail "CNAME does not contain $DOMAIN"
 [ ! -f "$R/.sekai-template" ] || fail ".sekai-template marker not removed"
 grep -q "^$NAME_LC$" "$R/scripts/ci/genericity-denylist.local.txt" \
   || fail "local denylist does not contain $NAME_LC"
-echo "✓ seeded artifacts present (FRAMEWORK-VERSION, CLAUDE.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed)"
+echo "✓ seeded artifacts present (FRAMEWORK-VERSION, CLAUDE.md header, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed)"
 
 # DoD-4: a planted place-name string in src/ fails the gate; framework denylist
 # untouched.

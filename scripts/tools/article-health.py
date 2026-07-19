@@ -343,8 +343,8 @@ def main() -> int:
     parser.add_argument(
         "--fix",
         action="store_true",
-        help="Apply auto-fixes for plugins that export a fix() (e.g. format-structure, "
-             "link-target, wikilink-target, frontmatter-format). Files are modified in place. "
+        help="Apply auto-fixes for plugins that export a fix() (frontmatter-format, "
+             "link-target, wikilink-target). Files are modified in place. "
              "Combine with --check=NAME to scope. Use --dry-run to preview without writing.",
     )
     parser.add_argument(

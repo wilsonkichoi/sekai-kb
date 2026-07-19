@@ -9,6 +9,7 @@
  *   CNAME                                      written for custom domains,
  *                                              removed for *.github.io
  *   CLAUDE.md                                  instance header block
+ *   README.md                                  instance repo front page
  *   FRAMEWORK-VERSION                          framework version at init time
  *   scripts/ci/genericity-denylist.local.txt   adopter place-name terms
  *   .sekai-template                            removed (template → instance)
@@ -277,6 +278,55 @@ projections of \`knowledge/\` — never edit them directly.
 `;
 }
 
+/**
+ * The instance repo front page. Rendered from config only (place name, tagline,
+ * domain) so the same answers always produce byte-identical output — like
+ * renderClaudeMd, no timestamps or environment reads. Overwrites the template's
+ * own README on adoption; instance-owned (merge=ours) so upgrades never clobber it.
+ */
+function renderReadme(cfg) {
+  const { name, tagline, domain } = cfg.place;
+  const url = `https://${domain}`;
+  return `# ${name}
+
+${tagline}
+
+Knowledge base for **${name}**, published at [${domain}](${url}). Built on the
+[sekai-kb](https://github.com/wilsonkichoi/sekai-kb) framework: plain Markdown
+content under \`knowledge/\` rendered as a fast, AI-native static site.
+
+> This file is **instance-owned** (\`merge=ours\` in \`.gitattributes\`): framework
+> upgrades never overwrite it. Edit it freely to describe your instance.
+
+## Quick start
+
+\`\`\`sh
+npm ci --force && uv sync   # install the site + the editorial tooling
+npm run dev                 # http://localhost:4321
+npm run build               # production build + contract checks
+\`\`\`
+
+Requires Node.js ≥ 22.12 and [uv](https://docs.astral.sh/uv/) (which fetches
+Python ≥ 3.12 for the editorial tooling).
+
+## Where things live
+
+- **\`place.config.ts\`** — this instance's identity (name, categories, map, links,
+  home-page copy). The one file to edit to re-place the site.
+- **\`knowledge/{Category}/*.md\`** — the content, and the single source of truth.
+  Everything the site renders is derived from it at build time.
+- **\`docs/playbook/\`** — the editorial canon (voice, structure, the quality bar).
+- **\`public/media/\`** — images and other assets.
+
+## Contributing
+
+Content lives in \`knowledge/\`; never edit the derived, gitignored \`src/content/\`.
+Run \`npm run build\` before pushing — CI runs the same gates. Framework internals
+(\`src/\`, \`scripts/\`) come from [sekai-kb](https://github.com/wilsonkichoi/sekai-kb);
+customize through config and content, and send framework changes upstream there.
+`;
+}
+
 const DENYLIST_LOCAL_HEADER = `# genericity-denylist.local.txt — INSTANCE-OWNED additions to the genericity
 # gate. Written by \`npm run init\` with this instance's place name; add more
 # terms freely (one per line, case-insensitive substring match). Read
@@ -334,6 +384,9 @@ export function writeInstance(root, cfg) {
 
   // CLAUDE.md instance header block.
   write('CLAUDE.md', renderClaudeMd(cfg));
+
+  // README.md: the instance repo front page (replaces the template's README).
+  write('README.md', renderReadme(cfg));
 
   // FRAMEWORK-VERSION: the framework version this instance adopted.
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

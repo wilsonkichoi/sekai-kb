@@ -40,21 +40,27 @@ def test_overview_blockquote_present_passes(write_article):
     assert overview_warns == []
 
 
-def test_list_wikilink_residual_hard(write_article):
+def test_list_wikilinks_not_flagged(write_article):
+    """LB-37 decision: wikilinks in list items are accepted. The remark plugin
+    renders `[[X]]` inside list items to an <a> exactly like inline text (the
+    ported "Astro won't render it" premise was false), and the playbook §4.5
+    Further Reading list is written with wikilinks. Unresolved targets are
+    caught by `wikilink-target`, not by format-structure."""
     body = textwrap.dedent(
         """\
         > **At a glance**: x
 
-        ## Section
+        ## Further Reading
 
-        - [[residual wikilink]]
+        - [[founding-of-marisol-cove|The Founding]]
+        - [[kelp-forest-preserve|Kelp Forest]]
         - normal bullet
         """
     )
     target = load_target(write_article(body, extra=_CAT))
     violations = list(format_structure.check(target, {}))
-    hard = [v for v in violations if v.severity == Severity.HARD]
-    assert any("[[wikilink]]" in v.message for v in hard)
+    assert not any("[[wikilink]]" in v.message for v in violations)
+    assert not any("List item" in v.message for v in violations)
 
 
 def test_footnote_use_without_def_hard(write_article):
