@@ -25,17 +25,55 @@ tags, never framework `main`** (ADR 004, SPEC
    flow in `docs/runbook/UPGRADE.md`), which merges the tag, never `main`.
 4. **Instance-owned files are never overwritten.** Files an instance owns
    (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
-   `README.md`, `docs/baselines/**`, `scripts/ci/genericity-denylist.local.txt`)
-   carry `.gitattributes merge=ours` on the instance, so a tag merge keeps the
+   `AGENTS.md`, `README.md`, `docs/baselines/**`,
+   `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) carry
+   `.gitattributes merge=ours` on the instance, so a tag merge keeps the
    instance's copy. Framework changes to those paths are therefore inert on
    instances by design — do not rely on them propagating.
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-19
+
+Dev-plugin encapsulation (agent-toolkit 0.0.55) and adopter-owned `AGENTS.md`. The
+framework's own development state (dev config + engineering rules) moves into
+`.agent-toolkit/`, stops shipping to adopters, and `AGENTS.md` becomes instance-owned
+from clone time (LB-41).
+
+### Added
+
+- **sekai-kb adopts the dev plugin** — `.agent-toolkit/dev.md` now carries the
+  framework repo's own dev-workflow config (tracker, test command, CI workflow,
+  merge policy, `context_file: AGENTS.md`, `rules_dir: .agent-toolkit/rules/`) plus a
+  tiered `## Rules` index of the 12 engineering rules. `AGENTS.md` gains a
+  dev-plugin reference line; `CLAUDE.md` reaches it via an `@AGENTS.md` shim.
+
+### Changed
+
+- **Engineering rules relocated** from `.claude/rules/` to `.agent-toolkit/rules/`
+  and reclassified as **dev-plugin state, not framework content**. They are lessons
+  from developing the framework's `src/`/`scripts/`; adopters never touch those
+  trees, so shipping them was a mistake. Every `.claude/rules/` reference in code
+  comments, `CLAUDE.md`, `README.md`, and the wizard was re-pointed or removed.
+- **`.gitattributes` `merge=ours` baseline is now 10 paths** — added `AGENTS.md`
+  and `.agent-toolkit/**`. `AGENTS.md` is instance-owned from clone time (its
+  starter began as framework boilerplate the instance then personalizes);
+  `.agent-toolkit/**` is instance-owned because every repo — the framework and each
+  instance — carries its own dev config that a tag merge must never overwrite.
+- **The init wizard strips dev-plugin state from adopter clones.**
+  `scripts/init/writer.mjs` removes the `.agent-toolkit/` tree and the `AGENTS.md`
+  dev-plugin reference line on adoption; `scripts/init/check-init.sh` asserts both
+  are absent post-init. A fresh instance ships zero dev-plugin state.
+- **`/upgrade` + `docs/runbook/UPGRADE.md` gained a starter-file reconciliation
+  step.** `merge=ours` silently discards the framework's changes to instance-owned
+  starter files (`AGENTS.md` above all); the upgrade flow now diffs each starter
+  against the incoming tag and offers framework improvements conversationally
+  instead of dropping them.
+
 ### Fixed
 
-- Template `.gitattributes` now ships the full 8-path `merge=ours` baseline the
-  docs promise: added `CNAME`, `docs/baselines/**`, and
+- Template `.gitattributes` now ships the full `merge=ours` baseline the docs
+  promise: added `CNAME`, `docs/baselines/**`, and
   `scripts/ci/genericity-denylist.local.txt` (all wizard-written), so a
   template-cloned adopter's `CNAME` + local denylist are protected without hand
   edits (LB-33 review S1).
@@ -46,6 +84,25 @@ tags, never framework `main`** (ADR 004, SPEC
 - `/upgrade` skill + `UPGRADE.md` CHANGELOG-excerpt command uses an `awk` range
   that stops before the next `## [` heading instead of a `sed` range that printed
   it as trailing noise (LB-33 review N1).
+
+### Upgrade note
+
+**An instance must migrate its own dev-plugin layout BEFORE merging this tag**, or
+the template-side deletion of `.claude/rules/` collides with the rule files the
+instance still has there. Do this on the merge branch, in order:
+
+1. Add the two new `merge=ours` lines to your instance `.gitattributes`
+   (`AGENTS.md`, `.agent-toolkit/**`) — this must precede the merge, or the tag's
+   `.agent-toolkit/dev.md` (the framework's config) would land on your instance.
+2. Relocate any rules you keep from `.claude/rules/` into your `rules_dir`
+   (`.agent-toolkit/rules/`) and remove `.claude/rules/`. The template-side rule
+   deletions then merge clean (both sides removed the path).
+3. Run `dev:setup` (agent-toolkit ≥ 0.0.55) so your `.agent-toolkit/dev.md` carries
+   `context_file` + `rules_dir` and a `## Rules` index; add the `AGENTS.md`
+   reference line and the `CLAUDE.md` `@AGENTS.md` shim.
+
+No `place.config` keys changed; the site builds unchanged. This note is about your
+repo's dev-workflow plumbing, not the rendered site.
 
 ## [1.0.1] — 2026-07-18
 
@@ -108,5 +165,6 @@ onto this tag.
 First release — nothing to upgrade from. The first instance establishes its merge
 base against this tag per `docs/runbook/UPGRADE.md` §Establishing the merge base.
 
-[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.1...HEAD
+[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.2...HEAD
+[1.0.2]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.2
 [1.0.0]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.0

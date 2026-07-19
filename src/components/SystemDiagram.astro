@@ -132,7 +132,7 @@ const particles = nodes.flatMap((n) => {
 // ── Center shape: instance boundary fitted to the hub, or brand-circle fallback ─
 // Optional build-time file: readFileSync + try/catch (never a dynamic import —
 // an absent file must degrade, not crash the build). See
-// .claude/rules/optional-build-time-json-readfilesync.md.
+// .agent-toolkit/rules/optional-build-time-json-readfilesync.md.
 function boundaryPath(): string | null {
   let raw: string;
   try {

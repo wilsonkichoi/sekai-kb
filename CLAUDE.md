@@ -23,8 +23,10 @@ plain Markdown under `knowledge/`. Replace this demo with your own place by runn
 - **Operations:** `docs/runbook/` — [DEPLOY.md](docs/runbook/DEPLOY.md) (install,
   toolchain, CI, GitHub Pages, custom domain; every command copy-pasteable).
 - **Architecture diagrams (engineering SSOT):** `docs/diagrams/*.drawio`.
-- **Engineering rules:** `.claude/rules/` — framework-owned lessons that keep the
-  build green (Astro/Vite gotchas, prebuild ordering, shell portability, lockfile).
+- **Engineering rules:** `.agent-toolkit/rules/` — framework-owned lessons that keep
+  the build green (Astro/Vite gotchas, prebuild ordering, shell portability,
+  lockfile). Dev-plugin state, indexed in `.agent-toolkit/dev.md`; stripped from
+  adopter clones by the init wizard.
 
 ## How the site builds
 
@@ -99,3 +101,13 @@ genericity + English-only gates to scan the **whole tree** (so the template ship
 zero real-place strings). `npm run init` removes the marker when you adopt the
 template, reverting the gates to scanning the code trees only — your `knowledge/`
 and `place.config.ts` then legitimately carry your place's identity.
+
+## Dev workflow
+
+The agent-toolkit dev plugin drives framework development (tasks, PRs, CI, review,
+verify). Its config and promoted rules live in `.agent-toolkit/`; the entry point is
+`AGENTS.md` (Codex reads it natively). Claude Code reaches the same chain through the
+import below. This dev-plugin state is stripped from adopter clones by the init
+wizard — adopters never see it.
+
+@AGENTS.md

@@ -10,7 +10,7 @@
 // machine complement to check-genericity.sh, which greps a place-name denylist
 // over the same trees. Test fixtures are code — the doctrine is whole-project.
 //
-// Codepoint ranges (from .claude/rules/clean-rebuild-no-dead-fork-code.md):
+// Codepoint ranges (CJK symbols/ideographs + fullwidth/halfwidth forms):
 //   U+3000–U+9FFF  CJK symbols/punctuation + unified ideographs
 //   U+FF00–U+FFEF  fullwidth / halfwidth forms
 // (U+2014 em dash and U+201C/U+201D curly quotes are below U+3000 and are

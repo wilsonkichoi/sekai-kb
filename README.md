@@ -70,7 +70,7 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
 - **`docs/diagrams/`** — architecture diagrams (draw.io), the engineering source of truth.
 - **`scripts/visual/`** — visual regression tooling (`npm run visual:baseline` to
   capture, `npm run visual:check` to diff). Run `visual:baseline` once first.
-- **`.claude/rules/`** — framework engineering rules that keep the build green.
+- **`.agent-toolkit/rules/`** — framework engineering rules that keep the build green.
 
 ## Genericity
 

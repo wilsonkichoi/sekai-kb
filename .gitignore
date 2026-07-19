@@ -29,5 +29,8 @@ reports/visual/diff/
 reports/visual/diff-report.html
 reports/visual/diff-summary.json
 
+# dev-plugin per-machine overrides (the committed config is .agent-toolkit/dev.md)
+.agent-toolkit/dev.local.md
+
 # os / editor
 .DS_Store
