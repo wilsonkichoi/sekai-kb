@@ -9,9 +9,10 @@
 #      same answers; its place.config.ts must be byte-identical to the
 #      `--answers` output. This is the DoD-2/§E contract (the two resolution
 #      paths cannot drift), not just writer determinism.
-#   3. Asserts every seeded artifact: FRAMEWORK-VERSION, the CLAUDE.md header,
-#      the README.md header, knowledge/{Category}/ dirs, INBOX.md, CNAME, the
-#      local genericity denylist, and the removed .sekai-template marker.
+#   3. Asserts every seeded artifact: FRAMEWORK-VERSION, the AGENTS.md header,
+#      the CLAUDE.md @AGENTS.md shim, the README.md header, knowledge/{Category}/
+#      dirs, INBOX.md, CNAME, the local genericity denylist, and the removed
+#      .sekai-template marker.
 #   4. Plants the test place name in src/ and asserts check-genericity.sh FAILS
 #      (the local denylist is live); removes it and asserts the gate passes.
 #
@@ -141,8 +142,12 @@ echo "✓ interactive mode with the same answers is byte-identical to --answers"
 R="$TMP/run1"
 [ -f "$R/FRAMEWORK-VERSION" ] || fail "FRAMEWORK-VERSION not written"
 [ -s "$R/FRAMEWORK-VERSION" ] || fail "FRAMEWORK-VERSION is empty"
-head -1 "$R/CLAUDE.md" | grep -q "^# $NAME$" \
-  || fail "CLAUDE.md header is not '# $NAME'"
+# AGENTS.md is the instance's agent-instruction SSOT; its header is the place name.
+head -1 "$R/AGENTS.md" | grep -q "^# $NAME$" \
+  || fail "AGENTS.md header is not '# $NAME'"
+# CLAUDE.md is a pure one-line @AGENTS.md shim — all instructions live in AGENTS.md.
+[ "$(cat "$R/CLAUDE.md")" = "@AGENTS.md" ] \
+  || fail "CLAUDE.md is not the single-line '@AGENTS.md' shim"
 head -1 "$R/README.md" | grep -q "^# $NAME$" \
   || fail "README.md header is not '# $NAME' (template README left on the instance)"
 for cat_dir in History Harbor Nature Food Events; do
@@ -157,18 +162,19 @@ grep -q "^$DOMAIN$" "$R/CNAME" || fail "CNAME does not contain $DOMAIN"
 [ ! -f "$R/.sekai-template" ] || fail ".sekai-template marker not removed"
 grep -q "^$NAME_LC$" "$R/scripts/ci/genericity-denylist.local.txt" \
   || fail "local denylist does not contain $NAME_LC"
-# Dev-plugin strip (LB-41): a fresh instance ships zero dev-plugin state — the
-# .agent-toolkit/ tree and the AGENTS.md reference block are removed by the wizard.
+# Dev-plugin encapsulation: a fresh instance ships zero dev-plugin state — the
+# .agent-toolkit/ tree is removed by the wizard, and the wizard-regenerated AGENTS.md
+# carries none of the framework's dev-plugin sentinel block or reference line.
 # Non-vacuous only because the committed tree (git archive HEAD, snapshotted above)
-# carries .agent-toolkit/ and the reference block.
+# carries .agent-toolkit/ and, in its AGENTS.md, the dev-plugin block.
 [ ! -d "$R/.agent-toolkit" ] || fail ".agent-toolkit/ not stripped from adopted instance"
 if grep -q "@.agent-toolkit/dev.md" "$R/AGENTS.md"; then
-  fail "AGENTS.md dev-plugin reference line not stripped"
+  fail "AGENTS.md carries a dev-plugin reference line (should be absent on an instance)"
 fi
 if grep -q "dev-plugin:start" "$R/AGENTS.md"; then
-  fail "AGENTS.md dev-plugin sentinel block not stripped"
+  fail "AGENTS.md carries the dev-plugin sentinel block (should be absent on an instance)"
 fi
-echo "✓ seeded artifacts present (FRAMEWORK-VERSION, CLAUDE.md header, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ + AGENTS.md reference stripped)"
+echo "✓ seeded artifacts present (FRAMEWORK-VERSION, AGENTS.md header, CLAUDE.md @AGENTS.md shim, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ removed + AGENTS.md dev-plugin block absent)"
 
 # DoD-4: a planted place-name string in src/ fails the gate; framework denylist
 # untouched.
