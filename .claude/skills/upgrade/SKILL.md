@@ -135,20 +135,22 @@ git commit --no-edit
 `merge=ours` is deliberately blunt: it keeps the instance's version of every
 instance-owned file and **silently discards the framework's changes** to those
 same files. That is correct for `place.config.ts`, `knowledge/**`, and
-`public/media/**` — pure instance content. But the *starter* files the wizard
-seeded (`AGENTS.md`, and secondarily `CLAUDE.md`, `README.md`) began as framework
+`public/media/**` — pure instance content. But the *content-bearing starter* files
+the wizard seeded (`AGENTS.md` above all, and `README.md`) began as framework
 boilerplate the instance lightly edited; a release that improves that boilerplate
 (a new agent instruction, a corrected pointer) would vanish under `merge=ours`
-with no signal. Surface those improvements instead of dropping them.
+with no signal. Surface those improvements instead of dropping them. `CLAUDE.md` is
+exempt — it is a pure one-line `@AGENTS.md` shim with no content to diverge; if the
+instance's copy is anything but that single line, reset it to the shim.
 
 For each instance-owned **starter** file — at minimum `AGENTS.md` — diff the
 instance's committed version against the incoming tag's version and, if they
 differ, walk the difference WITH the user:
 
 ```bash
-# AGENTS.md is the primary case; add CLAUDE.md / README.md if the CHANGELOG
-# entry mentions changes to them.
-for f in AGENTS.md CLAUDE.md README.md; do
+# AGENTS.md is the primary case; add README.md if the CHANGELOG entry mentions
+# changes to it. CLAUDE.md is a fixed @AGENTS.md shim — nothing to reconcile.
+for f in AGENTS.md README.md; do
   # Skip a starter file the tag does not carry — nothing to reconcile, and an
   # empty `git show` stream would otherwise report a spurious divergence.
   git cat-file -e "sekai-kb-vX.Y.Z:$f" 2>/dev/null || continue

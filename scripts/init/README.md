@@ -17,7 +17,8 @@ npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 | `place.config.ts` | Regenerated in full from the answers. Single writer: the interactive and `--answers` paths share one resolution table and one serializer, so they cannot drift. |
 | `knowledge/{Category}/` + `knowledge/INBOX.md` | Demo content is removed; one folder per chosen category (with `.gitkeep`) plus a fresh INBOX.md are seeded. |
 | `CNAME` | Written with the domain. A `*.github.io` domain skips it (and removes a stale one) — GitHub Pages default domains must not carry a CNAME. |
-| `CLAUDE.md` | Instance header block: place name, domain, tagline, plus the standard where-things-live / build / iron-rules sections. Instance-owned; edit freely. |
+| `AGENTS.md` | The instance's agent-instruction SSOT: place name/domain/tagline, the standard where-things-live / build / iron-rules sections, and the content working set. Read natively by Codex, and by Claude Code through the `CLAUDE.md` shim. Instance-owned; edit freely. |
+| `CLAUDE.md` | A one-line `@AGENTS.md` shim so Claude Code inlines `AGENTS.md`. Instance-owned. |
 | `FRAMEWORK-VERSION` | The framework version (template `package.json` `version`) this instance adopted; `/upgrade` reads it. |
 | `scripts/ci/genericity-denylist.local.txt` | The adopter's place name (lowercased, plus its no-space form) as **instance-owned** gate terms. `check-genericity.sh` reads this file additively; the framework denylist is never touched, so upgrades never conflict. Appends idempotently if the file already exists. |
 | `.sekai-template` | Removed: the genericity/English-only gates revert from whole-tree (template mode) to code-trees-only (instance mode). |

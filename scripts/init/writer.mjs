@@ -320,7 +320,7 @@ const CLAUDE_MD_SHIM = '@AGENTS.md\n';
 /**
  * The instance repo front page. Rendered from config only (place name, tagline,
  * domain) so the same answers always produce byte-identical output — like
- * renderClaudeMd, no timestamps or environment reads. Overwrites the template's
+ * renderAgentsMd, no timestamps or environment reads. Overwrites the template's
  * own README on adoption; instance-owned (merge=ours) so upgrades never clobber it.
  */
 function renderReadme(cfg) {
