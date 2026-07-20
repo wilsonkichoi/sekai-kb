@@ -24,8 +24,9 @@ governs work committed here.
 
 ## Binding docs
 
-- **Iron rules + where things live:** `CLAUDE.md` (SSOT, genericity + English-only,
-  framework vs instance).
+- **Iron rules + where things live:** `AGENTS.md` (agent-instruction SSOT,
+  genericity + English-only, framework vs instance). `CLAUDE.md` is the one-line
+  `@AGENTS.md` shim.
 - **Release discipline (read before cutting a release):** `CHANGELOG.md` preamble —
   every change lands with a CHANGELOG entry, breaking config changes carry an
   **Upgrade note**, instances merge tags only, instance-owned files

@@ -82,6 +82,21 @@ fail() {
   exit 1
 }
 
+# CLAUDE.md is a byte-level contract. Do not use command substitution here:
+# shells strip trailing newlines, which would make `@AGENTS.md\n\n` look valid.
+EXPECTED_CLAUDE_MD="$TMP/expected-CLAUDE.md"
+printf '@AGENTS.md\n' > "$EXPECTED_CLAUDE_MD"
+
+claude_shim_is_exact() {
+  cmp -s "$1" "$EXPECTED_CLAUDE_MD"
+}
+
+assert_rejected_claude_shim() {
+  if claude_shim_is_exact "$1"; then
+    fail "CLAUDE.md byte comparator accepted invalid fixture: $2"
+  fi
+}
+
 snapshot() {
   mkdir -p "$1"
   git -C "$ROOT" archive HEAD | tar -x -C "$1"
@@ -146,8 +161,38 @@ R="$TMP/run1"
 head -1 "$R/AGENTS.md" | grep -q "^# $NAME$" \
   || fail "AGENTS.md header is not '# $NAME'"
 # CLAUDE.md is a pure one-line @AGENTS.md shim — all instructions live in AGENTS.md.
-[ "$(cat "$R/CLAUDE.md")" = "@AGENTS.md" ] \
-  || fail "CLAUDE.md is not the single-line '@AGENTS.md' shim"
+claude_shim_is_exact "$R/CLAUDE.md" \
+  || fail "CLAUDE.md is not byte-identical to '@AGENTS.md\\n'"
+
+# Regression fixtures prove the byte comparator rejects differences that shell
+# command substitution would hide, plus content before or after the shim.
+printf '@AGENTS.md\n\n' > "$TMP/claude-trailing-blank.md"
+printf '@AGENTS.md' > "$TMP/claude-missing-newline.md"
+printf '@AGENTS.md\nAdditional instructions.\n' > "$TMP/claude-added-prose.md"
+printf '@AGENT.md\n' > "$TMP/claude-changed-byte.md"
+assert_rejected_claude_shim "$TMP/claude-trailing-blank.md" "trailing blank line"
+assert_rejected_claude_shim "$TMP/claude-missing-newline.md" "missing final newline"
+assert_rejected_claude_shim "$TMP/claude-added-prose.md" "added prose"
+assert_rejected_claude_shim "$TMP/claude-changed-byte.md" "changed byte"
+
+# The adopted AGENTS.md must retain the framework's support boundaries. Check
+# both headings and contract-bearing text so empty placeholder sections fail.
+grep -Fxq "## Language support boundary" "$R/AGENTS.md" \
+  || fail "AGENTS.md missing '## Language support boundary'"
+grep -Fq "Latin-script content" "$R/AGENTS.md" \
+  || fail "AGENTS.md language boundary omits Latin-script support"
+grep -Fq "CJK content is unsupported" "$R/AGENTS.md" \
+  || fail "AGENTS.md language boundary omits unsupported CJK content"
+grep -Fq 'place.locale' "$R/AGENTS.md" \
+  || fail "AGENTS.md language boundary omits place.locale"
+grep -Fq 'place.languages[]' "$R/AGENTS.md" \
+  || fail "AGENTS.md language boundary omits place.languages[]"
+grep -Fxq "## Semiont probe" "$R/AGENTS.md" \
+  || fail "AGENTS.md missing '## Semiont probe'"
+grep -Fq 'semiont/config.json' "$R/AGENTS.md" \
+  || fail "AGENTS.md semiont probe omits semiont/config.json"
+grep -Fq "no-op gracefully when it is absent" "$R/AGENTS.md" \
+  || fail "AGENTS.md semiont probe omits absent-file behavior"
 head -1 "$R/README.md" | grep -q "^# $NAME$" \
   || fail "README.md header is not '# $NAME' (template README left on the instance)"
 for cat_dir in History Harbor Nature Food Events; do
@@ -171,10 +216,13 @@ grep -q "^$NAME_LC$" "$R/scripts/ci/genericity-denylist.local.txt" \
 if grep -q "@.agent-toolkit/dev.md" "$R/AGENTS.md"; then
   fail "AGENTS.md carries a dev-plugin reference line (should be absent on an instance)"
 fi
-if grep -q "dev-plugin:start" "$R/AGENTS.md"; then
+if grep -Fq "<!-- dev-plugin:" "$R/AGENTS.md"; then
   fail "AGENTS.md carries the dev-plugin sentinel block (should be absent on an instance)"
 fi
-echo "✓ seeded artifacts present (FRAMEWORK-VERSION, AGENTS.md header, CLAUDE.md @AGENTS.md shim, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ removed + AGENTS.md dev-plugin block absent)"
+if grep -Fxq "## Template mode" "$R/AGENTS.md"; then
+  fail "AGENTS.md carries template-only '## Template mode'"
+fi
+echo "✓ seeded artifacts present (FRAMEWORK-VERSION, complete instance AGENTS.md, byte-exact CLAUDE.md shim, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ removed + template/dev-plugin AGENTS.md content absent)"
 
 # DoD-4: a planted place-name string in src/ fails the gate; framework denylist
 # untouched.

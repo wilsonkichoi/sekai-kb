@@ -33,6 +33,35 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-07-19
+
+Corrects the v1.0.3 AGENTS.md-as-SSOT rollout so framework development and fresh
+adopter instances follow the accepted ADR-006 contract without gaps.
+
+### Fixed
+
+- **Operative framework references now agree on the agent-instruction SSOT.**
+  `.agent-toolkit/dev.md` names `AGENTS.md` as the content-bearing instruction
+  source and `CLAUDE.md` as its one-line shim. The repository-topology diagram
+  carries the same labels and includes `AGENTS.md` plus `.agent-toolkit/**` in
+  the applicable instance-owned set.
+- **The init self-check enforces the `CLAUDE.md` shim byte-for-byte.** The expected
+  output is exactly `@AGENTS.md\n`; regression fixtures reject a trailing blank
+  line, a missing final newline, added prose, or any changed byte. The existing
+  CI init-check job runs this assertion, including its disposable `--build` tier.
+- **Fresh adopter instructions retain the full applicable support contract.**
+  Wizard-rendered `AGENTS.md` files now include the language-support boundary and
+  the absent-safe semiont probe rule. The init self-check asserts both sections
+  and continues to reject template-only and dev-plugin-only content.
+
+### Upgrade note
+
+`AGENTS.md`, `CLAUDE.md`, and `.agent-toolkit/**` are instance-owned, so merging
+this tag does not overwrite them. Reconcile the improved `AGENTS.md` starter per
+`docs/runbook/UPGRADE.md`: carry over the language-support boundary and semiont
+probe if they are absent, keep instance-specific instructions intact, and confirm
+that `CLAUDE.md` is byte-for-byte `@AGENTS.md\n`.
+
 ## [1.0.3] — 2026-07-19
 
 `AGENTS.md` becomes the single source of truth for agent instructions; `CLAUDE.md`
@@ -211,7 +240,8 @@ onto this tag.
 First release — nothing to upgrade from. The first instance establishes its merge
 base against this tag per `docs/runbook/UPGRADE.md` §Establishing the merge base.
 
-[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.3...HEAD
+[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.4...HEAD
+[1.0.4]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.4
 [1.0.3]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.3
 [1.0.2]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.2
 [1.0.0]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.0
