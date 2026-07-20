@@ -8,14 +8,15 @@
  *   knowledge/{Category}/ + knowledge/INBOX.md reseeded (demo content removed)
  *   CNAME                                      written for custom domains,
  *                                              removed for *.github.io
- *   CLAUDE.md                                  instance header block
+ *   AGENTS.md                                  instance agent-instruction SSOT
+ *                                              (place identity + content working set)
+ *   CLAUDE.md                                  one-line `@AGENTS.md` shim
  *   README.md                                  instance repo front page
  *   FRAMEWORK-VERSION                          framework version at init time
  *   scripts/ci/genericity-denylist.local.txt   adopter place-name terms
  *   .sekai-template                            removed (template → instance)
  *   .agent-toolkit/                            removed (dev-plugin state, not
  *                                              shipped to adopters)
- *   AGENTS.md                                  dev-plugin reference block stripped
  *
  * Writing is a pure function of the resolved config, with no timestamps or
  * environment reads, so the same answers always produce byte-identical output.
@@ -238,12 +239,24 @@ Queue for proposed articles. Add ideas here; move to the appropriate category di
 (none yet)
 `;
 
-function renderClaudeMd(cfg) {
+/**
+ * AGENTS.md — the instance's single source of truth for agent instructions.
+ * Read natively by Codex; reached by Claude Code through the one-line `@AGENTS.md`
+ * shim in CLAUDE.md (see CLAUDE_MD_SHIM). Rendered place-specifically, like
+ * renderReadme, so the same answers always produce byte-identical output. The
+ * dev-plugin sentinel block that the framework's own AGENTS.md carries is never
+ * emitted here — a fresh instance ships zero dev-plugin state.
+ */
+function renderAgentsMd(cfg) {
   const { name, tagline, domain } = cfg.place;
   return `# ${name}
 
 Knowledge base for **${name}** (${domain}), built on the
 [sekai-kb](https://github.com/wilsonkichoi/sekai-kb) framework. ${tagline}
+
+This file — **\`AGENTS.md\`** — is the single source of truth for agent instructions
+in this instance, for **every** agent CLI: codex-cli reads it natively, and Claude
+Code reaches it through a one-line \`@AGENTS.md\` shim in \`CLAUDE.md\`.
 
 > This file is **instance-owned** (\`merge=ours\` in \`.gitattributes\`): framework
 > upgrades never overwrite it. Edit it freely to describe your instance.
@@ -276,13 +289,38 @@ projections of \`knowledge/\` — never edit them directly.
 3. **Framework vs instance:** \`src/\` and \`scripts/\` are framework-owned — customize
    through config, content, and media. Anything more is upstreamed to sekai-kb and
    pulled back as a tagged release. The genericity gate is the structural guarantee.
+
+## Content working set
+
+Beyond the overview above, the working set for any agent session:
+
+- **Writing or editing content:** follow
+  [\`docs/playbook/ARTICLE-PLAYBOOK.md\`](./docs/playbook/ARTICLE-PLAYBOOK.md) and
+  the stage sequence in
+  [\`docs/playbook/REWRITE-PIPELINE.md\`](./docs/playbook/REWRITE-PIPELINE.md).
+  Edit only \`knowledge/\` — never the derived \`src/content/\`.
+- **Verifying claims:** [\`docs/playbook/FACTCHECK-PIPELINE.md\`](./docs/playbook/FACTCHECK-PIPELINE.md).
+  Never fabricate a fact, a source, or a quote.
+- **Build, toolchain, deploy commands:** [\`docs/runbook/DEPLOY.md\`](./docs/runbook/DEPLOY.md).
+  Python tooling always runs through \`uv\` (\`uv sync\`, \`uv run\`); never \`pip\`.
+- **Before committing:** \`npm run test\`, the relevant
+  \`npm run article-health -- <file> --profile=...\` gate, and \`npm run build\`
+  must pass. The pre-commit hook enforces a subset; don't rely on it as the
+  first check.
 `;
 }
 
 /**
+ * CLAUDE.md — a pure shim. Claude Code inlines `@AGENTS.md` recursively, so the
+ * instance's single agent-instruction SSOT (AGENTS.md) is reached from CLAUDE.md
+ * with no content of its own to drift.
+ */
+const CLAUDE_MD_SHIM = '@AGENTS.md\n';
+
+/**
  * The instance repo front page. Rendered from config only (place name, tagline,
  * domain) so the same answers always produce byte-identical output — like
- * renderClaudeMd, no timestamps or environment reads. Overwrites the template's
+ * renderAgentsMd, no timestamps or environment reads. Overwrites the template's
  * own README on adoption; instance-owned (merge=ours) so upgrades never clobber it.
  */
 function renderReadme(cfg) {
@@ -383,8 +421,16 @@ export function writeInstance(root, cfg) {
     write('CNAME', `${cfg.place.domain}\n`);
   }
 
-  // CLAUDE.md instance header block.
-  write('CLAUDE.md', renderClaudeMd(cfg));
+  // AGENTS.md: the instance's agent-instruction SSOT (place identity + content
+  // working set), regenerated place-specifically. Overwrites the framework
+  // starter (which carries the demo place + the dev-plugin sentinel block);
+  // instance-owned (merge=ours) so upgrades never clobber it afterward. A fresh
+  // instance ships zero dev-plugin state — renderAgentsMd emits no sentinel block.
+  write('AGENTS.md', renderAgentsMd(cfg));
+
+  // CLAUDE.md: a one-line `@AGENTS.md` shim. Claude Code inlines it recursively
+  // to reach AGENTS.md; no place content of its own to drift.
+  write('CLAUDE.md', CLAUDE_MD_SHIM);
 
   // README.md: the instance repo front page (replaces the template's README).
   write('README.md', renderReadme(cfg));
@@ -425,29 +471,16 @@ export function writeInstance(root, cfg) {
   }
 
   // Dev-plugin strip: the framework's own dev-workflow state (config + engineering
-  // rules under .agent-toolkit/, and the reference line that points at it) is
-  // framework-development state, never adopter content. A fresh instance ships zero
-  // dev-plugin state; an adopter who wants the dev workflow runs `dev:setup` to
-  // create their own. Strip the tree and the AGENTS.md reference block here;
-  // check-init.sh asserts both are absent post-init.
+  // rules under .agent-toolkit/) is framework-development state, never adopter
+  // content. A fresh instance ships zero dev-plugin state; an adopter who wants the
+  // dev workflow runs `dev:setup` to create their own. Remove the tree here;
+  // check-init.sh asserts it is absent post-init. The AGENTS.md dev-plugin sentinel
+  // block needs no separate strip: renderAgentsMd (above) rewrites AGENTS.md without
+  // it, so the freshly written instance file carries no dev-plugin reference.
   const agentToolkit = join(root, '.agent-toolkit');
   if (existsSync(agentToolkit)) {
     rmSync(agentToolkit, { recursive: true, force: true });
     actions.push('removed .agent-toolkit/ (dev-plugin state not shipped to adopters)');
-  }
-  // AGENTS.md is instance-owned but seeded from the framework starter; remove only
-  // the sentinel-delimited dev-plugin block, leaving the rest of the file intact.
-  const agentsPath = join(root, 'AGENTS.md');
-  if (existsSync(agentsPath)) {
-    const before = readFileSync(agentsPath, 'utf8');
-    const after = before.replace(
-      /\n+<!-- dev-plugin:start[\s\S]*?dev-plugin:end -->[ \t]*\n?/,
-      '\n',
-    );
-    if (after !== before) {
-      writeFileSync(agentsPath, after);
-      actions.push('stripped dev-plugin reference block from AGENTS.md');
-    }
   }
 
   return actions;

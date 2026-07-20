@@ -129,9 +129,10 @@ npm run init -- --answers adopt-answers.json
 
 (Add `--force` only if step 0 established this is an already-adopted clone the
 user chose to re-init.) The wizard writes `place.config.ts`, seeds
-`knowledge/{Category}/` + `INBOX.md`, writes/clears `CNAME`, the CLAUDE.md
-header, `FRAMEWORK-VERSION`, and the instance-owned genericity denylist, and
-removes the `.sekai-template` marker. Report each action it prints.
+`knowledge/{Category}/` + `INBOX.md`, writes/clears `CNAME`, the `AGENTS.md`
+agent-instruction SSOT + its `CLAUDE.md` `@AGENTS.md` shim, `FRAMEWORK-VERSION`,
+and the instance-owned genericity denylist, and removes the `.sekai-template`
+marker. Report each action it prints.
 
 An unknown key or malformed value makes the wizard exit non-zero and write
 nothing — fix the offending value in `adopt-answers.json` and re-run; never

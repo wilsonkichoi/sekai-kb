@@ -166,8 +166,8 @@ merges keep the instance's version:
 | `knowledge/**` | the place's articles (the content SSOT) |
 | `public/media/**` | the place's images and media |
 | `CNAME` | the instance's custom domain |
-| `CLAUDE.md` | instance header (rendered by the wizard) |
-| `AGENTS.md` | instance-owned agent instructions from clone time |
+| `CLAUDE.md` | one-line `@AGENTS.md` shim (written by the wizard) |
+| `AGENTS.md` | instance-owned agent-instruction SSOT (rendered by the wizard) |
 | `README.md` | instance repo front page (rendered by the wizard) |
 | `docs/baselines/**` | instance-captured health/visual baselines |
 | `scripts/ci/genericity-denylist.local.txt` | the place's own denylisted terms |
@@ -178,21 +178,25 @@ The list is append-only from the framework baseline; the framework never removes
 `merge=ours` entry, so an upgrade cannot start overwriting a file you own.
 
 `AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files. A wizard-adopted
-instance has `.agent-toolkit/` and the `AGENTS.md` dev-plugin reference line stripped
-at adoption (they are framework-development state, not adopter content); it therefore
-carries no dev config to be overwritten. A framework or first-instance checkout that
-keeps its own `.agent-toolkit/` relies on `merge=ours` so a framework tag never
-replaces its dev config with the framework's.
+instance has `.agent-toolkit/` removed at adoption and its `AGENTS.md` regenerated
+place-specifically, carrying none of the framework's dev-plugin sentinel block (they
+are framework-development state, not adopter content); it therefore has no dev config
+to be overwritten. A framework or first-instance checkout that keeps its own
+`.agent-toolkit/` relies on `merge=ours` so a framework tag never replaces its dev
+config with the framework's.
 
 ## Reconciling instance-owned starter files (every upgrade)
 
 `merge=ours` keeps your version of an instance-owned file and **silently drops the
 framework's changes** to it. That is what you want for `place.config.ts`,
-`knowledge/**`, and media. But the *starter* files the wizard seeded — `AGENTS.md`
-above all, and to a lesser degree `CLAUDE.md` / `README.md` — started as framework
-boilerplate; a release that improves that boilerplate would vanish with no signal.
-After a merge, diff your version against the tag and decide, file by file, whether to
-pull any framework improvement in (the `/upgrade` skill does this conversationally):
+`knowledge/**`, and media. But the *content-bearing starter* files the wizard seeded
+— `AGENTS.md` above all, and `README.md` — started as framework boilerplate; a
+release that improves that boilerplate would vanish with no signal. `CLAUDE.md` is
+exempt: it is a pure one-line `@AGENTS.md` shim carrying no content that can diverge,
+so if yours is anything but that single line, reset it to the shim rather than
+reconciling it. After a merge, diff each content-bearing starter against the tag and
+decide, file by file, whether to pull any framework improvement in (the `/upgrade`
+skill does this conversationally):
 
 ```bash
 # Show where your AGENTS.md diverges from the tag you just merged, then read both

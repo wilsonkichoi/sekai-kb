@@ -33,6 +33,52 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-07-19
+
+`AGENTS.md` becomes the single source of truth for agent instructions; `CLAUDE.md`
+is reduced to a one-line `@AGENTS.md` shim. Claude Code inlines the shim recursively
+(`CLAUDE.md` → `AGENTS.md` → `@.agent-toolkit/dev.md` → doctrine rules) and Codex
+reads `AGENTS.md` natively, so both CLIs boot from one document with no instructions
+duplicated across or diverging between the two files.
+
+### Changed
+
+- **`AGENTS.md` is the agent-instruction SSOT.** The framework `CLAUDE.md` content
+  (place identity, where-things-live, how-the-site-builds, iron rules, skill
+  ownership, language boundary, semiont probe, template mode) moved into `AGENTS.md`
+  above the dev-plugin sentinel block. The `AGENTS.md` "Read CLAUDE.md — it is the
+  boot document" pointer is gone; `CLAUDE.md` is now exactly `@AGENTS.md`. The
+  dev-plugin sentinel block and its `@.agent-toolkit/dev.md` reference line stay in
+  `AGENTS.md`, unchanged.
+- **The init wizard writes the new shape.** `scripts/init/writer.mjs` renders
+  `AGENTS.md` place-specifically (the former `renderClaudeMd` content plus the
+  content working set) and writes `CLAUDE.md` as the one-line `@AGENTS.md` shim; a
+  fresh instance's `AGENTS.md` carries no dev-plugin sentinel block, so no separate
+  strip is needed. `scripts/init/check-init.sh` now asserts the `AGENTS.md` header
+  and the `CLAUDE.md` shim.
+- **Starter reconciliation follows the new shape.** `/upgrade` +
+  `docs/runbook/UPGRADE.md` treat `AGENTS.md` (and `README.md`) as the
+  content-bearing starters to reconcile on upgrade; `CLAUDE.md` is exempt as a fixed
+  `@AGENTS.md` shim.
+
+### Upgrade note
+
+**An instance must mirror this consolidation by hand** — `AGENTS.md`, `CLAUDE.md`,
+and `.agent-toolkit/**` are `merge=ours`, so the tag's restructured starters do not
+land on your instance automatically. On the merge branch, after merging this tag:
+
+1. Move your `CLAUDE.md`'s content into your `AGENTS.md` (above the dev-plugin
+   sentinel block if you keep one), delete any "Read CLAUDE.md — boot document"
+   pointer, and reduce `CLAUDE.md` to a single `@AGENTS.md` line.
+2. Keep your `AGENTS.md` dev-plugin sentinel block and its `@.agent-toolkit/dev.md`
+   reference line intact — that line must NOT sit inside an HTML comment, or Claude
+   Code will not inline your dev config through the chain.
+3. Confirm `CLAUDE.md` is exactly `@AGENTS.md` and every `@` import target still
+   resolves.
+
+No `place.config` keys changed; the site builds unchanged. This note is about your
+repo's agent-instruction plumbing, not the rendered site.
+
 ## [1.0.2] — 2026-07-19
 
 Dev-plugin encapsulation (agent-toolkit 0.0.55) and adopter-owned `AGENTS.md`. The
@@ -165,6 +211,7 @@ onto this tag.
 First release — nothing to upgrade from. The first instance establishes its merge
 base against this tag per `docs/runbook/UPGRADE.md` §Establishing the merge base.
 
-[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.2...HEAD
+[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.3...HEAD
+[1.0.3]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.3
 [1.0.2]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.2
 [1.0.0]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.0
