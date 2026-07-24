@@ -1,3 +1,14 @@
+---
+tier: gotcha
+triggers:
+  objective:
+    - "build-time json"
+    - "graceful degradation"
+    - "optional json"
+  definition_of_done:
+    - "graceful degradation"
+    - "json absent"
+---
 # Optional build-time JSON: use readFileSync, not import()
 
 When an Astro template needs to consume a JSON file that may be absent at build time

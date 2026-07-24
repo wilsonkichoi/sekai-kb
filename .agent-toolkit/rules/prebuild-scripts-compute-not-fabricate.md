@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "scripts/core/build-*.mjs"
+  objective:
+    - "prebuild"
+    - "dashboard"
+  definition_of_done:
+    - "prebuild"
+    - "computed from real"
+---
 # Prebuild scripts have full repo access: compute, never fabricate
 
 Prebuild scripts (`scripts/core/build-*.mjs`) run in the repo root with full filesystem and

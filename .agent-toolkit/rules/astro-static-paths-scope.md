@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "src/pages/**/*.astro"
+  objective:
+    - "getstaticpaths"
+    - "static path"
+    - "dynamic route"
+  definition_of_done:
+    - "getstaticpaths"
+---
 # Astro getStaticPaths: helper functions must be inlined or exported
 
 Non-exported helper functions defined in .astro frontmatter are tree-shaken from the

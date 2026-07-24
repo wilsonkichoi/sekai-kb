@@ -57,10 +57,27 @@ governs work committed here.
 
 ## Rules
 
-Promoted engineering lessons (`dev:retro`) in `rules_dir`. All are gotcha-tier —
-indexed by path + trigger hook, not `@`-imported: each is a narrow, CI-gated
-build gotcha that a session opens only when its trigger matches, not standing
-doctrine to inline every session. Open the file when its hook fires.
+Promoted engineering lessons (`dev:retro`) in `rules_dir`, one file per rule.
+Project bootstrap **discovers** rules by walking `rules_dir` and reading each
+file's `tier` frontmatter — it does not `@`-import a registry list, so nothing
+below is a bare `@path` line (a leftover `@` import would make a harness inline
+every gotcha each session, defeating the triggers). Every Markdown file under
+`rules_dir` must declare a valid `tier`; an unclassified file fails the bootstrap
+closed rather than being silently dropped. See the dev plugin's
+`runtime_contracts/project-bootstrap.md` for the loading contract and trigger
+matching.
+
+- **`tier: doctrine`** — always selected by project bootstrap; standing judgment
+  inlined into every session.
+- **`tier: gotcha`** — selected only when a `triggers:` entry matches the task: a
+  `paths` glob against the changed files, or an `objective` / `definition_of_done`
+  case-insensitive substring. A gotcha needs at least one trigger.
+- **`tier: none`** — a non-rule Markdown file that stays in place, loaded by nothing.
+
+All rules here are **gotcha-tier**: each is a narrow, CI-gated build gotcha that a
+session loads only when its surface is in play. `.agent-toolkit/scripts/check-rule-registry.mjs`
+gates complete classification in CI (every rule file carries a valid tier; no
+`## Rules` entry is a bare `@path`).
 
 - `.agent-toolkit/rules/astro-geojson-import-raw.md` — build-time import of a `.geojson` (or other non-JSON data extension): use `?raw` + `JSON.parse`; Vite has no loader for the bare extension.
 - `.agent-toolkit/rules/astro-json-island-escape.md` — emitting build-time JSON into a `set:html` `<script type="application/json">` island: escape every `<` to its `\u003c` form (`JSON.stringify` does not), or a `</script>` inside a string value breaks out of the island.

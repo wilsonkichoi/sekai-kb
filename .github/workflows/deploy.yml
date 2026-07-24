@@ -62,6 +62,18 @@ jobs:
       - run: npm run test:ci
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
+      # Dev-plugin rule registry: assert every rule under rules_dir is tier-classified
+      # (project-bootstrap discovery contract). Guarded by .agent-toolkit/dev.md so an
+      # adopter stripped by `npm run init` — which removes the whole .agent-toolkit/
+      # tree, script included — never depends on a removed path.
+      - name: Rule registry (dev-plugin state; skipped when stripped)
+        run: |
+          if [ -f .agent-toolkit/dev.md ]; then
+            node .agent-toolkit/scripts/check-rule-registry.mjs
+            node .agent-toolkit/scripts/check-rule-registry.mjs --selftest
+          else
+            echo "no .agent-toolkit/dev.md (dev-plugin state stripped); skipping rule-registry check"
+          fi
 
   build:
     name: Build

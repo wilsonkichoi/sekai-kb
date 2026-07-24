@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "scripts/core/build-*.mjs"
+  objective:
+    - "gray-matter"
+    - "frontmatter date"
+  definition_of_done:
+    - "gray-matter"
+    - "date normalization"
+---
 # gray-matter dates must be normalized to ISO strings immediately
 
 `gray-matter` silently coerces unquoted YAML `date:` values (e.g. `date: 2026-06-19`) to
