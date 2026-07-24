@@ -20,8 +20,8 @@
 //   node .agent-toolkit/scripts/check-rule-registry.mjs            validate this repo
 //   node .agent-toolkit/scripts/check-rule-registry.mjs --selftest prove it catches an unclassified rule
 
-import { readdirSync, readFileSync, existsSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { readdirSync, readFileSync, existsSync, statSync, realpathSync, symlinkSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, relative, sep, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const VALID_TIERS = new Set(['doctrine', 'gotcha', 'none']);
@@ -81,14 +81,41 @@ function readRulesDir(repoRoot) {
   return { rulesDir: rulesDir.replace(/\/+$/, ''), configText: text };
 }
 
-function walkMarkdown(dir, acc) {
-  if (!existsSync(dir) || !statSync(dir).isDirectory()) return acc;
+// Enumerate every Markdown file under `dir`, mirroring resolve_project_rules.py's
+// discovery: FOLLOW symlinks for classification (a symlinked `.md` is a real
+// discovered rule and must be tier-checked), but REJECT any symlink whose target
+// escapes the repository — the same path-escape guarantee the resolver enforces.
+// `Dirent.isDirectory()/isFile()` do not follow symlinks, so classify via
+// `statSync` (which does) and record escape/broken-link errors so the checker
+// fails exactly where the resolver would hard-stop. `repoReal` is the canonical
+// repo root (both sides canonicalized so the macOS /var→/private/var symlink does
+// not read as an escape). `visited` guards symlink cycles.
+function walkMarkdown(dir, repoReal, acc, errors, visited = new Set()) {
+  let dirReal;
+  try { dirReal = realpathSync(dir); } catch { return; }
+  if (visited.has(dirReal)) return;
+  visited.add(dirReal);
+  let dst;
+  try { dst = statSync(dir); } catch { return; }
+  if (!dst.isDirectory()) return;
+  const relRepo = (x) => relative(repoReal, x).split(sep).join('/');
   for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     const p = join(dir, entry.name);
-    if (entry.isDirectory()) walkMarkdown(p, acc);
-    else if (entry.isFile() && entry.name.endsWith('.md')) acc.push(p);
+    if (entry.isSymbolicLink()) {
+      let target;
+      try { target = realpathSync(p); }
+      catch { errors.push(`${relRepo(p)}: broken symlink (rule discovery cannot resolve its target)`); continue; }
+      const rel = relative(repoReal, target);
+      if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+        errors.push(`${relRepo(p)}: symlink target escapes the repository (${target}); rule discovery rejects it`);
+        continue;
+      }
+    }
+    let s;
+    try { s = statSync(p); } catch { continue; } // follows symlink to its target
+    if (s.isDirectory()) walkMarkdown(p, repoReal, acc, errors, visited);
+    else if (s.isFile() && entry.name.endsWith('.md')) acc.push(p);
   }
-  return acc;
 }
 
 // Bare `@path` lines under the `## Rules` section of the dev config.
@@ -113,10 +140,12 @@ export function validate(repoRoot) {
     errors.push(`## Rules carries a bare @path line (registry double-duty; discovery ignores it and a harness would inline it): ${bare}`);
   }
 
-  const absRulesDir = join(repoRoot, rulesDir);
-  const files = walkMarkdown(absRulesDir, []);
+  const root = realpathSync(repoRoot); // canonical, so symlink escape checks are exact
+  const absRulesDir = join(root, rulesDir);
+  const files = [];
+  walkMarkdown(absRulesDir, root, files, errors);
   for (const file of files) {
-    const rel = relative(repoRoot, file).split(sep).join('/');
+    const rel = relative(root, file).split(sep).join('/');
     const text = readFileSync(file, 'utf8');
     if (text.split('\n').some((l) => IMPORT_LINE.test(l))) {
       errors.push(`${rel}: rule file carries an @ import line (rule files are terminal under discovery)`);
@@ -154,21 +183,41 @@ function selftest() {
     // A deliberately unclassified rule the checker MUST reject.
     writeFileSync(join(tmp, '.agent-toolkit', 'rules', 'bad.md'), '# bad rule, no frontmatter\n');
 
-    const errors = validate(tmp);
-    const caught = errors.some((e) => e.includes('rules/bad.md'));
-    const goodClean = !errors.some((e) => e.includes('rules/good.md'));
-    if (!caught) {
-      console.error('SELFTEST FAILED: checker did not reject the unclassified rule bad.md');
-      console.error(errors.join('\n') || '(no errors reported)');
-      return 1;
+    // A symlink inside rules_dir pointing at an in-repo but unclassified Markdown
+    // file: discovery follows it and it must be tier-checked, so the checker MUST
+    // reject it (the resolver hard-stops on the same case).
+    writeFileSync(join(tmp, 'stray-unclassified.md'), '# stray, no frontmatter\n');
+    symlinkSync(join('..', '..', 'stray-unclassified.md'), join(tmp, '.agent-toolkit', 'rules', 'linked-bad.md'));
+
+    // A symlink whose target escapes the repository: discovery rejects it, so the
+    // checker MUST flag it rather than silently skip.
+    const outside = mkdtempSync(join(tmpdir(), 'rule-registry-outside-'));
+    writeFileSync(join(outside, 'escapes.md'), '---\ntier: gotcha\ntriggers:\n  paths:\n    - "x"\n---\n# even a valid tier must not escape\n');
+    symlinkSync(join(outside, 'escapes.md'), join(tmp, '.agent-toolkit', 'rules', 'escapes.md'));
+
+    try {
+      const errors = validate(tmp);
+      const checks = [
+        ['unclassified rule bad.md', errors.some((e) => e.includes('rules/bad.md'))],
+        ['symlink to in-repo unclassified linked-bad.md', errors.some((e) => e.includes('rules/linked-bad.md'))],
+        ['repo-escaping symlink escapes.md', errors.some((e) => e.includes('rules/escapes.md') && e.includes('escapes the repository'))],
+      ];
+      const missed = checks.filter(([, caught]) => !caught);
+      if (missed.length) {
+        console.error(`SELFTEST FAILED: checker did not reject: ${missed.map(([n]) => n).join('; ')}`);
+        console.error(errors.join('\n') || '(no errors reported)');
+        return 1;
+      }
+      if (errors.some((e) => e.includes('rules/good.md'))) {
+        console.error('SELFTEST FAILED: checker wrongly rejected the valid rule good.md');
+        console.error(errors.join('\n'));
+        return 1;
+      }
+      console.log('SELFTEST OK: checker rejects unclassified rules, symlinks to unclassified targets, and repo-escaping symlinks; accepts a valid gotcha.');
+      return 0;
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
     }
-    if (!goodClean) {
-      console.error('SELFTEST FAILED: checker wrongly rejected the valid rule good.md');
-      console.error(errors.join('\n'));
-      return 1;
-    }
-    console.log('SELFTEST OK: checker rejects an unclassified rule and accepts a valid gotcha.');
-    return 0;
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
