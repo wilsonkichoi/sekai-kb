@@ -1,7 +1,7 @@
 {
   "name": "sekai-kb",
   "type": "module",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "AI-native place knowledge base — the sekai-kb framework template.",
   "engines": {
     "node": ">=22.12.0"
@@ -9,6 +9,8 @@
   "scripts": {
     "init": "node scripts/init/index.mjs",
     "init:check": "bash scripts/init/check-init.sh",
+    "upgrade:check": "bash scripts/upgrade/check-upgrade-state.sh",
+    "upgrade:selftest": "bash scripts/upgrade/check-upgrade-state.sh --selftest",
     "dev": "npm run prebuild && astro dev",
     "sync": "bash scripts/core/sync.sh",
     "prebuild": "npm run prebuild:sync && run-p prebuild:kb-index prebuild:search prebuild:content-dates prebuild:git-info prebuild:related prebuild:changelog prebuild:map-markers prebuild:dashboard && npm run prebuild:latest",

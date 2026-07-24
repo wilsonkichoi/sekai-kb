@@ -492,6 +492,12 @@ export function writeInstance(root, cfg) {
   // check-init.sh asserts it is absent post-init. The AGENTS.md dev-plugin sentinel
   // block needs no separate strip: renderAgentsMd (above) rewrites AGENTS.md without
   // it, so the freshly written instance file carries no dev-plugin reference.
+  //
+  // The two removals together are the `stripped` dev-plugin state that every later
+  // framework upgrade must preserve. `merge=ours` cannot protect a deleted path, so
+  // /upgrade classifies this state before merging and reconciles it after
+  // (scripts/upgrade/dev-plugin-state.mjs, ADR 006 addendum); do not change what is
+  // removed here without updating that helper's definition of `stripped`.
   const agentToolkit = join(root, '.agent-toolkit');
   if (existsSync(agentToolkit)) {
     rmSync(agentToolkit, { recursive: true, force: true });

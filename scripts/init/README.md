@@ -22,6 +22,7 @@ npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 | `FRAMEWORK-VERSION` | The framework version (template `package.json` `version`) this instance adopted; `/upgrade` reads it. |
 | `scripts/ci/genericity-denylist.local.txt` | The adopter's place name (lowercased, plus its no-space form) as **instance-owned** gate terms. `check-genericity.sh` reads this file additively; the framework denylist is never touched, so upgrades never conflict. Appends idempotently if the file already exists. |
 | `.sekai-template` | Removed: the genericity/English-only gates revert from whole-tree (template mode) to code-trees-only (instance mode). |
+| `.agent-toolkit/` | Removed, and the regenerated `AGENTS.md` carries no `@.agent-toolkit/dev.md` reference: a fresh instance ships zero dev-plugin state. That absence is **persistent instance state**, not a one-time deletion — `merge=ours` cannot protect a deleted path, so `/upgrade` classifies dev-plugin state before every merge and keeps it stripped (`docs/runbook/UPGRADE.md` §Dev-plugin state, ADR 006 addendum). Adopters who want the dev workflow opt in with `dev:setup`. |
 
 **Re-run guard:** on an established instance (no `.sekai-template` marker and
 articles already under `knowledge/`) the wizard aborts, because it reseeds
