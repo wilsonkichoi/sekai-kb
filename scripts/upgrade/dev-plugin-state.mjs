@@ -23,7 +23,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const TREE = '.agent-toolkit';
 const CONFIG = '.agent-toolkit/dev.md';
@@ -207,8 +207,12 @@ function preMergeRevision(repo, mergeInProgress) {
 }
 
 function mergeIsInProgress(repo) {
-  const path = git(repo, ['rev-parse', '--git-path', 'MERGE_HEAD']);
-  return existsSync(join(repo, path));
+  // `--git-path` answers relative to the repo root in a standard clone
+  // (`.git/MERGE_HEAD`) but ABSOLUTE in a linked worktree
+  // (`<main>/.git/worktrees/<name>/MERGE_HEAD`). `resolve` handles both; `join`
+  // would prefix the repo onto the absolute form, miss the file, and take the
+  // already-committed branch mid-merge — where `git commit --amend` refuses.
+  return existsSync(resolve(repo, git(repo, ['rev-parse', '--git-path', 'MERGE_HEAD'])));
 }
 
 function reconcileStripped(repo, mergeInProgress) {

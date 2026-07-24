@@ -465,6 +465,53 @@ case_stripped_shared_history() { # workdir
   git -C "$inst" show HEAD:src/app.js | grep -q 'fw-v2' \
     || fail "case 1: the framework's non-dev-plugin change (src/app.js at fw-v2) did not land — reconcile discarded the merge"
   ok "case 1: the framework's non-dev-plugin change (src/app.js @ fw-v2) landed"
+
+  # 1b — the same stripped shared-history upgrade run from a LINKED GIT WORKTREE
+  # (`git worktree add`), not a standalone clone. Git answers `rev-parse
+  # --git-path MERGE_HEAD` with an ABSOLUTE path there
+  # (`<main>/.git/worktrees/<name>/MERGE_HEAD`) instead of the repo-relative
+  # `.git/MERGE_HEAD`, so a helper that resolves it as repo-relative misses the
+  # file, believes the merge already committed, and runs `git commit --amend`
+  # mid-merge — which git refuses. Review finding B1 on PR #16.
+  local inst_wt wt
+  inst_wt="$work/instance-worktree-main"
+  wt="$work/instance-worktree-linked"
+  clone_at_v1 "$fw" "$inst_wt"
+  rm -rf "$inst_wt/.agent-toolkit"
+  write_instance_agents_md "$inst_wt/AGENTS.md" no-reference
+  git -C "$inst_wt" add -A
+  git -C "$inst_wt" commit -q -m "Adopt Example framework: strip dev-plugin state"
+  git -C "$inst_wt" worktree add -q "$wt" -b upgrade-in-worktree HEAD
+
+  # Fixture guard: this must really be a linked worktree (.git is a file there).
+  [ -f "$wt/.git" ] || fail "case 1b: fixture is not a linked worktree (.git is not a gitfile)"
+  case "$(git -C "$wt" rev-parse --git-path MERGE_HEAD)" in
+    /*) : ;;
+    *) fail "case 1b: fixture guard — git no longer answers --git-path absolutely in a linked worktree, so the topology under test is gone" ;;
+  esac
+  assert_classify "$wt" "case 1b" stripped
+
+  merge_status=0
+  git -C "$wt" merge --no-edit fw-v2 >/dev/null 2>&1 || merge_status=$?
+  [ "$merge_status" -ne 0 ] \
+    || fail "case 1b: the fw-v2 merge did not stop on the dev-config modify/delete conflict (fixture no longer exercises the in-progress path)"
+  git -C "$wt" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+    || fail "case 1b: fixture guard — no merge in progress after the conflicting merge"
+  ok "case 1b: linked-worktree upgrade stops mid-merge with MERGE_HEAD set"
+
+  assert_reconcile_ok "$wt" stripped "case 1b"
+  if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
+    git -C "$wt" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+      || fail "case 1b: reconcile finalized or amended the merge instead of leaving it in progress — it misread the linked worktree's MERGE_HEAD path"
+    ok "case 1b: reconcile took the merge-in-progress path (did not try to amend)"
+  fi
+  assert_no_unmerged_paths "$wt" "case 1b"
+
+  git -C "$wt" commit -q --no-edit || fail "case 1b: 'git commit --no-edit' failed after reconcile"
+  assert_is_merge_commit "$wt" "case 1b"
+  assert_no_tree_paths_in_commit "$wt" HEAD "case 1b"
+  [ ! -e "$wt/.agent-toolkit" ] || fail "case 1b: .agent-toolkit/ survives in the linked worktree"
+  assert_no_active_reference "$wt" "case 1b"
 }
 
 # ---------------------------------------------------------------------------
