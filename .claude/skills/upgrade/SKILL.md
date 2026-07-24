@@ -5,7 +5,8 @@ description: |
   remote at sekai-kb, fetches tags, merges a requested `sekai-kb-vX.Y.Z` release
   tag (never framework `main`), build-verifies, walks any conflicts WITH the user
   alongside that version's CHANGELOG entry, and bumps `FRAMEWORK-VERSION`.
-  Instance-owned files (`merge=ours` in `.gitattributes`) are kept automatically.
+  Instance-owned files (`merge=ours` in `.gitattributes`) keep their content, and
+  an intentionally absent `.agent-toolkit/` tree stays absent.
   TRIGGER when: user says "upgrade", "/upgrade", "update the framework", "pull the
   latest sekai-kb release", "bump to vX.Y.Z", or wants framework updates on an
   adopted instance.
@@ -76,24 +77,85 @@ feature-off when absent (SPEC §place.config.ts absent-safe rule), so the merge
 never *requires* config surgery — surface the new flag as an opt-in, do not edit
 the user's `place.config.ts` to enable it.
 
-## 3. Merge the tag (never `main`)
+## 3. Classify dev-plugin state — before merging
+
+`merge=ours` protects the **content** of a path that exists on both sides. It does
+not preserve an intentionally **absent** path: an instance adopted through
+`npm run init` has no `.agent-toolkit/` tree, so a framework tag that touches
+`.agent-toolkit/` produces a modify/delete conflict on shared history and adds the
+whole framework tree back as a theirs-only addition on an unrelated-history first
+merge. Dev-plugin presence or absence is therefore persistent instance state that
+the upgrade must classify **before** merging (ADR 006 addendum, SPEC §Repo
+topology):
+
+```bash
+HELPER=scripts/upgrade/dev-plugin-state.mjs
+# Releases before v1.0.5 did not ship the helper. On the first upgrade to v1.0.5+
+# run it from the tag; every later upgrade uses the copy in the instance. The
+# extracted copy lives inside .git, so it never touches the working tree.
+test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
+  git show sekai-kb-vX.Y.Z:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+node "$HELPER" classify   # prints `stripped` or `installed`; exit 3 = inconsistent
+```
+
+Keep both `$HELPER` and the printed state for step 5 — `reconcile` takes the
+answer from *before* the merge, because after the merge the tree no longer shows
+what the instance owned.
+
+- **`stripped`** (`.agent-toolkit/` absent **and** no active `@.agent-toolkit/dev.md`
+  reference in `AGENTS.md`/`CLAUDE.md`) → the absence is preserved through the
+  merge. Framework dev-plugin state is never an implicit upgrade payload; running
+  `dev:setup` is the only opt-in.
+- **`installed`** (the adopter's `.agent-toolkit/dev.md` **and** the active
+  reference are both present) → `merge=ours` keeps the adopter's config and rules.
+- **Exit 3, inconsistent** (only one half present) → **stop before merging** and
+  show the user the diagnostic. Do not guess whether to delete or install
+  dev-plugin state; the remedy line names both deliberate repairs.
+
+## 4. Merge the tag (never `main`)
 
 ```bash
 git merge --no-ff sekai-kb-vX.Y.Z -m "chore: upgrade framework to sekai-kb-vX.Y.Z"
 ```
 
-`.gitattributes merge=ours` keeps every instance-owned file
-(`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
-`AGENTS.md`, `README.md`, `docs/baselines/**`,
-`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) automatically —
-those never conflict.
+`.gitattributes merge=ours` keeps the instance's **existing** copy of every
+instance-owned file (`place.config.ts`, `knowledge/**`, `public/media/**`,
+`CNAME`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/baselines/**`,
+`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) — those do not
+conflict. It says nothing about a path the instance **deleted** (`.agent-toolkit/`
+on a wizard-adopted instance) or never had: git applies no merge driver there, so
+step 5 owns that case.
 
-- **Merge clean** → go to step 5.
-- **Conflicts reported** → step 4. Conflicts can only be in framework-owned files
-  the instance edited locally against the ownership rule (`src/`, `scripts/`), or
-  in a file the instance chose to fork and manage locally.
+Run step 5 next whether the merge stopped on conflicts or completed on its own.
 
-## 4. Conflict report — walk each file WITH the user
+## 5. Reconcile dev-plugin state — immediately after the merge
+
+```bash
+node "$HELPER" reconcile --state <stripped|installed>   # the state from step 3
+```
+
+- **`stripped`** → removes every `.agent-toolkit/` path the merge brought in,
+  resolving both the modify/delete conflict and the theirs-only addition, and
+  drops any active reference line the merge introduced into an entry file. If the
+  merge already committed, it amends that merge commit, so the framework tree is
+  never committed into the instance. The user is never asked to resolve a
+  dev-plugin conflict — after this step the conflict list in step 6 contains only
+  framework-owned files.
+- **`installed`** → mutates nothing. It asserts the adopter's `.agent-toolkit/**`
+  is byte-for-byte unchanged against the pre-merge revision and that the config
+  and active reference survived, and it **reports** any framework path the merge
+  added under `.agent-toolkit/`. Those are framework-development state, not
+  adopter content: show the list and let the user decide per file (keep it, or
+  `git rm -f -- <path>` before finalizing). The upgrade does not decide.
+- A nonzero exit is a stop, not a warning. The commonest cause is the `ours`
+  driver missing from this clone (step 0); the diagnostic names the repair.
+
+## 6. Conflict report — walk each file WITH the user
+
+Whatever is left after step 5 can only be a framework-owned file the instance
+edited locally against the ownership rule (`src/`, `scripts/`), or a file the
+instance chose to fork and manage locally. A clean list here means the merge is
+ready for step 7.
 
 Do **not** blindly take one side. For each conflicted path, present a short
 report and a proposal, then let the user decide:
@@ -115,7 +177,7 @@ the two sides (`git diff`). Then propose the resolution and its rationale:
 Apply only what the user approves (`git checkout --theirs/--ours <file>` or a
 hand-merge), then `git add <file>`. Never `git checkout -f` the whole tree.
 
-## 5. Build-verify before committing the merge
+## 7. Build-verify before committing the merge
 
 ```bash
 npm run build
@@ -124,13 +186,13 @@ npm run build
 The build must be green before the merge is finalized. If a merged framework
 change broke the build (e.g. a config contract the Upgrade note called out),
 resolve it now — do not commit a red merge. If the merge is still in progress
-(conflicts were resolved in step 4), finalize it:
+(conflicts were resolved in steps 5-6), finalize it:
 
 ```bash
 git commit --no-edit
 ```
 
-## 6. Reconcile instance-owned starter files (conversational diff)
+## 8. Reconcile instance-owned starter files (conversational diff)
 
 `merge=ours` is deliberately blunt: it keeps the instance's version of every
 instance-owned file and **silently discards the framework's changes** to those
@@ -171,15 +233,17 @@ default). Apply only what the user approves, then stage it:
 git add <starter-file>   # only the files the user chose to update
 ```
 
-Note: the dev-plugin reference line and `.agent-toolkit/**` are instance-owned by
-the same mechanism, but they are stripped from adopter clones by the wizard, so a
-pure adopter has nothing to reconcile there; a framework/first-instance checkout
-that carries its own `.agent-toolkit/` keeps it as-is.
+Note: `AGENTS.md` is also where the dev-plugin reference line lives, so never
+adopt the framework's dev-plugin block into a **stripped** instance while
+reconciling this file — steps 3 and 5 exist to keep that state absent, and
+re-adding the reference here would put the instance in the inconsistent state
+that stops the next upgrade. `.agent-toolkit/**` itself is not a starter file and
+is never reconciled conversationally; step 5 already settled it.
 
-## 7. Bump FRAMEWORK-VERSION
+## 9. Bump FRAMEWORK-VERSION
 
 Record the version just adopted (the tag's `vX.Y.Z`, matching the wizard's
-`v`-prefixed form). Fold any starter-file updates approved in step 6 into this
+`v`-prefixed form). Fold any starter-file updates approved in step 8 into this
 commit (or a preceding one):
 
 ```bash
@@ -187,9 +251,10 @@ printf 'vX.Y.Z\n' > FRAMEWORK-VERSION
 git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> vX.Y.Z"
 ```
 
-## 8. Report
+## 10. Report
 
-Tell the user: the version moved from → to, which files (if any) conflicted and
-how each was resolved, the build result, and any Upgrade-note opt-ins they
-declined (new feature flags left off). Push is theirs to make — on an instance,
-pushing `main` deploys.
+Tell the user: the version moved from → to, the dev-plugin state classified in
+step 3 and what reconcile did with it, which files (if any) conflicted and how
+each was resolved, the build result, and any Upgrade-note opt-ins they declined
+(new feature flags left off). Push is theirs to make — on an instance, pushing
+`main` deploys.

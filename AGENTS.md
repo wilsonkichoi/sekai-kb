@@ -34,7 +34,8 @@ the semiont probe, and the content working set.
 - **Engineering rules:** `.agent-toolkit/rules/` — framework-owned lessons that keep
   the build green (Astro/Vite gotchas, prebuild ordering, shell portability,
   lockfile). Dev-plugin state, indexed in `.agent-toolkit/dev.md`; stripped from
-  adopter clones by the init wizard.
+  adopter clones by the init wizard, and kept stripped by every later framework
+  upgrade (`docs/runbook/UPGRADE.md` §Dev-plugin state).
 
 ## How the site builds
 

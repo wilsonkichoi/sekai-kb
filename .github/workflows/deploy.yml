@@ -74,6 +74,18 @@ jobs:
           else
             echo "no .agent-toolkit/dev.md (dev-plugin state stripped); skipping rule-registry check"
           fi
+      # Upgrade determinism: a framework tag merge must preserve the instance's
+      # dev-plugin state — stripped stays stripped on shared AND unrelated history,
+      # installed keeps its adopter-owned config byte-for-byte, and either
+      # inconsistent state stops the upgrade (ADR 006 addendum). The harness builds
+      # disposable git repos and drives the same scripts/upgrade/ helper users run,
+      # so it is framework-owned and never guarded away on an adopter.
+      - name: Upgrade dev-plugin state regressions
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
+          npm run upgrade:check
+          npm run upgrade:selftest
 
   build:
     name: Build

@@ -33,6 +33,46 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-07-24
+
+Makes framework upgrades preserve an instance's dev-plugin state in both
+directions: an adopter who never wanted the dev workflow stops silently
+reacquiring it, and an adopter who installed their own keeps it untouched.
+
+### Fixed
+
+- **`/upgrade` preserves a stripped `.agent-toolkit/` tree.** `merge=ours`
+  protects the *content* of a path present on both merge sides; it does not
+  preserve a path the instance deliberately deleted. A wizard-adopted instance
+  therefore hit a `DU .agent-toolkit/dev.md` modify/delete conflict on a
+  shared-history upgrade, and had the framework's whole dev-plugin tree added back
+  as theirs-only content on an unrelated-history first tag merge. Dev-plugin
+  presence is now persistent instance state that the upgrade classifies before
+  merging and reconciles after (ADR 006 addendum, SPEC §Repo topology).
+
+### Added
+
+- **`scripts/upgrade/dev-plugin-state.mjs`** — the framework helper `/upgrade` and
+  `docs/runbook/UPGRADE.md` both drive. `classify` prints `stripped` (no
+  `.agent-toolkit/` and no active `@.agent-toolkit/dev.md` reference in
+  `AGENTS.md`/`CLAUDE.md`) or `installed` (the adopter's `.agent-toolkit/dev.md`
+  and the active reference both present), and exits 3 with a diagnostic on an
+  inconsistent state — half-installed dev-plugin state stops the upgrade rather
+  than being guessed at. `reconcile --state stripped` removes every
+  `.agent-toolkit/` path the merge brought in (modify/delete conflicts and
+  theirs-only additions alike), drops any reference line the merge introduced, and
+  amends the merge commit when the merge already completed, so the framework tree
+  is never committed into the instance and the user never resolves a dev-plugin
+  conflict by hand. `reconcile --state installed` mutates nothing: it asserts the
+  adopter's `.agent-toolkit/**` is byte-for-byte unchanged against the pre-merge
+  revision and reports framework paths the merge added, for the user to keep or
+  remove.
+- **`scripts/upgrade/check-upgrade-state.sh`** — disposable-repository regressions
+  for all five states (stripped on shared history, stripped on unrelated history,
+  installed, and both inconsistent states), plus a `--selftest` mode that proves
+  the suite fails when the reconcile step is skipped. Both run in the required CI
+  `test` job (`npm run upgrade:check`, `npm run upgrade:selftest`).
+
 ### Changed
 
 - **CI `test` job gates the dev-plugin rule registry when dev-plugin state is
@@ -48,6 +88,25 @@ tags, never framework `main`** (ADR 004, SPEC
   `.agent-toolkit/**` are instance-owned (`.gitattributes merge=ours`) and inert on
   instances; only this guarded `deploy.yml` step propagates on upgrade, and it
   requires no adopter action.
+
+### Upgrade note
+
+Run this upgrade with `/upgrade` (or the updated `docs/runbook/UPGRADE.md` flow):
+both now classify dev-plugin state **before** the merge and reconcile it after.
+Releases before 1.0.5 did not ship the helper, so on this one upgrade run it from
+the tag, as both flows show:
+
+```sh
+HELPER=scripts/upgrade/dev-plugin-state.mjs
+test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
+  git show sekai-kb-v1.0.5:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+STATE="$(node "$HELPER" classify)"
+```
+
+If `classify` exits 3, your instance is in an inconsistent state (a
+`.agent-toolkit/` tree with no active `@.agent-toolkit/dev.md` reference, or the
+reverse). Repair it deliberately before merging — the diagnostic names both
+directions. No `place.config.ts` change and no other adopter action is required.
 
 ## [1.0.4] — 2026-07-19
 
@@ -256,7 +315,8 @@ onto this tag.
 First release — nothing to upgrade from. The first instance establishes its merge
 base against this tag per `docs/runbook/UPGRADE.md` §Establishing the merge base.
 
-[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.4...HEAD
+[Unreleased]: https://github.com/wilsonkichoi/sekai-kb/compare/sekai-kb-v1.0.5...HEAD
+[1.0.5]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.5
 [1.0.4]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.4
 [1.0.3]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.3
 [1.0.2]: https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.2

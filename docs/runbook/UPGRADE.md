@@ -50,8 +50,23 @@ git config merge.ours.driver true
 git remote add framework https://github.com/wilsonkichoi/sekai-kb.git
 git fetch framework --tags
 
-# 3. The first merge — the ONLY one that needs --allow-unrelated-histories:
+# 3. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
+#    Releases before v1.0.5 did not ship the helper, so on a first merge run it
+#    from a release that does — any tag >= v1.0.5, even when the base you are
+#    establishing is older. The extracted copy lives inside .git, never in your tree.
+HELPER=scripts/upgrade/dev-plugin-state.mjs
+test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
+  git show sekai-kb-v1.0.5:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
+#    Exit 3 = inconsistent state (only one half of the dev workflow present):
+#    stop here and repair it deliberately, as the diagnostic says.
+
+# 4. The first merge — the ONLY one that needs --allow-unrelated-histories:
 git merge --allow-unrelated-histories sekai-kb-v1.0.0
+
+# 5. Reconcile dev-plugin state, immediately after the merge command — whether it
+#    stopped on conflicts or completed on its own:
+node "$HELPER" reconcile --state "$STATE"
 ```
 
 > **The `merge.ours.driver true` line is load-bearing and per-clone.** It is not
@@ -64,9 +79,12 @@ The merge outcome, file by file:
 - **Instance-owned files** (`place.config.ts`, `knowledge/**`, `CLAUDE.md`, …) —
   kept as yours automatically by `merge=ours`. No conflict. **Caveat:** `merge=ours`
   protects files you *already have* from being overwritten; it does **not** stop a
-  theirs-only file under those paths from being *added*. If the template ships demo
+  theirs-only file under those paths from being *added*, and it does **not**
+  preserve a path you deliberately *deleted*. If the template ships demo
   content (`knowledge/` articles for its example place), that content lands in your
-  instance on the first merge — strip it in the cleanup step below.
+  instance on the first merge — strip it in the cleanup step below. The deleted-path
+  case is `.agent-toolkit/` on a wizard-adopted instance; step 5's `reconcile` keeps
+  it absent.
 - **Files only the framework has** (e.g. `.claude/skills/`, `SystemDiagram.astro`)
   — added to your instance.
 - **Files only you have** (your docs, research, tracker config) — untouched; a
@@ -129,17 +147,32 @@ cat FRAMEWORK-VERSION
 # 3. Read the target's CHANGELOG entry first — especially its Upgrade note.
 git show sekai-kb-v1.0.1:CHANGELOG.md | awk '/^## \[1\.0\.1\]/{p=1;print;next} p&&/^## \[/{exit} p'
 
-# 4. Merge the tag (never main). merge=ours keeps your content/config.
+# 4. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
+#    Exit 3 = inconsistent state: stop and repair it deliberately.
+HELPER=scripts/upgrade/dev-plugin-state.mjs
+test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
+  git show sekai-kb-v1.0.1:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
+
+# 5. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff sekai-kb-v1.0.1 -m "chore: upgrade framework to sekai-kb-v1.0.1"
 
-# 5. If conflicts: they can only be framework-owned files you edited locally.
+# 6. Reconcile dev-plugin state, immediately after the merge command — whether it
+#    stopped on conflicts or completed on its own. Stripped: the framework's
+#    .agent-toolkit/ is removed again (conflicts and additions alike) so you never
+#    resolve a dev-plugin conflict by hand. Installed: nothing is touched; your
+#    config and rules are asserted byte-for-byte unchanged, and any framework path
+#    the merge ADDED under .agent-toolkit/ is reported for you to keep or remove.
+node "$HELPER" reconcile --state "$STATE"
+
+# 7. If conflicts remain: they can only be framework-owned files you edited locally.
 #    Read the CHANGELOG line for each, then take framework unless you intentionally
 #    forked it (in which case: upstream it to sekai-kb so it stops conflicting):
 git diff --name-only --diff-filter=U
 #    git checkout --theirs <file> && git add <file>     # take framework
 #    git commit --no-edit                               # finalize the merge
 
-# 6. Build-verify, then record the new version.
+# 8. Build-verify, then record the new version.
 npm run build
 printf 'v1.0.1\n' > FRAMEWORK-VERSION
 git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> v1.0.1"
@@ -177,13 +210,34 @@ Adopters add their own instance-specific files to `.gitattributes` the same way.
 The list is append-only from the framework baseline; the framework never removes a
 `merge=ours` entry, so an upgrade cannot start overwriting a file you own.
 
-`AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files. A wizard-adopted
-instance has `.agent-toolkit/` removed at adoption and its `AGENTS.md` regenerated
-place-specifically, carrying none of the framework's dev-plugin sentinel block (they
-are framework-development state, not adopter content); it therefore has no dev config
-to be overwritten. A framework or first-instance checkout that keeps its own
-`.agent-toolkit/` relies on `merge=ours` so a framework tag never replaces its dev
-config with the framework's.
+**`merge=ours` protects content, not absence.** It applies to a path that exists on
+both sides of the merge. A path you deliberately deleted gets no merge driver at
+all: on shared history the framework's change to it becomes a modify/delete
+conflict, and on an unrelated-history first merge the framework's whole tree is
+added back as theirs-only content. That is exactly the `.agent-toolkit/` case, and
+it is why the flows above carry a classify step and a reconcile step.
+
+## Dev-plugin state (`.agent-toolkit/`) — classified on every upgrade
+
+`AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files, and whether the
+dev workflow is installed is **persistent instance state** the upgrade preserves in
+either direction (ADR 006 addendum, SPEC §Repo topology). `/upgrade` and the flows
+above classify it before merging with
+`node scripts/upgrade/dev-plugin-state.mjs classify`:
+
+| State | Means | The upgrade does |
+| ----- | ----- | ---------------- |
+| `stripped` | `.agent-toolkit/` absent **and** no active `@.agent-toolkit/dev.md` reference in `AGENTS.md`/`CLAUDE.md` | Keeps both absent. `reconcile --state stripped` removes every `.agent-toolkit/` path the merge brought in — conflicted or cleanly added — and amends the merge commit if the merge already committed, so the framework tree is never committed into your instance. You never resolve a dev-plugin conflict by hand. |
+| `installed` | your own `.agent-toolkit/dev.md` **and** the active reference are both present | Keeps your config and rules. `merge=ours` does the work; `reconcile --state installed` mutates nothing and asserts your `.agent-toolkit/**` is byte-for-byte unchanged, then reports any framework path the merge *added* under it for you to keep or `git rm -f`. |
+| inconsistent | only one half present (a tree with no active reference, or a reference with no tree) | **Stops before merging**, exit 3, with a diagnostic naming both deliberate repairs. The upgrade never guesses whether to delete or install dev-plugin state. |
+
+A wizard-adopted instance is `stripped`: `npm run init` removes `.agent-toolkit/`
+and regenerates `AGENTS.md` without the framework's dev-plugin sentinel block, both
+being framework-development state rather than adopter content. Framework dev-plugin
+state is never reacquired implicitly — running `dev:setup`, which writes your own
+config and reference, is the only way in. A framework or first-instance checkout
+that keeps its own `.agent-toolkit/` is `installed` and relies on `merge=ours` so a
+framework tag never replaces its dev config with the framework's.
 
 ## Reconciling instance-owned starter files (every upgrade)
 

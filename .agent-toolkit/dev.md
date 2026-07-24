@@ -53,7 +53,11 @@ governs work committed here.
   and `AGENTS.md` carry `merge=ours`; the init wizard strips `.agent-toolkit/` and
   the `AGENTS.md` reference line from adopter clones (ADR 006). Rules here are
   lessons from developing the framework's `src/`/`scripts/`; adopters never touch
-  those trees, so they never ship.
+  those trees, so they never ship. `merge=ours` protects content, not absence: an
+  adopter's stripped state is preserved by `scripts/upgrade/dev-plugin-state.mjs`,
+  which `/upgrade` runs before and after every tag merge (ADR 006 addendum). A
+  change to this tree's shape must keep that helper's `stripped`/`installed`
+  definitions true — `scripts/upgrade/check-upgrade-state.sh` is the gate.
 
 ## Rules
 
