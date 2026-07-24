@@ -1,3 +1,16 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "src/components/**/*.astro"
+    - "src/layouts/**/*.astro"
+  objective:
+    - 'target="_blank"'
+    - "external link"
+  definition_of_done:
+    - "external link"
+    - "no-external-icon"
+---
 # External links in article surface need no-external-icon class
 
 Global CSS (`src/styles/global.css`) appends a ↗ pseudo-element to any

@@ -1,3 +1,16 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "**/*.geojson"
+    - "**/*.topojson"
+    - "**/*.ndjson"
+  objective:
+    - "geojson"
+    - "map marker"
+  definition_of_done:
+    - "geojson"
+---
 # Astro/Vite: import .geojson (and other non-JSON data extensions) as ?raw + JSON.parse
 
 Vite registers no loader for the `.geojson` extension, so

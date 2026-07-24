@@ -1,3 +1,19 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "plugins/**/*.mjs"
+    - "**/remark-*.mjs"
+    - "**/rehype-*.mjs"
+    - "astro.config.ts"
+  objective:
+    - "remark"
+    - "rehype"
+    - "wikilink"
+  definition_of_done:
+    - "remark"
+    - "rehype"
+---
 # Remark/rehype plugins cannot dynamically import project config
 
 Plugins in Astro's remark/rehype pipeline execute inside Vite's module runner, where

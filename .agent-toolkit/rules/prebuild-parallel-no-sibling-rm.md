@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "scripts/core/build-*.mjs"
+  objective:
+    - "prebuild"
+    - "run-p"
+    - "parallel prebuild"
+  definition_of_done:
+    - "prebuild"
+---
 # Parallel prebuild scripts must not clean sibling output
 
 Scripts that run concurrently in the `run-p` prebuild group (package.json) must only

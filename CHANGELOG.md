@@ -33,6 +33,22 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Changed
+
+- **CI `test` job gates the dev-plugin rule registry when dev-plugin state is
+  present.** `.github/workflows/deploy.yml` gains a step that runs
+  `.agent-toolkit/scripts/check-rule-registry.mjs` and its self-test, guarded by
+  `if [ -f .agent-toolkit/dev.md ]`. The checker asserts every promoted rule under
+  the configured `rules_dir` declares a valid `tier` (doctrine / gotcha+trigger /
+  none) for the dev-plugin project-bootstrap **discovery** contract (dev 0.0.64+),
+  and that the `## Rules` section carries no bare `@path` registry line. The init
+  wizard strips the entire `.agent-toolkit/` tree from adopter instances, so on a
+  stripped adopter the guard makes the step a clean no-op — the workflow never
+  depends on a removed path. The rule files and registry format under
+  `.agent-toolkit/**` are instance-owned (`.gitattributes merge=ours`) and inert on
+  instances; only this guarded `deploy.yml` step propagates on upgrade, and it
+  requires no adopter action.
+
 ## [1.0.4] — 2026-07-19
 
 Corrects the v1.0.3 AGENTS.md-as-SSOT rollout so framework development and fresh

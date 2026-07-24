@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - ".github/workflows/**"
+  objective:
+    - "github actions"
+    - "workflow"
+  definition_of_done:
+    - "permissions"
+    - "least privilege"
+---
 # GitHub Actions: least-privilege permissions
 
 Any workflow that runs pull-request code (checkout + `npm ci`/build/test on `pull_request`

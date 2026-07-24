@@ -1,3 +1,16 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "package.json"
+    - "package-lock.json"
+  objective:
+    - "dependency"
+    - "lockfile"
+  definition_of_done:
+    - "lockfile"
+    - "npm ci"
+---
 # Lockfile cross-platform validation
 
 After changing dependencies, verify the lockfile is CI-valid before pushing:

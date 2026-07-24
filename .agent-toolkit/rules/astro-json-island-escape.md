@@ -1,3 +1,14 @@
+---
+tier: gotcha
+triggers:
+  objective:
+    - "set:html"
+    - "json island"
+    - "application/json"
+  definition_of_done:
+    - "set:html"
+    - "json island"
+---
 # Emitting build-time JSON into a page: escape `<` for a set:html script island
 
 Astro's `set:html` does no escaping. Embedding a JSON string in a

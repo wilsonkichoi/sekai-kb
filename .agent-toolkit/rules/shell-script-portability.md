@@ -1,3 +1,15 @@
+---
+tier: gotcha
+triggers:
+  paths:
+    - "scripts/**/*.sh"
+  objective:
+    - "shell script"
+    - "bash"
+  definition_of_done:
+    - "shell script"
+    - "bash 3.2"
+---
 # Shell scripts must run on macOS bash 3.2 and CI bash 5
 
 Repo shell scripts (`scripts/**`) run both locally (macOS default bash is 3.2; a dev shell
