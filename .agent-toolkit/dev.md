@@ -78,10 +78,16 @@ matching.
   case-insensitive substring. A gotcha needs at least one trigger.
 - **`tier: none`** — a non-rule Markdown file that stays in place, loaded by nothing.
 
-All rules here are **gotcha-tier**: each is a narrow, CI-gated build gotcha that a
-session loads only when its surface is in play. `.agent-toolkit/scripts/check-rule-registry.mjs`
-gates complete classification in CI (every rule file carries a valid tier; no
-`## Rules` entry is a bare `@path`).
+`.agent-toolkit/scripts/check-rule-registry.mjs` gates complete classification in
+CI (every rule file carries a valid tier; no `## Rules` entry is a bare `@path`).
+
+### Doctrine
+
+- `.agent-toolkit/rules/dod-is-the-scope.md` — the claimed task's Objective + DoD is the whole scope; every criterion is implemented before hand-off.
+- `.agent-toolkit/rules/dod-guard-suite-must-run-in-ci.md` — a test suite cited as a DoD guard counts only when the CI workflow runs it.
+- `.agent-toolkit/rules/genericity-gate-scope.md` — the framework's exact genericity + English-only gate scope, denylist sources, scanned text, and exclusions.
+
+### Gotchas
 
 - `.agent-toolkit/rules/astro-geojson-import-raw.md` — build-time import of a `.geojson` (or other non-JSON data extension): use `?raw` + `JSON.parse`; Vite has no loader for the bare extension.
 - `.agent-toolkit/rules/astro-json-island-escape.md` — emitting build-time JSON into a `set:html` `<script type="application/json">` island: escape every `<` to its `\u003c` form (`JSON.stringify` does not), or a `</script>` inside a string value breaks out of the island.
