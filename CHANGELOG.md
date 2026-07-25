@@ -33,6 +33,13 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Changed
+
+- **The required dev-plugin release is explicit and CI-guarded.**
+  `.agent-toolkit/dev.md` frontmatter now declares the action repository and
+  release. `npm run dev-plugin:check` verifies every `check-rules` workflow
+  reference against that declaration, and CI now uses `dev-v0.0.72`.
+
 ## [1.0.6] — 2026-07-25
 
 Moves category colors into instance configuration, makes genericity scan-root

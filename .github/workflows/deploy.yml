@@ -66,6 +66,8 @@ jobs:
       - run: npm run test:ci
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
+      - name: Dev-plugin action references match the declared release
+        run: npm run dev-plugin:check
       # Dev-plugin rule registry: assert every rule under rules_dir is tier-classified
       # (project-bootstrap discovery contract). The dev plugin ships the checker, so
       # this repository vendors none: the composite action runs the copy of
@@ -75,7 +77,7 @@ jobs:
       # is absent, so no `if [ -f ... ]` guard is needed for an adopter stripped by
       # `npm run init`; the init-check job below proves that on a real stripped tree.
       - name: Rule registry
-        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.72
       # Non-vacuity, in place of the retired check-rule-registry.mjs --selftest. The
       # upstream repository-validation job proves the checker's own contract; this
       # proves THIS workflow's wiring of it still fails a deliberately unclassified
@@ -103,7 +105,7 @@ jobs:
         id: rules-selftest
         if: hashFiles('.agent-toolkit/dev.md') != ''
         continue-on-error: true
-        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.72
         with:
           path: ${{ runner.temp }}/check-rules-unclassified
       - name: Rule registry self-test verdict
@@ -196,7 +198,7 @@ jobs:
       # from the action's documentation.
       - name: Rule registry on the stripped instance
         id: rules-stripped
-        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.72
       - name: Rule registry stripped-instance verdict
         env:
           OUTCOME: ${{ steps.rules-stripped.outcome }}

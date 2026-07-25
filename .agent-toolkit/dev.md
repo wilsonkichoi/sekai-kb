@@ -1,8 +1,10 @@
 ---
+dev_plugin_repository: wilsonkichoi/agent-toolkit
+dev_plugin_release: dev-v0.0.72
 tracker: linear
 linear_team: LB
 linear_project: "LB Rebuild"
-test_command: "npm run genericity && npm run test:ci && npm run article-health:test && npm run article-health -- --all --profile=ci-deploy && npm run build"
+test_command: "npm run genericity && npm run dev-plugin:check && npm run test:ci && npm run article-health:test && npm run article-health -- --all --profile=ci-deploy && npm run build"
 ci_workflow: deploy.yml        # GH Actions: genericity + test + build + init-check on every PR; deploy on push to main
 merge_policy: squash
 review_action_installed: false # auto PR-review GitHub Action (claude-review.yml) not installed
@@ -80,11 +82,12 @@ matching.
 
 CI gates complete classification with the dev plugin's own checker
 (`resolve_project_rules.py --check`), run through the upstream composite action
-pinned at an immutable release tag:
-`wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70`. This
-repository vendors no second copy of that checker. `--check` is stricter than a
-lifecycle run in one place: a bare `@path` line under `## Rules` is an error here,
-where a lifecycle run only warns.
+declared by `dev_plugin_repository` and `dev_plugin_release` in this file's
+frontmatter. This repository vendors no second copy of that checker. The
+`npm run dev-plugin:check` gate fails if a `check-rules` workflow reference drifts
+from that declaration. `--check` is stricter than a lifecycle run in one place: a
+bare `@path` line under `## Rules` is an error here, where a lifecycle run only
+warns.
 
 The step lives in the `test` job of `.github/workflows/deploy.yml`, which runs on
 every pull request and every push to `main`. What enforces it is the job graph:

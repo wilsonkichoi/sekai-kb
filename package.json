@@ -35,6 +35,7 @@
     "genericity": "bash scripts/ci/check-genericity.sh && node scripts/ci/check-english-only.mjs && node scripts/ci/check-scan-root-docs.mjs",
     "genericity:selftest": "bash scripts/ci/check-skills-gated.sh",
     "genericity:docs-selftest": "bash scripts/ci/check-scan-root-docs-selftest.sh",
+    "dev-plugin:check": "node scripts/ci/check-dev-plugin-action.mjs",
     "english-only": "node scripts/ci/check-english-only.mjs",
     "article-health": "uv run python scripts/tools/article-health.py",
     "article-health:test": "uv run pytest tests/article_health",
