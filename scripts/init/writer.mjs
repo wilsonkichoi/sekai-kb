@@ -282,10 +282,14 @@ projections of \`knowledge/\` — never edit them directly.
 1. **SSOT:** \`knowledge/\` is the only content source of truth; \`src/content/\` is
    derived (gitignored, written by sync) and never edited directly.
 2. **Genericity + English-only:** zero place-specific strings and zero CJK/multi-language
-   code paths in any code tree — \`src/\`, \`scripts/\`, \`tests/\`, future \`workers/\`/plugin
-   code; test fixtures are code. Place identity flows only from \`place.config.ts\` +
-   \`knowledge/\` + \`public/media/\`. Machine-gated by \`npm run genericity\`
-   (\`scripts/ci/check-genericity.sh\` + \`scripts/ci/check-english-only.mjs\`).
+   code paths in any code tree; test fixtures are code, and so are the framework
+   skills. Place identity flows only from \`place.config.ts\` + \`knowledge/\` +
+   \`public/media/\`. Machine-gated by \`npm run genericity\`, whose two gates carry
+   **different** roots: \`scripts/ci/check-genericity.sh\` (place-name denylist) scans
+   \`src/\`, \`scripts/\`, \`tests/\`, \`.claude/skills/\`;
+   \`scripts/ci/check-english-only.mjs\` (CJK codepoints) scans \`src/\`, \`scripts/\`,
+   \`tests/\`, \`workers/\`, \`.claude/skills/\`; a gate skips any of its roots that this
+   instance does not have.
 3. **Framework vs instance:** \`src/\` and \`scripts/\` are framework-owned — customize
    through config, content, and media. Anything more is upstreamed to sekai-kb and
    pulled back as a tagged release. The genericity gate is the structural guarantee.

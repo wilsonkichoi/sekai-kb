@@ -8,10 +8,13 @@
 # (ADR 002, SPEC §Negative requirements, §G risk 2). This is the structural
 # mitigation for the trap that motivated the whole rebuild.
 #
-# Scan scope: src/, scripts/, tests/, and .claude/skills/ (test fixtures are
-# code, and framework skills are agent-executed prose that is code for doctrine
-# purposes — the whole-project doctrine, STRATEGIC-DIRECTION 2026-07-11 (b),
-# task 5.6). place.config.ts (repo root), knowledge/, public/media/, and docs/
+# Scan scope, instance mode: src/, scripts/, tests/, .claude/skills/; test
+# fixtures are code, and framework skills are agent-executed prose that is code
+# for doctrine purposes — the whole-project doctrine, STRATEGIC-DIRECTION
+# 2026-07-11 (b), task 5.6. The English-only gate (check-english-only.mjs) has a
+# different instance root list; the two are never merged into one claim
+# (scripts/ci/check-scan-root-docs.mjs gates both statements).
+# place.config.ts (repo root), knowledge/, public/media/, and docs/
 # hold place identity legitimately and are outside the scan roots by
 # construction; the denylist file itself is inside scripts/ and is excluded
 # explicitly (it necessarily contains the forbidden terms).

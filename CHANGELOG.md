@@ -33,6 +33,45 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scan-root scope statements now match the gates.** `npm run genericity` runs
+  two gates whose instance-mode roots differ — the place-name denylist gate
+  (`scripts/ci/check-genericity.sh`) scans `src/`, `scripts/`, `tests/`,
+  `.claude/skills/`, and the English-only gate
+  (`scripts/ci/check-english-only.mjs`) scans `src/`, `scripts/`, `tests/`,
+  `workers/`, `.claude/skills/` — and both scan the whole repository in template
+  mode. Eight statements restated those sets wrongly, most by merging them into
+  one claim or by omitting `.claude/skills/`: the denylist file header, the
+  English-only script's instance-mode comment, the English-only CI step name (it
+  omitted `workers/`), `docs/runbook/DEPLOY.md` §Quality gates, `README.md`
+  §Genericity, `AGENTS.md` iron rule 2 (which contradicted its own "Skill
+  ownership" section), the wizard-emitted instance `AGENTS.md` in
+  `scripts/init/writer.mjs`, and the `.sekai-template` marker. Each now states
+  the roots per gate; the `check-genericity.sh` "Scan scope" header, already
+  correct, was reworded to say which gate its list belongs to.
+
+### Added
+
+- **`scripts/ci/check-scan-root-docs.mjs`** — the guard that keeps the above
+  true. It *derives* both root sets from the two gate scripts (the
+  `SCAN_ROOTS+=` lines and the `SCAN_ROOTS` array literal) and asserts that all
+  21 registered statements enumerate exactly the roots of the gate each one
+  describes; changing a script's roots changes what the guard demands, with no
+  second edit to the guard. A registered statement that has been reworded or
+  moved (its anchor no longer matches) fails rather than silently passing.
+  Statements in adopter-owned files (`AGENTS.md`, `README.md`,
+  `.agent-toolkit/**`) and in the removed `.sekai-template` marker are required
+  in template mode and reported as skipped on an adopted instance, so an
+  adopter's own wording never fails their gate. Wired into `npm run genericity`,
+  so `test_command` and every local run cover it.
+- **`scripts/ci/check-scan-root-docs-selftest.sh`** (`npm run
+  genericity:docs-selftest`) — the guard's non-vacuity proof, in the
+  `check-skills-gated.sh` idiom: it plants doc drift, script `SCAN_ROOTS` drift,
+  and a reworded anchor, requires the guard to fail each time, and restores every
+  file it mutates. Both the guard and this self-test run as named steps in
+  `deploy.yml`'s `genericity` job.
+
 ## [1.0.5] — 2026-07-24
 
 Makes framework upgrades preserve an instance's dev-plugin state in both

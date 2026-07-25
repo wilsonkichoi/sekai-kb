@@ -83,7 +83,9 @@ function walk(dir) {
 // Template mode (LB-26): the `.sekai-template` marker means this checkout is the
 // sekai-kb template, which ships English-only demo content — so the CJK gate runs
 // over the WHOLE tree, not just code trees. `npm run init` removes the marker on
-// adoption, reverting to the code trees only (src/, scripts/, tests/, workers/).
+// adoption, reverting to the code trees only (src/, scripts/, tests/, workers/,
+// .claude/skills/) -- this gate's own root list, which is not the genericity
+// gate's (check-genericity.sh has no workers/).
 const scanned = [];
 if (existsSync(join(ROOT, '.sekai-template'))) {
   scanned.push('(whole tree — template mode)');

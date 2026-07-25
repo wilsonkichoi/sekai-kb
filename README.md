@@ -74,9 +74,13 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
 
 ## Genericity
 
-`src/`, `scripts/`, and `tests/` carry **zero place-specific strings** — all place
-identity flows through `place.config.ts`, `knowledge/`, and `public/media/`. This is
-machine-enforced (`npm run genericity`) and is the structural guarantee that one
+The code trees carry **zero place-specific strings** — all place identity flows
+through `place.config.ts`, `knowledge/`, and `public/media/`. This is
+machine-enforced by `npm run genericity`, two gates whose instance-mode roots
+differ: the place-name denylist gate scans `src/`, `scripts/`, `tests/`,
+`.claude/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
+`workers/`, `.claude/skills/`; in the pristine template (the `.sekai-template`
+marker) both scan the whole repository. It is the structural guarantee that one
 config file re-places the whole site.
 
 ## Language support

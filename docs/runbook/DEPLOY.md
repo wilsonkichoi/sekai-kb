@@ -115,11 +115,17 @@ npm run genericity
 npm run test:ci
 ```
 
-The genericity gate enforces that framework code carries zero place-specific
-strings. In the pristine template (the `.sekai-template` marker is present at
-the repo root) it scans the whole tree; in an adopted instance (`npm run init`
-removes the marker) it scans the code trees (`src/`, `scripts/`, `tests/`), so
-your `knowledge/` and `place.config.ts` legitimately carry your place's name.
+`npm run genericity` runs two gates: the place-name denylist gate
+(`scripts/ci/check-genericity.sh`), which enforces that framework code carries
+zero place-specific strings, and the English-only gate
+(`scripts/ci/check-english-only.mjs`), which rejects CJK codepoints. In the
+pristine template (the `.sekai-template` marker is present at the repo root)
+both scan the whole tree. In an adopted instance (`npm run init` removes the
+marker) they scan the code trees, and their root sets differ: the place-name
+denylist gate scans `src/`, `scripts/`, `tests/`, `.claude/skills/`; the
+English-only gate scans `src/`, `scripts/`, `tests/`, `workers/`,
+`.claude/skills/`; your `knowledge/` and `place.config.ts` are outside both, so
+they legitimately carry your place's name.
 Your place name is added to `scripts/ci/genericity-denylist.local.txt` by the
 init wizard, which keeps it out of framework code from day one.
 
