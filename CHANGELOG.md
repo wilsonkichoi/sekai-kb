@@ -33,6 +33,15 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Changed
+
+- **Category colors are now instance-owned.** The slug-keyed `COLOR_PALETTE` in
+  `src/utils/categoryConfig.ts` is removed. Colors flow through optional
+  `color?` and `colorLight?` fields on each entry in `place.config.ts`
+  `categories[]`. Absent fields fall back to a neutral `DEFAULT_COLOR`
+  (`#475569` / `#47556920`), so existing adopters build without config surgery.
+  The demo place carries its colors inline as an example.
+
 ### Removed
 
 - **`.agent-toolkit/scripts/check-rule-registry.mjs` is retired.** The dev plugin

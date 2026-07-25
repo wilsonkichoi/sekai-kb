@@ -29,6 +29,8 @@ export interface PlaceConfig {
     title: string;
     icon: string;
     description: string;
+    color?: string;
+    colorLight?: string;
   }>;
   /** Leaflet init: center [lat, lng], zoom, and maxBounds [[S,W],[N,E]]. */
   map: {
@@ -149,12 +151,16 @@ const config: PlaceConfig = {
       icon: '📜',
       description:
         'Founding, the fishing era, the arts revival, and civic milestones',
+      color: '#92400e',
+      colorLight: '#f59e0b20',
     },
     {
       slug: 'beaches',
       title: 'Beaches',
       icon: '🏖️',
       description: 'Coves, tide pools, access points, and swimming conditions',
+      color: '#0284c7',
+      colorLight: '#0284c720',
     },
     {
       slug: 'nature',
@@ -162,18 +168,24 @@ const config: PlaceConfig = {
       icon: '🌊',
       description:
         'Kelp forests, coastal sage, marine life, and the preserve system',
+      color: '#0e7490',
+      colorLight: '#0e749020',
     },
     {
       slug: 'trails',
       title: 'Trails',
       icon: '🥾',
       description: 'Ridge hikes, bluff walks, and canyon routes above the cove',
+      color: '#15803d',
+      colorLight: '#15803d20',
     },
     {
       slug: 'food',
       title: 'Food',
       icon: '🍽️',
       description: 'Cafes, seafood shacks, markets, and culinary landmarks',
+      color: '#ea580c',
+      colorLight: '#ea580c20',
     },
   ],
   map: {
