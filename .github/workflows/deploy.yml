@@ -67,17 +67,57 @@ jobs:
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
       # Dev-plugin rule registry: assert every rule under rules_dir is tier-classified
-      # (project-bootstrap discovery contract). Guarded by .agent-toolkit/dev.md so an
-      # adopter stripped by `npm run init` — which removes the whole .agent-toolkit/
-      # tree, script included — never depends on a removed path.
-      - name: Rule registry (dev-plugin state; skipped when stripped)
+      # (project-bootstrap discovery contract). The dev plugin ships the checker, so
+      # this repository vendors none: the composite action runs the copy of
+      # resolve_project_rules.py --check that shipped with the tag it is pinned at.
+      # Pin an immutable dev-vX.Y.Z release tag — never `main`, never a moving major.
+      # The action detects .agent-toolkit/dev.md itself and skips with exit 0 when it
+      # is absent, so no `if [ -f ... ]` guard is needed for an adopter stripped by
+      # `npm run init`; the init-check job below proves that on a real stripped tree.
+      - name: Rule registry
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+      # Non-vacuity, in place of the retired check-rule-registry.mjs --selftest. The
+      # upstream repository-validation job proves the checker's own contract; this
+      # proves THIS workflow's wiring of it still fails a deliberately unclassified
+      # rule file, so the step above can never pass vacuously.
+      - name: Rule registry self-test fixture
+        env:
+          FIXTURE: ${{ runner.temp }}/check-rules-unclassified
         run: |
-          if [ -f .agent-toolkit/dev.md ]; then
-            node .agent-toolkit/scripts/check-rule-registry.mjs
-            node .agent-toolkit/scripts/check-rule-registry.mjs --selftest
-          else
-            echo "no .agent-toolkit/dev.md (dev-plugin state stripped); skipping rule-registry check"
-          fi
+          set -euo pipefail
+          mkdir -p "$FIXTURE/.agent-toolkit/rules"
+          printf 'Fixture project instructions.\n' >"$FIXTURE/AGENTS.md"
+          printf -- '---\ncontext_file: AGENTS.md\nrules_dir: .agent-toolkit/rules/\n---\n\n## Rules\n\nFixture.\n' \
+            >"$FIXTURE/.agent-toolkit/dev.md"
+          printf 'No tier frontmatter, so rule discovery must hard-stop here.\n' \
+            >"$FIXTURE/.agent-toolkit/rules/unclassified.md"
+      - name: Rule registry self-test (must fail)
+        id: rules-selftest
+        continue-on-error: true
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+        with:
+          path: ${{ runner.temp }}/check-rules-unclassified
+      - name: Rule registry self-test verdict
+        env:
+          OUTCOME: ${{ steps.rules-selftest.outcome }}
+          RESULT: ${{ steps.rules-selftest.outputs.result }}
+          STATUS: ${{ steps.rules-selftest.outputs.status }}
+          REPORT: ${{ steps.rules-selftest.outputs.report }}
+        run: |
+          set -euo pipefail
+          fail() { echo "rule-registry self-test FAILED: $*" >&2; exit 1; }
+          [ "$OUTCOME" = failure ] || fail "expected the fixture step to fail, got '$OUTCOME'"
+          [ "$RESULT" = checked ] || fail "expected result 'checked', got '$RESULT'"
+          [ "$STATUS" = 1 ] || fail "expected status '1', got '$STATUS'"
+          case "$REPORT" in
+            *"rules_dir contains unclassified Markdown"*) ;;
+            *) fail "report does not name the unclassified-rule diagnostic: $REPORT" ;;
+          esac
+          case "$REPORT" in
+            *".agent-toolkit/rules/unclassified.md"*) ;;
+            *) fail "report does not name the offending file: $REPORT" ;;
+          esac
+          echo "rule-registry self-test OK: the pinned action rejects an unclassified rule file."
       # Upgrade determinism: a framework tag merge must preserve the instance's
       # dev-plugin state — stripped stays stripped on shared AND unrelated history,
       # installed keeps its adopter-owned config byte-for-byte, and either
@@ -140,6 +180,32 @@ jobs:
       # full build on the initialized instance); the CI checkout is disposable.
       - name: Init self-check (double-init byte-diff, seeded files, local denylist gate, init → build)
         run: bash scripts/init/check-init.sh --build
+      # The step above ran the wizard in place, so this workspace IS a stripped
+      # adopter tree: no .agent-toolkit/ at all. Run the same rules-contract action
+      # the test job runs and prove it skips cleanly there, rather than assuming it
+      # from the action's documentation.
+      - name: Rule registry on the stripped instance
+        id: rules-stripped
+        uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
+      - name: Rule registry stripped-instance verdict
+        env:
+          OUTCOME: ${{ steps.rules-stripped.outcome }}
+          RESULT: ${{ steps.rules-stripped.outputs.result }}
+          STATUS: ${{ steps.rules-stripped.outputs.status }}
+          REPORT: ${{ steps.rules-stripped.outputs.report }}
+        run: |
+          set -euo pipefail
+          fail() { echo "stripped-instance rules check FAILED: $*" >&2; exit 1; }
+          # Non-vacuous only because the wizard really removed the tree.
+          [ ! -e .agent-toolkit ] || fail ".agent-toolkit/ survived the wizard; this is not a stripped tree"
+          [ "$OUTCOME" = success ] || fail "expected success, got '$OUTCOME'"
+          [ "$RESULT" = skipped ] || fail "expected result 'skipped', got '$RESULT'"
+          [ "$STATUS" = 0 ] || fail "expected status '0', got '$STATUS'"
+          case "$REPORT" in
+            *"no .agent-toolkit/dev.md"*) ;;
+            *) fail "report does not carry the skip message: $REPORT" ;;
+          esac
+          echo "stripped-instance rules check OK: skipped with exit 0 on a tree the wizard stripped."
 
   deploy:
     name: Deploy to Pages

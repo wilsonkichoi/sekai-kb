@@ -33,6 +33,33 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Removed
+
+- **`.agent-toolkit/scripts/check-rule-registry.mjs` is retired.** The dev plugin
+  now ships the rule-discovery checker itself
+  (`resolve_project_rules.py --check`, agent-toolkit #37) and packages it as a
+  composite action (#39) referenced at an immutable release tag (#38), so the
+  framework no longer maintains a second copy of a checker it does not own. The
+  `test` job's `Rule registry` step is now a single
+  `uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70`, and
+  the `if [ -f .agent-toolkit/dev.md ]` shell guard around it is gone: the action
+  performs that detection itself and skips with exit 0 on a repository without the
+  config, which is exactly what a `npm run init`-stripped adopter has.
+  `.agent-toolkit/scripts/` is removed with its only file.
+
+  Two steps replace the retired `--selftest`, so adopter-side non-vacuity is not
+  lost. In `test`, a throwaway fixture carrying one unclassified rule file is run
+  through the same pinned action and the workflow asserts it fails with the
+  `rules_dir contains unclassified Markdown` diagnostic. In `init-check`, where
+  the wizard has just stripped the workspace in place, the action is run against
+  that real stripped tree and the workflow asserts `result: skipped` and exit 0.
+
+  **Upgrade note:** this is `deploy.yml` only, so it reaches instances through a
+  normal tag merge with no adopter action. An instance that carries its own
+  `.agent-toolkit/` tree (adopter-owned, `merge=ours`) keeps its copy of the
+  retired script through the merge and should delete it in the same commit that
+  adopts this release; an instance stripped by `npm run init` has nothing to do.
+
 ### Fixed
 
 - **Scan-root scope statements now match the gates.** `npm run genericity` runs
