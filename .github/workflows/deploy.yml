@@ -80,7 +80,15 @@ jobs:
       # upstream repository-validation job proves the checker's own contract; this
       # proves THIS workflow's wiring of it still fails a deliberately unclassified
       # rule file, so the step above can never pass vacuously.
+      #
+      # Guarded on dev-plugin state, unlike the `Rule registry` step itself. This
+      # workflow is framework-owned and ships to every adopter on upgrade, and an
+      # adopter stripped by `npm run init` has no rules to guard: for them these three
+      # steps would install uv and couple their CI to an upstream diagnostic string in
+      # order to prove the wiring of a step that can only ever skip. The guard is on
+      # the proof, never on the gate.
       - name: Rule registry self-test fixture
+        if: hashFiles('.agent-toolkit/dev.md') != ''
         env:
           FIXTURE: ${{ runner.temp }}/check-rules-unclassified
         run: |
@@ -93,11 +101,13 @@ jobs:
             >"$FIXTURE/.agent-toolkit/rules/unclassified.md"
       - name: Rule registry self-test (must fail)
         id: rules-selftest
+        if: hashFiles('.agent-toolkit/dev.md') != ''
         continue-on-error: true
         uses: wilsonkichoi/agent-toolkit/.github/actions/check-rules@dev-v0.0.70
         with:
           path: ${{ runner.temp }}/check-rules-unclassified
       - name: Rule registry self-test verdict
+        if: hashFiles('.agent-toolkit/dev.md') != ''
         env:
           OUTCOME: ${{ steps.rules-selftest.outcome }}
           RESULT: ${{ steps.rules-selftest.outputs.result }}

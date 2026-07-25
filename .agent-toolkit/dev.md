@@ -87,13 +87,19 @@ lifecycle run in one place: a bare `@path` line under `## Rules` is an error her
 where a lifecycle run only warns.
 
 The step lives in the `test` job of `.github/workflows/deploy.yml`, which runs on
-every pull request and every push to `main`. No job is a GitHub *required status
-check*: `main` carries no branch protection. What enforces the gate is the job
-graph, `build` needs `test` and `deploy` needs `build`, so a red `test` blocks the
-Pages deploy. The action detects `.agent-toolkit/dev.md` itself and skips with exit
-0 when it is absent, so an adopter stripped by `npm run init` needs no shell guard;
-the `init-check` job proves that against a tree the wizard really stripped, and a
-fixture step in `test` proves the wiring still fails an unclassified rule file.
+every pull request and every push to `main`. What enforces it is the job graph:
+`build` needs `test` and `deploy` needs `build`, so a red `test` blocks the Pages
+deploy no matter how branch protection is configured. (Checked 2026-07-25: `main`
+carried no branch protection, so no job was a GitHub *required status check*
+either. That is a repository setting, changeable without a commit here, which is
+why the job graph is what this paragraph relies on.)
+
+The action detects `.agent-toolkit/dev.md` itself and skips with exit 0 when it is
+absent, so an adopter stripped by `npm run init` needs no shell guard on the gate;
+the `init-check` job proves that against a tree the wizard really stripped. The
+non-vacuity fixture in `test` — which proves the wiring still fails an unclassified
+rule file — *is* guarded on that file, because a stripped adopter has no rules for
+it to prove anything about.
 
 ### Doctrine
 

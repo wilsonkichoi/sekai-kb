@@ -54,11 +54,19 @@ tags, never framework `main`** (ADR 004, SPEC
   the wizard has just stripped the workspace in place, the action is run against
   that real stripped tree and the workflow asserts `result: skipped` and exit 0.
 
+  The `test` fixture steps carry `if: hashFiles('.agent-toolkit/dev.md') != ''`.
+  The gate itself is never guarded; only its non-vacuity proof is, because an
+  instance with no dev-plugin state has no rules for that proof to be about and
+  should not install a toolchain or depend on an upstream diagnostic string to
+  learn it. Adopters running `dev:setup` get the full proof back automatically the
+  moment their config exists.
+
   **Upgrade note:** this is `deploy.yml` only, so it reaches instances through a
   normal tag merge with no adopter action. An instance that carries its own
   `.agent-toolkit/` tree (adopter-owned, `merge=ours`) keeps its copy of the
   retired script through the merge and should delete it in the same commit that
-  adopts this release; an instance stripped by `npm run init` has nothing to do.
+  adopts this release; an instance stripped by `npm run init` has nothing to do —
+  its `Rule registry` step skips and the fixture steps do not run at all.
 
 ### Fixed
 
