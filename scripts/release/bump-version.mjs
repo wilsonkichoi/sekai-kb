@@ -7,7 +7,37 @@ import { pathToFileURL } from 'node:url';
 const LEVELS = new Set(['patch', 'minor', 'major']);
 const VERSION_RE = /^v(\d+)\.(\d+)\.(\d+)$/;
 
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const replaceVersionLine = (content, indent, current, next, label) => {
+  const pattern = new RegExp(`^ {${indent}}"version": "${escapeRegex(current)}"(,?)$`, 'gm');
+  const matches = [...content.matchAll(pattern)];
+  if (matches.length !== 1) {
+    throw new Error(`${label} must contain exactly one ${indent}-space-indented version field`);
+  }
+  return content.replace(pattern, `${' '.repeat(indent)}"version": "${next}"$1`);
+};
+
+const replaceLockVersions = (content, current, next) => {
+  const withRoot = replaceVersionLine(content, 2, current, next, 'package-lock.json root');
+  const emptyPackageStart = withRoot.search(/^    "": \{$/m);
+  if (emptyPackageStart === -1) throw new Error('package-lock.json must contain packages[""]');
+  const afterEmptyPackage = withRoot.slice(emptyPackageStart + 1);
+  const nextPackageOffset = afterEmptyPackage.search(/^    "[^"]+": \{$/m);
+  const emptyPackageEnd = nextPackageOffset === -1
+    ? withRoot.length
+    : emptyPackageStart + 1 + nextPackageOffset;
+  const before = withRoot.slice(0, emptyPackageStart);
+  const emptyPackage = withRoot.slice(emptyPackageStart, emptyPackageEnd);
+  const after = withRoot.slice(emptyPackageEnd);
+  return before + replaceVersionLine(
+    emptyPackage,
+    6,
+    current,
+    next,
+    'package-lock.json packages[""]',
+  ) + after;
+};
 
 const parseVersion = (value, label) => {
   const match = VERSION_RE.exec(value.trim());
@@ -57,10 +87,12 @@ export const bumpAdopterVersion = (root, level, { dryRun = false } = {}) => {
   const packagePath = resolve(base, 'package.json');
   const lockPath = resolve(base, 'package-lock.json');
   const current = readFileSync(versionPath, 'utf8').trim();
+  const packageSource = readFileSync(packagePath, 'utf8');
+  const lockSource = readFileSync(lockPath, 'utf8');
   parseVersion(current, 'VERSION');
 
-  const pkg = readJson(packagePath);
-  const lock = readJson(lockPath);
+  const pkg = JSON.parse(packageSource);
+  const lock = JSON.parse(lockSource);
   const npmCurrent = current.slice(1);
   if (pkg.version !== npmCurrent) throw new Error('package.json.version does not match VERSION');
   if (lock.version !== npmCurrent || lock.packages?.['']?.version !== npmCurrent) {
@@ -69,15 +101,12 @@ export const bumpAdopterVersion = (root, level, { dryRun = false } = {}) => {
 
   const next = nextVersion(current, level);
   const npmNext = next.slice(1);
-  pkg.version = npmNext;
-  lock.version = npmNext;
-  lock.packages[''].version = npmNext;
 
   if (!dryRun) {
     writeAtomically([
       { path: versionPath, content: `${next}\n` },
-      { path: packagePath, content: `${JSON.stringify(pkg, null, 2)}\n` },
-      { path: lockPath, content: `${JSON.stringify(lock, null, 2)}\n` },
+      { path: packagePath, content: replaceVersionLine(packageSource, 2, npmCurrent, npmNext, 'package.json') },
+      { path: lockPath, content: replaceLockVersions(lockSource, npmCurrent, npmNext) },
     ]);
   }
   return { current, next, level };

@@ -53,7 +53,8 @@ tags, never framework `main`** (ADR 004, SPEC
   Init creates adopter `VERSION` and sets the adopter manifest versions from it.
   CI rejects drift. The new `npm run release:bump -- patch|minor|major` command and
   `/sekai-release` skill let an adopter maintainer prepare a release explicitly, without
-  versioning routine article PRs.
+  versioning routine article PRs. The bump command preserves every non-version
+  byte in both npm manifests.
 
   **Upgrade note:** the first upgrade from v1.0.8 keeps the adopter's `VERSION`
   when the framework deletes its mistaken template copy. `/sekai-upgrade` now captures
