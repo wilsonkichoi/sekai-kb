@@ -3,7 +3,7 @@
 Knowledge base for the fictional coastal town of **Marisol Cove** — the demo place
 that ships with the **sekai-kb** framework template. Built with Astro; content is
 plain Markdown under `knowledge/`. Replace this demo with your own place by running
-`npm run init` (or the `/adopt` skill).
+`npm run init` (or the `/sekai-adopt` skill).
 
 This file — **`AGENTS.md`** — is the single source of truth for agent instructions
 in this repository, for **every** agent CLI: codex-cli reads it natively, and Claude
@@ -72,9 +72,9 @@ content).
    skills. Place identity flows only from `place.config.ts` + `knowledge/` +
    `public/media/`. Machine-gated by `npm run genericity`, whose two gates carry
    **different** instance-mode roots: `scripts/ci/check-genericity.sh` (place-name
-   denylist) scans `src/`, `scripts/`, `tests/`, `.claude/skills/`;
+   denylist) scans `src/`, `scripts/`, `tests/`, `.agent/skills/`;
    `scripts/ci/check-english-only.mjs` (CJK codepoints) scans `src/`, `scripts/`,
-   `tests/`, `workers/`, `.claude/skills/`; in template mode (the `.sekai-template`
+   `tests/`, `workers/`, `.agent/skills/`; in template mode (the `.sekai-template`
    marker) both scan the whole repository. `scripts/ci/check-scan-root-docs.mjs`
    keeps every such statement in this repository true.
 3. **Framework vs instance:** `src/` and `scripts/` are framework-owned — customize
@@ -83,23 +83,31 @@ content).
    `CHANGELOG.md` becomes instance-owned at adoption; framework release notes remain
    available from immutable tags.
 
-## Skill ownership
+## Skill discovery and ownership
 
-The skills under `.claude/skills/` — `/write`, `/validate`, `/factcheck`, the
-`/kb` router, plus `/adopt`, `/seed-articles`, `/upgrade`, and `/release` — are
-**framework-owned**, the same class as `src/` and `scripts/`. They are managed
-through framework upgrades; customize them the way you customize `src/`: through
-`place.config.ts`, `knowledge/`, and the playbook, not by editing the skill
-bodies.
+Claude Code must discover project skills from `.agent/skills/*/SKILL.md`: read
+each file's YAML `name` and `description` for discovery, then load the full file
+when the user names a skill or the request matches its description. This is
+required because `CLAUDE.md` delegates all project instructions to this file and
+the skills no longer live under Claude's default `.claude/skills/` path.
+
+The skills under `.agent/skills/` — `/sekai-write`, `/sekai-validate`,
+`/sekai-factcheck`, the `/sekai-kb` router, plus `/sekai-adopt`,
+`/sekai-seed-articles`, `/sekai-upgrade`, and `/sekai-release` — are
+**framework-owned**, the same class as `src/` and `scripts/`. The `sekai-`
+namespace prevents collisions with adopter and tool-provided skills. They are
+managed through framework upgrades; customize them the way you customize `src/`:
+through `place.config.ts`, `knowledge/`, and the playbook, not by editing the
+skill bodies.
 
 - **Adding a skill is free.** A new skill is a new directory under
-  `.claude/skills/`, so it never conflicts on `/upgrade`. The `/kb` router lists
-  it automatically (it enumerates the directory, not a hardcoded set).
+  `.agent/skills/`, so it never conflicts on `/sekai-upgrade`. The `/sekai-kb`
+  router lists it automatically (it enumerates the directory, not a hardcoded set).
 - **Overriding a framework skill** means either upstreaming the change to
   sekai-kb first (so every instance gets it), or accepting a conflict-managed
-  local fork that `/upgrade` flags on each release.
+  local fork that `/sekai-upgrade` flags on each release.
 
-Both machine gates (`npm run genericity`) scan `.claude/skills/` — agent-executed
+Both machine gates (`npm run genericity`) scan `.agent/skills/` — agent-executed
 prose is code for the genericity + English-only doctrine.
 
 ## Language support boundary

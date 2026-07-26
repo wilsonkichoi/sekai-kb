@@ -1,4 +1,4 @@
 interface:
   display_name: "Release Instance"
   short_description: "Explicitly bump an adopter release version"
-  default_prompt: "Use $release to prepare an explicit patch, minor, or major adopter release."
+  default_prompt: "Use $sekai-release to prepare an explicit patch, minor, or major adopter release."

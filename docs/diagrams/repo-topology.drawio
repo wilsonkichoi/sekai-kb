@@ -19,7 +19,7 @@
             <mxGeometry height="344" width="674" x="389" y="355" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="template contents&#xa;init wizard (interactive + --answers) · /adopt · /seed-articles&#xa;/upgrade · playbook · runbook&#xa;AGENTS.md content-bearing starter · CLAUDE.md one-line shim" mermaidId="n:tpl" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="template contents&#xa;init wizard (interactive + --answers) · /adopt · /seed-articles&#xa;/upgrade · playbook · runbook&#xa;AGENTS.md content-bearing starter · CLAUDE.md one-line shim" id="5">
+        <UserObject label="template contents&#xa;init wizard (interactive + --answers) · /sekai-adopt · /sekai-seed-articles&#xa;/sekai-upgrade · playbook · runbook&#xa;AGENTS.md content-bearing starter · CLAUDE.md one-line shim" mermaidId="n:tpl" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="template contents&#xa;init wizard (interactive + --answers) · /sekai-adopt · /sekai-seed-articles&#xa;/sekai-upgrade · playbook · runbook&#xa;AGENTS.md content-bearing starter · CLAUDE.md one-line shim" id="5">
           <mxCell parent="4" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="93" width="499" x="140" y="45" as="geometry" />
           </mxCell>
@@ -48,7 +48,7 @@
             <mxGeometry height="112" width="414" x="874" y="45" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="dana-point — 5.2c end-to-end proof,&#xa;under 1 hour via /adopt" mermaidId="n:dp" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="dana-point — 5.2c end-to-end proof,&#xa;under 1 hour via /adopt" id="9">
+        <UserObject label="dana-point — 5.2c end-to-end proof,&#xa;under 1 hour via /sekai-adopt" mermaidId="n:dp" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="dana-point — 5.2c end-to-end proof,&#xa;under 1 hour via /sekai-adopt" id="9">
           <mxCell parent="7" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="73" width="323" x="355" y="65" as="geometry" />
           </mxCell>
@@ -143,7 +143,7 @@
             </mxGeometry>
           </mxCell>
         </UserObject>
-        <UserObject label="Use this template, /adopt interview,&#xa;init --answers, /seed-articles" mermaidId="e:adopter-&gt;other#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.35;entryY=0;" mermaidBaseValue="Use this template, /adopt interview,&#xa;init --answers, /seed-articles" id="20">
+        <UserObject label="Use this template, /sekai-adopt interview,&#xa;init --answers, /sekai-seed-articles" mermaidId="e:adopter-&gt;other#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.35;entryY=0;" mermaidBaseValue="Use this template, /sekai-adopt interview,&#xa;init --answers, /sekai-seed-articles" id="20">
           <mxCell edge="1" parent="1" source="12" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=0.5;exitY=1;entryX=0.35;entryY=0;" target="10">
             <mxGeometry relative="1" as="geometry">
               <Array as="points">

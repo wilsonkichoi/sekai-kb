@@ -1,6 +1,6 @@
 ---
-name: release
-description: Explicitly prepare a patch, minor, or major release of an adopted sekai-kb instance. Use when an adopter maintainer says "/release", "bump the instance version", "prepare a patch release", "prepare a minor release", or "prepare a major release". Never use for the Sekai framework release train or for routine article pull requests.
+name: sekai-release
+description: Explicitly prepare a patch, minor, or major release of an adopted sekai-kb instance. Use when an adopter maintainer says "/sekai-release", "bump the instance version", "prepare a patch release", "prepare a minor release", or "prepare a major release". Never use for the Sekai framework release train or for routine article pull requests.
 ---
 
 # Release an adopter instance
@@ -40,7 +40,7 @@ npm run release:bump -- patch --dry-run
 ```
 
 Replace `patch` with the selected level. Show the current and proposed versions.
-An explicit request such as `/release minor` is approval; otherwise obtain
+An explicit request such as `/sekai-release minor` is approval; otherwise obtain
 confirmation before writing.
 
 ## 3. Update synchronized version fields

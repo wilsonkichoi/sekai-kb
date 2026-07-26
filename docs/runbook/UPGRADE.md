@@ -1,7 +1,7 @@
 # UPGRADE — Pulling framework releases into an instance
 
 Companion to `DEPLOY.md`. Every command is copy-pasteable. This is the manual git
-flow for non-AI users; the `/upgrade` skill (`.claude/skills/upgrade/`) drives the
+flow for non-AI users; the `/sekai-upgrade` skill (`.agent/skills/sekai-upgrade/`) drives the
 identical steps for an AI CLI. Keep the two in sync.
 
 Instances track the sekai-kb framework by merging **immutable release tags, never
@@ -83,8 +83,8 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 
 > **The `merge.ours.driver true` line is load-bearing and per-clone.** It is not
 > stored in the repo. A fresh clone of this instance, or a CI checkout that does a
-> tag merge, must set it first or `merge=ours` does nothing. `/upgrade` sets it in
-> its preflight; the wizard-adopted instance's first `/upgrade` does the same.
+> tag merge, must set it first or `merge=ours` does nothing. `/sekai-upgrade` sets it in
+> its preflight; the wizard-adopted instance's first `/sekai-upgrade` does the same.
 
 The merge outcome, file by file:
 
@@ -97,7 +97,7 @@ The merge outcome, file by file:
   instance on the first merge — strip it in the cleanup step below. The deleted-path
   case is `.agent-toolkit/` on a wizard-adopted instance; step 5's `reconcile` keeps
   it absent.
-- **Files only the framework has** (e.g. `.claude/skills/`, `SystemDiagram.astro`)
+- **Files only the framework has** (e.g. `.agent/skills/`, `SystemDiagram.astro`)
   — added to your instance.
 - **Files only you have** (your docs, research, tracker config) — untouched; a
   merge never deletes a path absent on the incoming side.
@@ -117,7 +117,7 @@ for f in $(git diff --name-only --diff-filter=U); do git checkout --theirs "$f" 
 ```
 
 Then remove the template-only marker (an instance is not the template) and any
-demo content the merge added. A "Use this template" adopter reseeds via `/adopt`;
+demo content the merge added. A "Use this template" adopter reseeds via `/sekai-adopt`;
 an existing instance re-basing onto the framework strips the template's demo
 articles so only its own `knowledge/` remains:
 
@@ -269,7 +269,7 @@ it is why the flows above carry a classify step and a reconcile step.
 
 `AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files, and whether the
 dev workflow is installed is **persistent instance state** the upgrade preserves in
-either direction (ADR 006 addendum, SPEC §Repo topology). `/upgrade` and the flows
+either direction (ADR 006 addendum, SPEC §Repo topology). `/sekai-upgrade` and the flows
 above classify it before merging with
 `node scripts/upgrade/dev-plugin-state.mjs classify`:
 
@@ -297,7 +297,7 @@ release that improves that boilerplate would vanish with no signal. `CLAUDE.md` 
 exempt: it is a pure one-line `@AGENTS.md` shim carrying no content that can diverge,
 so if yours is anything but that single line, reset it to the shim rather than
 reconciling it. After a merge, diff each content-bearing starter against the tag and
-decide, file by file, whether to pull any framework improvement in (the `/upgrade`
+decide, file by file, whether to pull any framework improvement in (the `/sekai-upgrade`
 skill does this conversationally):
 
 `FRAMEWORK-VERSION` is merge-protected for a different reason: the merge keeps the old

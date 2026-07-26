@@ -12,7 +12,7 @@ tags, never framework `main`** (ADR 004, SPEC
 
 1. **Every framework change lands with a CHANGELOG entry.** No entry, no release.
    The entry names what changed in the framework-owned trees (`src/`, `scripts/`,
-   `.claude/skills/`, `docs/playbook/`, `docs/runbook/`, config).
+   `.agent/skills/`, `docs/playbook/`, `docs/runbook/`, config).
 2. **Breaking config changes carry an upgrade note.** Any change an instance must
    act on at merge time (a renamed `place.config.ts` key, a new required field, a
    moved file) goes under an explicit **Upgrade note** in that version's entry.
@@ -22,7 +22,7 @@ tags, never framework `main`** (ADR 004, SPEC
 3. **Instances merge tags only.** The release flow is: land the change on `main`
    with its CHANGELOG entry → bump `FRAMEWORK-VERSION` and its npm manifest
    mirrors → tag
-   `sekai-kb-vX.Y.Z` → push the tag. Instances run `/upgrade` (or the manual git
+   `sekai-kb-vX.Y.Z` → push the tag. Instances run `/sekai-upgrade` (or the manual git
    flow in `docs/runbook/UPGRADE.md`), which merges the tag, never `main`.
 4. **Instance-owned files are never overwritten.** Files an instance owns
    (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
@@ -36,16 +36,27 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Changed
 
+- **Framework skills moved to the shared agent namespace.** All skills now live
+  under `.agent/skills/`, and their folder names, YAML names, invocation names,
+  and cross-skill references use the `sekai-` prefix. `AGENTS.md` tells Claude
+  Code to discover metadata from that path and load a full `SKILL.md` only when
+  it triggers. The genericity and English-only gates now scan the new tree.
+
+  **Upgrade note:** remove the old `.claude/skills/` tree when adopting this
+  release. Use `/sekai-adopt`, `/sekai-seed-articles`, `/sekai-write`,
+  `/sekai-validate`, `/sekai-factcheck`, `/sekai-kb`, `/sekai-upgrade`, and
+  `/sekai-release` after the upgrade.
+
 - **Framework and adopter npm manifests now mirror their respective release
   SSOTs.** The Sekai template no longer carries `VERSION`; its
   `package.json.version` and lockfile root versions mirror `FRAMEWORK-VERSION`.
   Init creates adopter `VERSION` and sets the adopter manifest versions from it.
   CI rejects drift. The new `npm run release:bump -- patch|minor|major` command and
-  `/release` skill let an adopter maintainer prepare a release explicitly, without
+  `/sekai-release` skill let an adopter maintainer prepare a release explicitly, without
   versioning routine article PRs.
 
   **Upgrade note:** the first upgrade from v1.0.8 keeps the adopter's `VERSION`
-  when the framework deletes its mistaken template copy. `/upgrade` now captures
+  when the framework deletes its mistaken template copy. `/sekai-upgrade` now captures
   adopter package identity before merging, takes incoming framework scripts and
   dependencies, and restores adopter name, description, privacy, and version
   fields afterward. This package reconciliation is required on every upgrade

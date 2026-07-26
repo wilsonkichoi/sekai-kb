@@ -1,13 +1,13 @@
 ---
-name: adopt
+name: sekai-adopt
 description: |
   Turn a fresh sekai-kb template clone into your own place. The PRIMARY adopter
   path: interviews you about your place (name, tagline, domain, map center,
   locale, categories, and any material you already have), writes an auditable
   answers file, runs the init wizard to generate place.config.ts + seed the
-  instance, offers /seed-articles, and walks deploy from the runbook. Never
+  instance, offers /sekai-seed-articles, and walks deploy from the runbook. Never
   writes place.config.ts directly — the wizard is the single writer.
-  TRIGGER when: user says "adopt", "/adopt", "make this my place", "set up my
+  TRIGGER when: user says "adopt", "/sekai-adopt", "make this my place", "set up my
   instance", "onboard", "adopt the template", or is starting a fresh sekai-kb
   clone and wants to configure it.
 allowed-tools:
@@ -17,12 +17,12 @@ allowed-tools:
   - Write
 ---
 
-# /adopt — Bootstrap a sekai-kb instance
+# /sekai-adopt — Bootstrap a sekai-kb instance
 
-Interview → answers file → `npm run init` → offer `/seed-articles` → deploy
+Interview → answers file → `npm run init` → offer `/sekai-seed-articles` → deploy
 walkthrough. This skill orchestrates; it does **not** restate the wizard's
 validation or the runbook's commands (drift = decay). The single writer of
-place identity is the init wizard: `/adopt` only produces the answers it
+place identity is the init wizard: `/sekai-adopt` only produces the answers it
 consumes.
 
 ## 0. Preflight
@@ -89,7 +89,7 @@ default in brackets; an empty answer takes it.
     `social.twitter` / `social.threads` / `social.instagram` handles.
 11. **Existing material** — ask what they already have written about their place
     (URLs, notes, docs, prior wiki text). This is **not** a wizard field; keep
-    it for step 7 (`/seed-articles` grounds its drafts in it). Summarize back
+    it for step 7 (`/sekai-seed-articles` grounds its drafts in it). Summarize back
     what you collected so it survives into that step.
 
 ## 2. Map center — geocode from knowledge, then confirm
@@ -158,17 +158,17 @@ material from step 1. If the user accepts:
   (`docs/playbook/ARTICLE-PLAYBOOK.md` §6 — specific over generic, no
   travel-brochure tells).
 - Show the exact `home.*` edit and get explicit approval **before** touching the
-  file. This is the one place `/adopt` edits `place.config.ts` directly, and it
+  file. This is the one place `/sekai-adopt` edits `place.config.ts` directly, and it
   is sanctioned only because `home.*` is instance-owned copy, edited after init,
-  behind the same human-approval gate as `/seed-articles`.
+  behind the same human-approval gate as `/sekai-seed-articles`.
 - On approval, edit `home.*` in `place.config.ts`, then re-run `npm run build`.
 
 If the user declines, leave the generic defaults — they are editable by hand
 anytime.
 
-## 6. Offer /seed-articles
+## 6. Offer /sekai-seed-articles
 
-Offer to run `/seed-articles` now to draft the first articles. If the user
+Offer to run `/sekai-seed-articles` now to draft the first articles. If the user
 accepts, hand off the material collected in step 1 (it is already in this
 session's context) and invoke the skill. If they decline, point them at
 `knowledge/INBOX.md` and `docs/playbook/ARTICLE-PLAYBOOK.md` for writing on
@@ -194,5 +194,5 @@ follow each command; do not re-derive the steps from memory.
 ## Done
 
 Report what was written (from the wizard output), whether the build is green,
-whether home copy was drafted, whether `/seed-articles` ran, and the deploy
+whether home copy was drafted, whether `/sekai-seed-articles` ran, and the deploy
 sections the user still needs to complete.

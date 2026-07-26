@@ -11,7 +11,7 @@
  * These are DEMO values for a FICTIONAL town, "Marisol Cove". The sekai-kb
  * template ships them so the site builds and deploys out of the box; a fictional
  * place means the template never owes real-place accuracy upkeep. Run
- * `npm run init` (or the /adopt skill) to overwrite this file with your own place.
+ * `npm run init` (or the /sekai-adopt skill) to overwrite this file with your own place.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 

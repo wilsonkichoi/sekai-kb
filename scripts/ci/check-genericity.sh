@@ -3,12 +3,12 @@
 # check-genericity.sh — the genericity gate.
 #
 # Fails if any place-specific string leaks into framework-owned code (src/,
-# scripts/, tests/, or .claude/skills/). Place identity must flow ONLY through
+# scripts/, tests/, or .agent/skills/). Place identity must flow ONLY through
 # place.config.ts, knowledge/, and public/media/ — never hardcoded in code trees
 # (ADR 002, SPEC §Negative requirements, §G risk 2). This is the structural
 # mitigation for the trap that motivated the whole rebuild.
 #
-# Scan scope, instance mode: src/, scripts/, tests/, .claude/skills/; test
+# Scan scope, instance mode: src/, scripts/, tests/, .agent/skills/; test
 # fixtures are code, and framework skills are agent-executed prose that is code
 # for doctrine purposes — the whole-project doctrine, STRATEGIC-DIRECTION
 # 2026-07-11 (b), task 5.6. The English-only gate (check-english-only.mjs) has a
@@ -65,28 +65,25 @@ else
   [ -d "$ROOT/src" ] && SCAN_ROOTS+=("$ROOT/src")
   [ -d "$ROOT/scripts" ] && SCAN_ROOTS+=("$ROOT/scripts")
   [ -d "$ROOT/tests" ] && SCAN_ROOTS+=("$ROOT/tests")
-  [ -d "$ROOT/.claude/skills" ] && SCAN_ROOTS+=("$ROOT/.claude/skills")
-  MODE="instance (src/, scripts/, tests/, .claude/skills/)"
+  [ -d "$ROOT/.agent/skills" ] && SCAN_ROOTS+=("$ROOT/.agent/skills")
+  MODE="instance (src/, scripts/, tests/, .agent/skills/)"
   if [ "${#SCAN_ROOTS[@]}" -eq 0 ]; then
-    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .claude/skills/ to scan"
+    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .agent/skills/ to scan"
     exit 0
   fi
 fi
 
 # Build the file list with `find` (prune dirs, then grep the survivors), rather
 # than `grep -r --exclude-dir`. `--exclude-dir` matches on the directory BASENAME
-# on both GNU and BSD grep, so the derived projection `public/kb/` and the
-# `.claude/skills/kb/` router share the name `kb` and would be excluded together
-# — silently exempting the router from the gate (LB-30 review blocker). The two
-# exclusion classes are therefore matched differently:
+# on both GNU and BSD grep, which can silently exempt an unrelated directory with
+# the same name. The two exclusion classes are therefore matched differently:
 #  - Vendor/tool caches (node_modules, .git, dist, .astro, .venv, __pycache__):
 #    pruned by basename — no legitimate framework dir ever carries these names,
 #    anywhere in the tree. .git is critical in template mode — commit messages
 #    carry the pre-cut place name.
 #  - The derived, gitignored projections of knowledge/ (src/content via sync.sh,
 #    src/data via prebuild JSON, public/kb via build-kb-index): pruned by PATH,
-#    so a same-basename dir elsewhere (the .claude/skills/kb router) is still
-#    scanned.
+#    so a same-basename directory elsewhere is still scanned.
 #  - The denylist files (they necessarily contain the forbidden terms) and the
 #    template marker are dropped by filename.
 # grep -I skips binary files. -print0/xargs -0 handle any spaces in paths.

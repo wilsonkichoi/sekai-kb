@@ -4,8 +4,8 @@
  * The home-page copy surface (~200 config lines) exceeds any init interview,
  * so the wizard writes GENERIC defaults computed from the place name and the
  * chosen categories: the site builds and reads sensibly out of the box, and no
- * prompt walks the copy. Place-specific copy arrives later — /adopt may draft
- * it behind the same human-approval gate as /seed-articles, or the adopter
+ * prompt walks the copy. Place-specific copy arrives later — /sekai-adopt may draft
+ * it behind the same human-approval gate as /sekai-seed-articles, or the adopter
  * edits place.config.ts by hand (the file is instance-owned).
  *
  * Every array here is consumed with .map() by the home components, so any

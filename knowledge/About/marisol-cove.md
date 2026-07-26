@@ -20,7 +20,7 @@ Marisol Cove is a small, fictional coastal town, and this knowledge base is its 
 
 The town, its wharf, its cafe, and its kelp preserve are invented. That is deliberate. A demo built on a real place would owe real-place accuracy forever; a fictional one lets the template stay a template. Every article here exists to show the shape of a good entry, not to be correct about anywhere in particular.
 
-If you are reading this on a live site, someone has either kept the demo as-is or is about to replace it. To make it your own, run `npm run init` (or the `/adopt` skill) and point it at a real place: the wizard rewrites `place.config.ts`, and your content goes under `knowledge/`.
+If you are reading this on a live site, someone has either kept the demo as-is or is about to replace it. To make it your own, run `npm run init` (or the `/sekai-adopt` skill) and point it at a real place: the wizard rewrites `place.config.ts`, and your content goes under `knowledge/`.
 
 ## How it is organized
 

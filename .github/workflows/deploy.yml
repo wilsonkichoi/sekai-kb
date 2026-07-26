@@ -37,15 +37,15 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Check for place-specific strings in src/, scripts/, tests/, .claude/skills/
+      - name: Check for place-specific strings in src/, scripts/, tests/, .agent/skills/
         run: bash scripts/ci/check-genericity.sh
-      - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/, workers/, .claude/skills/
+      - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/, workers/, .agent/skills/
         run: node scripts/ci/check-english-only.mjs
       - name: Scan-root scope statements match both gates' SCAN_ROOTS
         run: node scripts/ci/check-scan-root-docs.mjs
       - name: Version ownership contract
         run: npm run version:check
-      - name: Self-test — both gates scan .claude/skills/ in instance mode
+      - name: Self-test — both gates scan .agent/skills/ in instance mode
         run: bash scripts/ci/check-skills-gated.sh
       - name: Self-test — the scan-root docs guard fails on doc, script, and anchor drift
         run: bash scripts/ci/check-scan-root-docs-selftest.sh

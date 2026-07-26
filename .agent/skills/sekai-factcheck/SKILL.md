@@ -1,10 +1,10 @@
 ---
-name: factcheck
+name: sekai-factcheck
 description: |
   Fact-check a knowledge/ article via the canonical FACTCHECK-PIPELINE. Audits
   claims against their sources and the knowledge/ ground truth. Quick mode during
   rewrites; Full mode for post-ship audits or reader challenges.
-  TRIGGER when: user says "factcheck", "fact-check", "/factcheck",
+  TRIGGER when: user says "factcheck", "fact-check", "/sekai-factcheck",
   "hallucination audit", "verify claims", "check sources", or when a rewrite
   reaches REWRITE-PIPELINE Stage 3.
 allowed-tools:
@@ -15,7 +15,7 @@ allowed-tools:
   - WebSearch
 ---
 
-# /factcheck — Fact-check an article (thin shell)
+# /sekai-factcheck — Fact-check an article (thin shell)
 
 > **Intentionally thin.** Every phase, gate, and method lives in the pipeline
 > canon. This skill loads context and runs it — it does not restate or fork

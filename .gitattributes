@@ -5,7 +5,7 @@
 # REQUIRED once per clone (not version-controlled, so it cannot ship here):
 #   git config merge.ours.driver true
 # The `ours` driver is not built into git; without that config line every
-# `merge=ours` below silently no-ops. `/upgrade` and docs/runbook/UPGRADE.md set
+# `merge=ours` below silently no-ops. `/sekai-upgrade` and docs/runbook/UPGRADE.md set
 # it. Adopters: add your own instance-specific files below.
 
 CLAUDE.md merge=ours

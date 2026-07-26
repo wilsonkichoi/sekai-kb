@@ -1,13 +1,13 @@
 ---
-name: seed-articles
+name: sekai-seed-articles
 description: |
   Draft the first 5 starter articles for a sekai-kb instance. Grounds drafts in
   source material you supply (URLs, notes, prior text) and cites it; with no
   material, drafts from AI research. Every draft follows the editorial playbook
   and passes article-health before a structural human-approval gate — nothing is
   committed without your explicit approval in-flow.
-  TRIGGER when: user says "seed articles", "/seed-articles", "draft my first
-  articles", "starter articles", "write the first 5", or runs it after /adopt.
+  TRIGGER when: user says "seed articles", "/sekai-seed-articles", "draft my first
+  articles", "starter articles", "write the first 5", or runs it after /sekai-adopt.
 allowed-tools:
   - Bash
   - Read
@@ -17,7 +17,7 @@ allowed-tools:
   - WebSearch
 ---
 
-# /seed-articles — Draft the first 5 articles
+# /sekai-seed-articles — Draft the first 5 articles
 
 Batch-drafts 5 starter articles across the instance's categories. This skill
 orchestrates the batch, grounds it in source material, and enforces the approval
@@ -39,7 +39,7 @@ full:
 ## 1. Source material — the two modes
 
 Ask the user for any existing material about their place: source URLs, notes,
-documents, prior wiki or blog text. If `/adopt` collected material, it is
+documents, prior wiki or blog text. If `/sekai-adopt` collected material, it is
 already in this session's context — confirm it rather than re-asking.
 
 - **Supplied-material mode** (material exists): every draft must be grounded in

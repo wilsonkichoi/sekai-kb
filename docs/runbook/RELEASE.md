@@ -1,7 +1,7 @@
 # RELEASE — Explicit adopter releases
 
 Adopter releases are maintainer decisions. Routine article and maintenance pull
-requests do not change `VERSION`. The `/release` skill drives this same flow for
+requests do not change `VERSION`. The `/sekai-release` skill drives this same flow for
 an AI CLI.
 
 ## Version ownership

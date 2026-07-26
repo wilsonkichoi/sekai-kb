@@ -35,11 +35,11 @@ Full install table with version checks:
 2. **Make it your place.** The primary path is AI-assisted, in an agent CLI
    (Claude Code or codex-cli — see [`AGENTS.md`](./AGENTS.md)):
 
-   - **`/adopt`** — an interview about your place; writes `place.config.ts`
+   - **`/sekai-adopt`** — an interview about your place; writes `place.config.ts`
      (name, categories, map, links) and swaps out the demo content.
-   - **`/seed-articles`** — drafts your first articles from source material you
+   - **`/sekai-seed-articles`** — drafts your first articles from source material you
      supply, following the editorial playbook, behind your approval.
-   - **`/release`** — explicitly prepares a patch, minor, or major adopter
+   - **`/sekai-release`** — explicitly prepares a patch, minor, or major adopter
      release. Routine article PRs never bump the instance version.
 
    The no-AI path is the wizard: **`npm run init`** asks the same core questions
@@ -80,8 +80,8 @@ The code trees carry **zero place-specific strings** — all place identity flow
 through `place.config.ts`, `knowledge/`, and `public/media/`. This is
 machine-enforced by `npm run genericity`, two gates whose instance-mode roots
 differ: the place-name denylist gate scans `src/`, `scripts/`, `tests/`,
-`.claude/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
-`workers/`, `.claude/skills/`; in the pristine template (the `.sekai-template`
+`.agent/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
+`workers/`, `.agent/skills/`; in the pristine template (the `.sekai-template`
 marker) both scan the whole repository. It is the structural guarantee that one
 config file re-places the whole site.
 

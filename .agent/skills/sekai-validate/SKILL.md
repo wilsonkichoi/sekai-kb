@@ -1,12 +1,12 @@
 ---
-name: validate
+name: sekai-validate
 description: |
   Validate knowledge/ articles for editorial quality, frontmatter correctness,
   and cross-reference integrity. Use when reviewing a PR that touches knowledge/,
   after writing or editing an article, or when asked "is this article good
   enough?". Runs article-health + the frontmatter schema test and reports; a thin
   wrapper over the existing checks, it does not reimplement them.
-  TRIGGER when: user says "validate", "/validate", "check article", "review
+  TRIGGER when: user says "validate", "/sekai-validate", "check article", "review
   quality", or when editing .md files in knowledge/.
 allowed-tools:
   - Bash
@@ -15,7 +15,7 @@ allowed-tools:
   - Glob
 ---
 
-# /validate — Validate articles (thin wrapper)
+# /sekai-validate — Validate articles (thin wrapper)
 
 > The quality bar is canonical in `docs/playbook/ARTICLE-PLAYBOOK.md` §7 — read
 > it before judging prose. This skill runs the existing checks and reports; it

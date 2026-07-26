@@ -2,7 +2,7 @@
 // check-english-only.mjs — the English-only CJK-codepoint gate.
 //
 // Fails if any CJK-range codepoint appears in a committed code tree (src/,
-// scripts/, tests/, workers/, .claude/skills/). The site ships English-only
+// scripts/, tests/, workers/, .agent/skills/). The site ships English-only
 // through the current roadmap; a CJK codepoint in code, a test fixture, or a
 // framework skill (agent-executed prose is code for doctrine purposes) is dead
 // fork content
@@ -26,9 +26,9 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 // Present and future code trees. src/content and src/data are derived,
 // gitignored projections of knowledge/ (place-specific by nature) and are
 // skipped by the content/data dir-name rule below, matching check-genericity.sh.
-// .claude/skills holds the framework skills (agent-executed prose is code for
+// .agent/skills holds the framework skills (agent-executed prose is code for
 // doctrine purposes — task 5.6).
-const SCAN_ROOTS = ['src', 'scripts', 'tests', 'workers', '.claude/skills'];
+const SCAN_ROOTS = ['src', 'scripts', 'tests', 'workers', '.agent/skills'];
 // Vendor/tool caches are skipped by BASENAME in both modes — no legitimate
 // framework dir carries these names anywhere. .git is skipped so template mode
 // (whole-tree scan) never trips over pre-cut history.
@@ -36,9 +36,8 @@ const SKIP_DIRS = new Set([
   'node_modules', '__pycache__', '.git', '.astro', 'dist', '.venv',
 ]);
 // The derived, gitignored projections of knowledge/ (src/content, src/data,
-// public/kb) are skipped by ROOT-relative PATH, not basename: `public/kb` and
-// the `.claude/skills/kb` router share the basename `kb`, and a basename skip
-// would silently exempt the router from the gate (LB-30 review blocker).
+// public/kb) are skipped by ROOT-relative PATH, not basename, so an unrelated
+// same-basename directory remains covered by the gate.
 const SKIP_PATHS = new Set([
   'src/content', 'src/data', 'public/kb',
 ]);
@@ -84,7 +83,7 @@ function walk(dir) {
 // sekai-kb template, which ships English-only demo content — so the CJK gate runs
 // over the WHOLE tree, not just code trees. `npm run init` removes the marker on
 // adoption, reverting to the code trees only (src/, scripts/, tests/, workers/,
-// .claude/skills/) -- this gate's own root list, which is not the genericity
+// .agent/skills/) -- this gate's own root list, which is not the genericity
 // gate's (check-genericity.sh has no workers/).
 const scanned = [];
 if (existsSync(join(ROOT, '.sekai-template'))) {

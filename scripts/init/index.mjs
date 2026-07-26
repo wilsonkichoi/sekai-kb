@@ -8,7 +8,7 @@
  * Both modes resolve answers through the same prompt table (prompt-table.mjs)
  * into the same resolved config, and hand it to the same writer (writer.mjs) —
  * the single writer of place identity. The same answers therefore produce
- * byte-identical output in either mode; /adopt drives the --answers path.
+ * byte-identical output in either mode; /sekai-adopt drives the --answers path.
  *
  * The answers-JSON schema is documented in scripts/init/README.md. Missing
  * keys take the same defaults an interactive user gets by pressing Enter.
@@ -123,7 +123,7 @@ function evalDefault(row, cfg) {
 }
 
 /**
- * The /adopt contract: an unknown key in the answers JSON is a hard error,
+ * The /sekai-adopt contract: an unknown key in the answers JSON is a hard error,
  * never a silent default — a typo'd path must not half-initialize an
  * instance. A path is known when it is a row id or a proper prefix of one;
  * row-id values themselves (category arrays, [lat, lng] pairs) are opaque
@@ -333,5 +333,5 @@ for (const a of actions) console.log(`  ${a}`);
 console.log(
   '\nNext: npm run build (full pipeline + contract checks), then commit.\n' +
     'Home-page copy shipped as generic defaults — edit home.* in place.config.ts,\n' +
-    'or let /adopt draft place-specific copy behind human approval.',
+    'or let /sekai-adopt draft place-specific copy behind human approval.',
 );

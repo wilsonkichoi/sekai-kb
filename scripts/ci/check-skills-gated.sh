@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# check-skills-gated.sh — self-test for the .claude/skills/ gate coverage.
+# check-skills-gated.sh — self-test for the .agent/skills/ gate coverage.
 #
 # Proves that BOTH machine gates (check-genericity.sh and check-english-only.mjs)
-# scan .claude/skills/ in INSTANCE mode (task 5.6, DoD-3). A framework skill is
+# scan .agent/skills/ in INSTANCE mode (task 5.6, DoD-3). A framework skill is
 # agent-executed prose, which is code for the genericity + English-only doctrine;
 # a place string or CJK codepoint leaking into a skill body must fail CI the same
 # way it does in src/ or tests/.
@@ -11,14 +11,12 @@
 # Why instance mode specifically: the `.sekai-template` marker switches both
 # gates to a whole-tree scan that would catch a planted string regardless of
 # SCAN_ROOTS. This test hides the marker so the failure it observes can only come
-# from .claude/skills/ being an explicit instance-mode scan root — which is the
+# from .agent/skills/ being an explicit instance-mode scan root — which is the
 # behavior an adopter (marker removed by `npm run init`) relies on.
 #
-# The plant lives inside .claude/skills/kb/ (the router's directory) on purpose:
-# the derived projection public/kb/ shares the basename `kb`, and an earlier
-# basename-scoped exclude silently exempted the router from both gates (LB-30
-# review blocker). Planting here locks that regression — a basename `kb` exclude
-# would let the plant through and fail this test.
+# The plant lives inside .agent/skills/sekai-kb/ (the router's directory) so the
+# self-test exercises a real framework skill directory instead of an unrelated
+# scratch root.
 #
 # Portable to macOS bash 3.2 and CI bash 5 (no mapfile; CDPATH unset; the CJK
 # byte is written via octal so this script's own source stays pure ASCII and
@@ -38,10 +36,8 @@ GEN_GATE="$ROOT/scripts/ci/check-genericity.sh"
 CJK_GATE="$ROOT/scripts/ci/check-english-only.mjs"
 MARKER="$ROOT/.sekai-template"
 MARKER_BAK="$ROOT/.sekai-template.selftest-bak"
-# Plant inside the router's own directory (.claude/skills/kb/) so the test
-# exercises the `kb` basename that collides with the derived public/kb/
-# projection — not a fresh uniquely-named scratch dir that no exclude touches.
-SCRATCH="$ROOT/.claude/skills/kb/__gate_selftest__.md"
+# Plant inside the router's own directory, not a fresh uniquely named root.
+SCRATCH="$ROOT/.agent/skills/sekai-kb/__gate_selftest__.md"
 
 # First real denylist term (skip comments/blank lines). Derived at runtime, never
 # hardcoded, so this script's own source carries no forbidden place string.
@@ -79,16 +75,16 @@ fi
   printf 'cjk: \344\270\255\n'
 } > "$SCRATCH"
 
-# The genericity gate must now FAIL (place string under .claude/skills/kb/).
+# The genericity gate must now FAIL (place string under .agent/skills/sekai-kb/).
 if bash "$GEN_GATE" >/dev/null 2>&1; then
-  echo "❌ skills-gate self-test: genericity gate did NOT catch '$PLANT_TERM' in .claude/skills/kb/ (instance mode)" >&2
+  echo "❌ skills-gate self-test: genericity gate did NOT catch '$PLANT_TERM' in .agent/skills/sekai-kb/ (instance mode)" >&2
   exit 1
 fi
 
-# The english-only gate must now FAIL (CJK codepoint under .claude/skills/kb/).
+# The english-only gate must now FAIL (CJK codepoint under .agent/skills/sekai-kb/).
 if node "$CJK_GATE" >/dev/null 2>&1; then
-  echo "❌ skills-gate self-test: english-only gate did NOT catch a CJK codepoint in .claude/skills/kb/ (instance mode)" >&2
+  echo "❌ skills-gate self-test: english-only gate did NOT catch a CJK codepoint in .agent/skills/sekai-kb/ (instance mode)" >&2
   exit 1
 fi
 
-echo "✓ skills-gate self-test passed — both gates scan .claude/skills/ (incl. the kb/ router) in instance mode ('$PLANT_TERM' + CJK caught)"
+echo "✓ skills-gate self-test passed — both gates scan .agent/skills/ (including the sekai-kb router) in instance mode ('$PLANT_TERM' + CJK caught)"

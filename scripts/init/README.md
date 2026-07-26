@@ -6,7 +6,7 @@ answers always produce **byte-identical** output, whichever mode ran.
 
 ```sh
 npm run init                                 # interactive
-npm run init -- --answers answers.json       # non-interactive (the /adopt path)
+npm run init -- --answers answers.json       # non-interactive (the /sekai-adopt path)
 npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 ```
 
@@ -19,13 +19,13 @@ npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 | `CNAME` | Written with the domain. A `*.github.io` domain skips it (and removes a stale one) — GitHub Pages default domains must not carry a CNAME. |
 | `AGENTS.md` | The instance's agent-instruction SSOT: place name/domain/tagline, the standard where-things-live / build / iron-rules sections, and the content working set. Read natively by Codex, and by Claude Code through the `CLAUDE.md` shim. Instance-owned; edit freely. |
 | `CLAUDE.md` | A one-line `@AGENTS.md` shim so Claude Code inlines `AGENTS.md`. Instance-owned. |
-| `CHANGELOG.md` | Replaces the framework release log with an instance-only changelog. Instance-owned; `/upgrade` reads framework notes from release tags instead. |
+| `CHANGELOG.md` | Replaces the framework release log with an instance-only changelog. Instance-owned; `/sekai-upgrade` reads framework notes from release tags instead. |
 | `package.json` / `package-lock.json` | Rewrites the root package name and description for the adopter, keeps the package private, and sets the root package versions from the new adopter `VERSION` without its leading `v`. Scripts and dependencies remain framework-owned. |
 | `VERSION` | The adopter's own release version, initialized to `v0.0.0`. Instance-owned and merge-protected. |
-| `FRAMEWORK-VERSION` | The checked-out Sekai framework release this instance adopted. Instance-owned and merge-protected; `/upgrade` bumps it after verification. |
+| `FRAMEWORK-VERSION` | The checked-out Sekai framework release this instance adopted. Instance-owned and merge-protected; `/sekai-upgrade` bumps it after verification. |
 | `scripts/ci/genericity-denylist.local.txt` | The adopter's place name (lowercased, plus its no-space form) as **instance-owned** gate terms. `check-genericity.sh` reads this file additively; the framework denylist is never touched, so upgrades never conflict. Appends idempotently if the file already exists. |
 | `.sekai-template` | Removed: the genericity/English-only gates revert from whole-tree (template mode) to code-trees-only (instance mode). |
-| `.agent-toolkit/` | Removed, and the regenerated `AGENTS.md` carries no `@.agent-toolkit/dev.md` reference: a fresh instance ships zero dev-plugin state. That absence is **persistent instance state**, not a one-time deletion — `merge=ours` cannot protect a deleted path, so `/upgrade` classifies dev-plugin state before every merge and keeps it stripped (`docs/runbook/UPGRADE.md` §Dev-plugin state, ADR 006 addendum). Adopters who want the dev workflow opt in with `dev:setup`. |
+| `.agent-toolkit/` | Removed, and the regenerated `AGENTS.md` carries no `@.agent-toolkit/dev.md` reference: a fresh instance ships zero dev-plugin state. That absence is **persistent instance state**, not a one-time deletion — `merge=ours` cannot protect a deleted path, so `/sekai-upgrade` classifies dev-plugin state before every merge and keeps it stripped (`docs/runbook/UPGRADE.md` §Dev-plugin state, ADR 006 addendum). Adopters who want the dev workflow opt in with `dev:setup`. |
 
 **Re-run guard:** on an established instance (no `.sekai-template` marker and
 articles already under `knowledge/`) the wizard aborts, because it reseeds
@@ -54,15 +54,15 @@ All prompts live in `prompt-table.mjs` as data rows — see "Extending" below.
 `seo.defaultOgImage` = `/og-default.png`; `seo.twitterHandle` mirrors the
 Twitter handle when given; **`home.*` ships generic defaults** computed from
 the place name and categories — no prompt walks the home-page copy. Replace it
-by hand in `place.config.ts` (instance-owned), or let `/adopt` draft
-place-specific copy behind the same human-approval gate as `/seed-articles`.
+by hand in `place.config.ts` (instance-owned), or let `/sekai-adopt` draft
+place-specific copy behind the same human-approval gate as `/sekai-seed-articles`.
 
-## Answers JSON (the `/adopt` contract)
+## Answers JSON (the `/sekai-adopt` contract)
 
 Keys mirror the prompt ids (dot-paths). Any missing non-required key takes the
 same default an interactive user gets by pressing Enter. Unknown **keys** (a
 typo'd path is rejected, never silently defaulted) and malformed values are
-hard errors (exit 1) — `/adopt` must not half-initialize.
+hard errors (exit 1) — `/sekai-adopt` must not half-initialize.
 
 ```json
 {

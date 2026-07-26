@@ -1,5 +1,5 @@
 ---
-name: upgrade
+name: sekai-upgrade
 description: |
   Pull a framework release into this instance. Adds/points the `framework`
   remote at sekai-kb, fetches tags, merges a requested `sekai-kb-vX.Y.Z` release
@@ -7,7 +7,7 @@ description: |
   alongside that version's CHANGELOG entry, and bumps `FRAMEWORK-VERSION`.
   Instance-owned files (`merge=ours` in `.gitattributes`) keep their content, and
   an intentionally absent `.agent-toolkit/` tree stays absent.
-  TRIGGER when: user says "upgrade", "/upgrade", "update the framework", "pull the
+  TRIGGER when: user says "upgrade", "/sekai-upgrade", "update the framework", "pull the
   latest sekai-kb release", "bump to vX.Y.Z", or wants framework updates on an
   adopted instance.
 allowed-tools:
@@ -16,7 +16,7 @@ allowed-tools:
   - Edit
 ---
 
-# /upgrade — Merge a framework release into this instance
+# /sekai-upgrade — Merge a framework release into this instance
 
 Instances track sekai-kb by merging **immutable release tags, never framework
 `main`** (ADR 004, SPEC §Repo topology). This skill wraps the tagged-release
@@ -47,11 +47,11 @@ npm run version:check
   run — the command is idempotent. This is the single most common cause of a
   "framework upgrade clobbered my `place.config.ts`" report.
 - **`.sekai-template` present** → this is the framework itself, not an instance.
-  Stop; `/upgrade` is an instance operation.
+  Stop; `/sekai-upgrade` is an instance operation.
 - **Working tree not clean** → stop and tell the user to commit or stash first. A
   merge onto a dirty tree is unrecoverable-in-place.
 - Note `VERSION` as the adopter's own release and `FRAMEWORK-VERSION` as the
-  framework "from" version. `/upgrade` changes only the latter.
+  framework "from" version. `/sekai-upgrade` changes only the latter.
 
 ## 1. Point the `framework` remote and fetch tags
 

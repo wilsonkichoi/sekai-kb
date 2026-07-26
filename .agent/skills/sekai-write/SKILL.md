@@ -1,11 +1,11 @@
 ---
-name: write
+name: sekai-write
 description: |
   Write or rewrite a knowledge/ article via the canonical REWRITE-PIPELINE.
   Handles both new articles and rewrites (one skill, one pipeline). Thin shell:
   loads place identity and the editorial bar from config + the playbook, reads
   the pipeline, and executes its stages.
-  TRIGGER when: user says "write X", "rewrite X", "/write", "new article",
+  TRIGGER when: user says "write X", "rewrite X", "/sekai-write", "new article",
   "rewrite article", or asks to write or improve any knowledge/ article.
 allowed-tools:
   - Bash
@@ -16,7 +16,7 @@ allowed-tools:
   - WebSearch
 ---
 
-# /write — Write / Rewrite an article (thin shell)
+# /sekai-write — Write / Rewrite an article (thin shell)
 
 > **Intentionally thin.** Every stage, gate, and editorial standard lives in the
 > pipeline and playbook canon. This skill only loads context and runs the
@@ -37,7 +37,7 @@ full (no `limit` / `offset`):
 Follow REWRITE-PIPELINE Stages 0–5 as written. No skipping, no reordering, no
 adding stages.
 
-- Stage 3 (fact-check) escalates to `/factcheck` for contested claims or a
+- Stage 3 (fact-check) escalates to `/sekai-factcheck` for contested claims or a
   post-ship audit; a quick self-audit is inline.
 - The mandatory ship gate is Stage 4's `--profile=ci-deploy` (blocks on HARD).
   `--profile=rewrite-stage-4` is the media-complete self-check for a depth

@@ -1,11 +1,11 @@
 ---
-name: kb
+name: sekai-kb
 description: |
   Top-level router for this knowledge base. Lists the available skills (with
   their triggers) so you can pick the right one for a fuzzy request, and reports
   organ vitals when the semiont layer is configured. Routes only — it never runs
   a pipeline.
-  TRIGGER when: user says "kb", "/kb", "what can I do", "which skill", "help me
+  TRIGGER when: user says "kb", "/sekai-kb", "what can I do", "which skill", "help me
   pick", or has a fuzzy request and needs routing to the right skill.
 allowed-tools:
   - Bash
@@ -13,7 +13,7 @@ allowed-tools:
   - Glob
 ---
 
-# /kb — Skill router (route only)
+# /sekai-kb — Skill router (route only)
 
 > This skill **routes**; it does not run anything. The work lives in the other
 > skills — point at the best fit, do not restate its steps.
@@ -36,7 +36,7 @@ Enumerate from the directory so adopter-added skills appear automatically (do
 not hardcode a list):
 
 ```bash
-for d in .claude/skills/*/SKILL.md; do
+for d in .agent/skills/*/SKILL.md; do
   name=$(grep -m1 '^name:' "$d" | sed 's/name:[[:space:]]*//')
   trig=$(grep -m1 'TRIGGER when' "$d" | sed 's/^[[:space:]]*//')
   printf '• /%-13s %s\n' "$name" "$trig"
