@@ -296,9 +296,9 @@ projections of \`knowledge/\` — never edit them directly.
    skills. Place identity flows only from \`place.config.ts\` + \`knowledge/\` +
    \`public/media/\`. Machine-gated by \`npm run genericity\`, whose two gates carry
    **different** roots: \`scripts/ci/check-genericity.sh\` (place-name denylist) scans
-   \`src/\`, \`scripts/\`, \`tests/\`, \`.agent/skills/\`;
+   \`src/\`, \`scripts/\`, \`tests/\`, \`.agents/skills/\`;
    \`scripts/ci/check-english-only.mjs\` (CJK codepoints) scans \`src/\`, \`scripts/\`,
-   \`tests/\`, \`workers/\`, \`.agent/skills/\`; a gate skips any of its roots that this
+   \`tests/\`, \`workers/\`, \`.agents/skills/\`; a gate skips any of its roots that this
    instance does not have.
 3. **Framework vs instance:** \`src/\` and \`scripts/\` are framework-owned — customize
    through config, content, and media. Anything more is upstreamed to sekai-kb and
@@ -306,11 +306,11 @@ projections of \`knowledge/\` — never edit them directly.
 
 ## Skill discovery
 
-Claude Code must discover project skills from \`.agent/skills/*/SKILL.md\`: read
-each file's YAML \`name\` and \`description\` for discovery, then load the full file
-when the user names a skill or the request matches its description. The
-framework-owned skills use the \`sekai-\` prefix to avoid collisions with instance
-and tool-provided skills.
+Codex discovers project skills natively from \`.agents/skills/*/SKILL.md\`. Claude
+Code must discover them from the same path by reading each file's YAML \`name\` and
+\`description\`, then load the full file when the user names a skill or the request
+matches its description. The framework-owned skills use the \`sekai-\` prefix to
+avoid collisions with instance and tool-provided skills.
 
 ## Language support boundary
 

@@ -80,8 +80,8 @@ The code trees carry **zero place-specific strings** — all place identity flow
 through `place.config.ts`, `knowledge/`, and `public/media/`. This is
 machine-enforced by `npm run genericity`, two gates whose instance-mode roots
 differ: the place-name denylist gate scans `src/`, `scripts/`, `tests/`,
-`.agent/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
-`workers/`, `.agent/skills/`; in the pristine template (the `.sekai-template`
+`.agents/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
+`workers/`, `.agents/skills/`; in the pristine template (the `.sekai-template`
 marker) both scan the whole repository. It is the structural guarantee that one
 config file re-places the whole site.
 

@@ -3,12 +3,12 @@
 # check-genericity.sh — the genericity gate.
 #
 # Fails if any place-specific string leaks into framework-owned code (src/,
-# scripts/, tests/, or .agent/skills/). Place identity must flow ONLY through
+# scripts/, tests/, or .agents/skills/). Place identity must flow ONLY through
 # place.config.ts, knowledge/, and public/media/ — never hardcoded in code trees
 # (ADR 002, SPEC §Negative requirements, §G risk 2). This is the structural
 # mitigation for the trap that motivated the whole rebuild.
 #
-# Scan scope, instance mode: src/, scripts/, tests/, .agent/skills/; test
+# Scan scope, instance mode: src/, scripts/, tests/, .agents/skills/; test
 # fixtures are code, and framework skills are agent-executed prose that is code
 # for doctrine purposes — the whole-project doctrine, STRATEGIC-DIRECTION
 # 2026-07-11 (b), task 5.6. The English-only gate (check-english-only.mjs) has a
@@ -65,10 +65,10 @@ else
   [ -d "$ROOT/src" ] && SCAN_ROOTS+=("$ROOT/src")
   [ -d "$ROOT/scripts" ] && SCAN_ROOTS+=("$ROOT/scripts")
   [ -d "$ROOT/tests" ] && SCAN_ROOTS+=("$ROOT/tests")
-  [ -d "$ROOT/.agent/skills" ] && SCAN_ROOTS+=("$ROOT/.agent/skills")
-  MODE="instance (src/, scripts/, tests/, .agent/skills/)"
+  [ -d "$ROOT/.agents/skills" ] && SCAN_ROOTS+=("$ROOT/.agents/skills")
+  MODE="instance (src/, scripts/, tests/, .agents/skills/)"
   if [ "${#SCAN_ROOTS[@]}" -eq 0 ]; then
-    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .agent/skills/ to scan"
+    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .agents/skills/ to scan"
     exit 0
   fi
 fi

@@ -36,7 +36,7 @@ Enumerate from the directory so adopter-added skills appear automatically (do
 not hardcode a list):
 
 ```bash
-for d in .agent/skills/*/SKILL.md; do
+for d in .agents/skills/*/SKILL.md; do
   name=$(grep -m1 '^name:' "$d" | sed 's/name:[[:space:]]*//')
   trig=$(grep -m1 'TRIGGER when' "$d" | sed 's/^[[:space:]]*//')
   printf '• /%-13s %s\n' "$name" "$trig"

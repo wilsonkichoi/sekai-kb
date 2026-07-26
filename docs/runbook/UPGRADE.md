@@ -1,7 +1,7 @@
 # UPGRADE — Pulling framework releases into an instance
 
 Companion to `DEPLOY.md`. Every command is copy-pasteable. This is the manual git
-flow for non-AI users; the `/sekai-upgrade` skill (`.agent/skills/sekai-upgrade/`) drives the
+flow for non-AI users; the `/sekai-upgrade` skill (`.agents/skills/sekai-upgrade/`) drives the
 identical steps for an AI CLI. Keep the two in sync.
 
 Instances track the sekai-kb framework by merging **immutable release tags, never
@@ -97,7 +97,7 @@ The merge outcome, file by file:
   instance on the first merge — strip it in the cleanup step below. The deleted-path
   case is `.agent-toolkit/` on a wizard-adopted instance; step 5's `reconcile` keeps
   it absent.
-- **Files only the framework has** (e.g. `.agent/skills/`, `SystemDiagram.astro`)
+- **Files only the framework has** (e.g. `.agents/skills/`, `SystemDiagram.astro`)
   — added to your instance.
 - **Files only you have** (your docs, research, tracker config) — untouched; a
   merge never deletes a path absent on the incoming side.

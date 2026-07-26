@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# check-skills-gated.sh — self-test for the .agent/skills/ gate coverage.
+# check-skills-gated.sh — self-test for the .agents/skills/ gate coverage.
 #
 # Proves that BOTH machine gates (check-genericity.sh and check-english-only.mjs)
-# scan .agent/skills/ in INSTANCE mode (task 5.6, DoD-3). A framework skill is
+# scan .agents/skills/ in INSTANCE mode (task 5.6, DoD-3). A framework skill is
 # agent-executed prose, which is code for the genericity + English-only doctrine;
 # a place string or CJK codepoint leaking into a skill body must fail CI the same
 # way it does in src/ or tests/.
@@ -11,10 +11,10 @@
 # Why instance mode specifically: the `.sekai-template` marker switches both
 # gates to a whole-tree scan that would catch a planted string regardless of
 # SCAN_ROOTS. This test hides the marker so the failure it observes can only come
-# from .agent/skills/ being an explicit instance-mode scan root — which is the
+# from .agents/skills/ being an explicit instance-mode scan root — which is the
 # behavior an adopter (marker removed by `npm run init`) relies on.
 #
-# The plant lives inside .agent/skills/sekai-kb/ (the router's directory) so the
+# The plant lives inside .agents/skills/sekai-kb/ (the router's directory) so the
 # self-test exercises a real framework skill directory instead of an unrelated
 # scratch root.
 #
@@ -34,10 +34,21 @@ cd "$ROOT"
 DENYLIST="$ROOT/scripts/ci/genericity-denylist.txt"
 GEN_GATE="$ROOT/scripts/ci/check-genericity.sh"
 CJK_GATE="$ROOT/scripts/ci/check-english-only.mjs"
+SKILLS_ROOT="$ROOT/.agents/skills"
+LEGACY_SKILLS_ROOT="$ROOT/.agent/skills"
 MARKER="$ROOT/.sekai-template"
 MARKER_BAK="$ROOT/.sekai-template.selftest-bak"
 # Plant inside the router's own directory, not a fresh uniquely named root.
-SCRATCH="$ROOT/.agent/skills/sekai-kb/__gate_selftest__.md"
+SCRATCH="$SKILLS_ROOT/sekai-kb/__gate_selftest__.md"
+
+if [ ! -d "$SKILLS_ROOT" ]; then
+  echo "skills-gate self-test: Codex discovery root .agents/skills is missing" >&2
+  exit 1
+fi
+if [ -e "$LEGACY_SKILLS_ROOT" ]; then
+  echo "skills-gate self-test: legacy undiscoverable root .agent/skills still exists" >&2
+  exit 1
+fi
 
 # First real denylist term (skip comments/blank lines). Derived at runtime, never
 # hardcoded, so this script's own source carries no forbidden place string.
@@ -75,16 +86,16 @@ fi
   printf 'cjk: \344\270\255\n'
 } > "$SCRATCH"
 
-# The genericity gate must now FAIL (place string under .agent/skills/sekai-kb/).
+# The genericity gate must now FAIL (place string under .agents/skills/sekai-kb/).
 if bash "$GEN_GATE" >/dev/null 2>&1; then
-  echo "❌ skills-gate self-test: genericity gate did NOT catch '$PLANT_TERM' in .agent/skills/sekai-kb/ (instance mode)" >&2
+  echo "❌ skills-gate self-test: genericity gate did NOT catch '$PLANT_TERM' in .agents/skills/sekai-kb/ (instance mode)" >&2
   exit 1
 fi
 
-# The english-only gate must now FAIL (CJK codepoint under .agent/skills/sekai-kb/).
+# The english-only gate must now FAIL (CJK codepoint under .agents/skills/sekai-kb/).
 if node "$CJK_GATE" >/dev/null 2>&1; then
-  echo "❌ skills-gate self-test: english-only gate did NOT catch a CJK codepoint in .agent/skills/sekai-kb/ (instance mode)" >&2
+  echo "❌ skills-gate self-test: english-only gate did NOT catch a CJK codepoint in .agents/skills/sekai-kb/ (instance mode)" >&2
   exit 1
 fi
 
-echo "✓ skills-gate self-test passed — both gates scan .agent/skills/ (including the sekai-kb router) in instance mode ('$PLANT_TERM' + CJK caught)"
+echo "✓ skills-gate self-test passed — both gates scan .agents/skills/ (including the sekai-kb router) in instance mode ('$PLANT_TERM' + CJK caught)"

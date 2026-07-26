@@ -72,9 +72,9 @@ content).
    skills. Place identity flows only from `place.config.ts` + `knowledge/` +
    `public/media/`. Machine-gated by `npm run genericity`, whose two gates carry
    **different** instance-mode roots: `scripts/ci/check-genericity.sh` (place-name
-   denylist) scans `src/`, `scripts/`, `tests/`, `.agent/skills/`;
+   denylist) scans `src/`, `scripts/`, `tests/`, `.agents/skills/`;
    `scripts/ci/check-english-only.mjs` (CJK codepoints) scans `src/`, `scripts/`,
-   `tests/`, `workers/`, `.agent/skills/`; in template mode (the `.sekai-template`
+   `tests/`, `workers/`, `.agents/skills/`; in template mode (the `.sekai-template`
    marker) both scan the whole repository. `scripts/ci/check-scan-root-docs.mjs`
    keeps every such statement in this repository true.
 3. **Framework vs instance:** `src/` and `scripts/` are framework-owned — customize
@@ -85,13 +85,14 @@ content).
 
 ## Skill discovery and ownership
 
-Claude Code must discover project skills from `.agent/skills/*/SKILL.md`: read
-each file's YAML `name` and `description` for discovery, then load the full file
-when the user names a skill or the request matches its description. This is
-required because `CLAUDE.md` delegates all project instructions to this file and
-the skills no longer live under Claude's default `.claude/skills/` path.
+Codex discovers project skills natively from `.agents/skills/*/SKILL.md`. Claude
+Code must discover them from the same path by reading each file's YAML `name` and
+`description`, then load the full file when the user names a skill or the request
+matches its description. Claude needs the explicit instruction because
+`CLAUDE.md` delegates all project instructions to this file and the skills do not
+live under Claude's default `.claude/skills/` path.
 
-The skills under `.agent/skills/` — `/sekai-write`, `/sekai-validate`,
+The skills under `.agents/skills/` — `/sekai-write`, `/sekai-validate`,
 `/sekai-factcheck`, the `/sekai-kb` router, plus `/sekai-adopt`,
 `/sekai-seed-articles`, `/sekai-upgrade`, and `/sekai-release` — are
 **framework-owned**, the same class as `src/` and `scripts/`. The `sekai-`
@@ -101,13 +102,13 @@ through `place.config.ts`, `knowledge/`, and the playbook, not by editing the
 skill bodies.
 
 - **Adding a skill is free.** A new skill is a new directory under
-  `.agent/skills/`, so it never conflicts on `/sekai-upgrade`. The `/sekai-kb`
+  `.agents/skills/`, so it never conflicts on `/sekai-upgrade`. The `/sekai-kb`
   router lists it automatically (it enumerates the directory, not a hardcoded set).
 - **Overriding a framework skill** means either upstreaming the change to
   sekai-kb first (so every instance gets it), or accepting a conflict-managed
   local fork that `/sekai-upgrade` flags on each release.
 
-Both machine gates (`npm run genericity`) scan `.agent/skills/` — agent-executed
+Both machine gates (`npm run genericity`) scan `.agents/skills/` — agent-executed
 prose is code for the genericity + English-only doctrine.
 
 ## Language support boundary

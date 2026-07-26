@@ -12,7 +12,7 @@ tags, never framework `main`** (ADR 004, SPEC
 
 1. **Every framework change lands with a CHANGELOG entry.** No entry, no release.
    The entry names what changed in the framework-owned trees (`src/`, `scripts/`,
-   `.agent/skills/`, `docs/playbook/`, `docs/runbook/`, config).
+   `.agents/skills/`, `docs/playbook/`, `docs/runbook/`, config).
 2. **Breaking config changes carry an upgrade note.** Any change an instance must
    act on at merge time (a renamed `place.config.ts` key, a new required field, a
    moved file) goes under an explicit **Upgrade note** in that version's entry.
@@ -37,10 +37,11 @@ tags, never framework `main`** (ADR 004, SPEC
 ### Changed
 
 - **Framework skills moved to the shared agent namespace.** All skills now live
-  under `.agent/skills/`, and their folder names, YAML names, invocation names,
-  and cross-skill references use the `sekai-` prefix. `AGENTS.md` tells Claude
-  Code to discover metadata from that path and load a full `SKILL.md` only when
-  it triggers. The genericity and English-only gates now scan the new tree.
+  under `.agents/skills/`, and their folder names, YAML names, invocation names,
+  and cross-skill references use the `sekai-` prefix. Codex discovers the
+  standard path natively; `AGENTS.md` tells Claude Code to discover metadata
+  there and load a full `SKILL.md` only when it triggers. The genericity and
+  English-only gates now scan the new tree.
 
   **Upgrade note:** remove the old `.claude/skills/` tree when adopting this
   release. Use `/sekai-adopt`, `/sekai-seed-articles`, `/sekai-write`,

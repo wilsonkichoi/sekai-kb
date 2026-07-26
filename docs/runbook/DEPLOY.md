@@ -122,9 +122,9 @@ zero place-specific strings, and the English-only gate
 pristine template (the `.sekai-template` marker is present at the repo root)
 both scan the whole tree. In an adopted instance (`npm run init` removes the
 marker) they scan the code trees, and their root sets differ: the place-name
-denylist gate scans `src/`, `scripts/`, `tests/`, `.agent/skills/`; the
+denylist gate scans `src/`, `scripts/`, `tests/`, `.agents/skills/`; the
 English-only gate scans `src/`, `scripts/`, `tests/`, `workers/`,
-`.agent/skills/`; your `knowledge/` and `place.config.ts` are outside both, so
+`.agents/skills/`; your `knowledge/` and `place.config.ts` are outside both, so
 they legitimately carry your place's name.
 Your place name is added to `scripts/ci/genericity-denylist.local.txt` by the
 init wizard, which keeps it out of framework code from day one.
