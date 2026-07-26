@@ -28,12 +28,15 @@ the semiont probe, and the content working set.
   (voice, structure, quality bar), [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md)
   (the write/rewrite process), [FACTCHECK-PIPELINE.md](docs/playbook/FACTCHECK-PIPELINE.md)
   (fact-check methodology).
-- **Operations:** `docs/runbook/` — [DEPLOY.md](docs/runbook/DEPLOY.md) (install,
-  toolchain, CI, GitHub Pages, custom domain; every command copy-pasteable).
+- **Operations:** `docs/runbook/` — [DEPLOY.md](docs/runbook/DEPLOY.md) covers
+  install and deployment, [UPGRADE.md](docs/runbook/UPGRADE.md) covers framework
+  adoption, and [RELEASE.md](docs/runbook/RELEASE.md) covers explicit adopter
+  releases.
 - **Change history:** this template's `CHANGELOG.md` records framework releases.
   `npm run init` replaces it with an instance-owned changelog for adopter work.
-- **Versions:** `VERSION` is the adopter release SSOT. `FRAMEWORK-VERSION` is the
-  Sekai release adopted by that instance. `package.json` is not a version SSOT.
+- **Versions:** this template has only `FRAMEWORK-VERSION`, the Sekai release SSOT.
+  Init creates adopter `VERSION`. In each repository, `package.json.version`
+  mirrors its own release SSOT without the leading `v`.
 - **Architecture diagrams (engineering SSOT):** `docs/diagrams/*.drawio`.
 - **Engineering rules:** `.agent-toolkit/rules/` — framework-owned lessons that keep
   the build green (Astro/Vite gotchas, prebuild ordering, shell portability,
@@ -83,7 +86,7 @@ content).
 ## Skill ownership
 
 The skills under `.claude/skills/` — `/write`, `/validate`, `/factcheck`, the
-`/kb` router, plus `/adopt`, `/seed-articles` (and `/upgrade` when it ships) — are
+`/kb` router, plus `/adopt`, `/seed-articles`, `/upgrade`, and `/release` — are
 **framework-owned**, the same class as `src/` and `scripts/`. They are managed
 through framework upgrades; customize them the way you customize `src/`: through
 `place.config.ts`, `knowledge/`, and the playbook, not by editing the skill

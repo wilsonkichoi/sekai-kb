@@ -39,6 +39,8 @@ Full install table with version checks:
      (name, categories, map, links) and swaps out the demo content.
    - **`/seed-articles`** — drafts your first articles from source material you
      supply, following the editorial playbook, behind your approval.
+   - **`/release`** — explicitly prepares a patch, minor, or major adopter
+     release. Routine article PRs never bump the instance version.
 
    The no-AI path is the wizard: **`npm run init`** asks the same core questions
    at the terminal, writes `place.config.ts`, and seeds empty category folders —

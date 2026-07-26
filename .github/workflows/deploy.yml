@@ -145,6 +145,7 @@ jobs:
           git config --global user.name "CI"
           npm run upgrade:check
           npm run upgrade:selftest
+          npm run upgrade:package-selftest
 
   build:
     name: Build

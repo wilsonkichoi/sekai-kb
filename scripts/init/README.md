@@ -20,7 +20,7 @@ npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 | `AGENTS.md` | The instance's agent-instruction SSOT: place name/domain/tagline, the standard where-things-live / build / iron-rules sections, and the content working set. Read natively by Codex, and by Claude Code through the `CLAUDE.md` shim. Instance-owned; edit freely. |
 | `CLAUDE.md` | A one-line `@AGENTS.md` shim so Claude Code inlines `AGENTS.md`. Instance-owned. |
 | `CHANGELOG.md` | Replaces the framework release log with an instance-only changelog. Instance-owned; `/upgrade` reads framework notes from release tags instead. |
-| `package.json` / `package-lock.json` | Rewrites the root package name and description for the adopter, keeps the package private, and removes npm package versions. Scripts and dependencies remain framework-owned. |
+| `package.json` / `package-lock.json` | Rewrites the root package name and description for the adopter, keeps the package private, and sets the root package versions from the new adopter `VERSION` without its leading `v`. Scripts and dependencies remain framework-owned. |
 | `VERSION` | The adopter's own release version, initialized to `v0.0.0`. Instance-owned and merge-protected. |
 | `FRAMEWORK-VERSION` | The checked-out Sekai framework release this instance adopted. Instance-owned and merge-protected; `/upgrade` bumps it after verification. |
 | `scripts/ci/genericity-denylist.local.txt` | The adopter's place name (lowercased, plus its no-space form) as **instance-owned** gate terms. `check-genericity.sh` reads this file additively; the framework denylist is never touched, so upgrades never conflict. Appends idempotently if the file already exists. |

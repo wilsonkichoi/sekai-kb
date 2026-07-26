@@ -384,7 +384,8 @@ assert_instance_version() { # repo label
   ok "$2: adopter VERSION is preserved"
 }
 
-# Framework repo carrying tags fw-v1 and fw-v2.
+# Framework repo carrying legacy fw-v1 (which mistakenly tracked VERSION) and
+# corrected fw-v2 (which deletes it so only adopters carry VERSION).
 build_framework() { # dir
   local fw="$1"
   init_repo "$fw"
@@ -420,7 +421,7 @@ triggers:
 EOF
   printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
   printf '# Framework changelog\n\nFramework release fw-v2.\n' > "$fw/CHANGELOG.md"
-  printf 'template-v2\n' > "$fw/VERSION"
+  rm "$fw/VERSION"
   printf 'framework-v2\n' > "$fw/FRAMEWORK-VERSION"
   git -C "$fw" add -A
   git -C "$fw" commit -q -m "Example framework fw-v2"
@@ -504,10 +505,10 @@ case_stripped_shared_history() { # workdir
   ok "case 1: fw-v2 merge stops on the .agent-toolkit/dev.md modify/delete conflict"
 
   assert_reconcile_ok "$inst" stripped "case 1"
-  assert_no_unmerged_paths "$inst" "case 1"
-
-  git -C "$inst" commit -q --no-edit || fail "case 1: 'git commit --no-edit' failed after reconcile"
-  ok "case 1: 'git commit --no-edit' finalizes the merge"
+  git -C "$inst" diff --name-only --diff-filter=U | grep -qx 'VERSION' \
+    || fail "case 1: expected the one-time VERSION modify/delete conflict after dev-plugin reconciliation"
+  ok "case 1: one-time framework VERSION deletion leaves the adopter VERSION for explicit resolution"
+  finalize_merge "$inst" "case 1"
 
   assert_is_merge_commit "$inst" "case 1"
   assert_no_tree_paths_in_commit "$inst" HEAD "case 1"
@@ -560,9 +561,9 @@ case_stripped_shared_history() { # workdir
       || fail "case 1b: reconcile finalized or amended the merge instead of leaving it in progress — it misread the linked worktree's MERGE_HEAD path"
     ok "case 1b: reconcile took the merge-in-progress path (did not try to amend)"
   fi
-  assert_no_unmerged_paths "$wt" "case 1b"
-
-  git -C "$wt" commit -q --no-edit || fail "case 1b: 'git commit --no-edit' failed after reconcile"
+  git -C "$wt" diff --name-only --diff-filter=U | grep -qx 'VERSION' \
+    || fail "case 1b: expected the one-time VERSION modify/delete conflict"
+  finalize_merge "$wt" "case 1b"
   assert_is_merge_commit "$wt" "case 1b"
   assert_no_tree_paths_in_commit "$wt" HEAD "case 1b"
   [ ! -e "$wt/.agent-toolkit" ] || fail "case 1b: .agent-toolkit/ survives in the linked worktree"

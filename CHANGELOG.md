@@ -20,18 +20,36 @@ tags, never framework `main`** (ADR 004, SPEC
    §place.config.ts absent-safe rule), so an instance that ignores the note still
    builds — the note tells it what it is opting out of.
 3. **Instances merge tags only.** The release flow is: land the change on `main`
-   with its CHANGELOG entry → bump `FRAMEWORK-VERSION` → tag
+   with its CHANGELOG entry → bump `FRAMEWORK-VERSION` and its npm manifest
+   mirrors → tag
    `sekai-kb-vX.Y.Z` → push the tag. Instances run `/upgrade` (or the manual git
    flow in `docs/runbook/UPGRADE.md`), which merges the tag, never `main`.
 4. **Instance-owned files are never overwritten.** Files an instance owns
    (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
-   `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
+   `AGENTS.md`, `README.md`, `CHANGELOG.md`, adopter-only `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
    `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) carry
    `.gitattributes merge=ours` on the instance, so a tag merge keeps the
    instance's copy. Framework changes to those paths are therefore inert on
    instances by design — do not rely on them propagating.
 
 ## [Unreleased]
+
+### Changed
+
+- **Framework and adopter npm manifests now mirror their respective release
+  SSOTs.** The Sekai template no longer carries `VERSION`; its
+  `package.json.version` and lockfile root versions mirror `FRAMEWORK-VERSION`.
+  Init creates adopter `VERSION` and sets the adopter manifest versions from it.
+  CI rejects drift. The new `npm run release:bump -- patch|minor|major` command and
+  `/release` skill let an adopter maintainer prepare a release explicitly, without
+  versioning routine article PRs.
+
+  **Upgrade note:** the first upgrade from v1.0.8 keeps the adopter's `VERSION`
+  when the framework deletes its mistaken template copy. `/upgrade` now captures
+  adopter package identity before merging, takes incoming framework scripts and
+  dependencies, and restores adopter name, description, privacy, and version
+  fields afterward. This package reconciliation is required on every upgrade
+  because the manifests have mixed ownership.
 
 ## [1.0.8] — 2026-07-26
 

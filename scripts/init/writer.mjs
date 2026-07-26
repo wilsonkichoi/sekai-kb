@@ -275,6 +275,9 @@ Code reaches it through a one-line \`@AGENTS.md\` shim in \`CLAUDE.md\`.
 - **Media:** \`public/media/\` and other \`public/\` assets.
 - **Instance history:** \`CHANGELOG.md\` records changes to this instance only.
   Framework release notes remain in immutable \`sekai-kb\` tags.
+- **Versions:** \`VERSION\` is this instance's release SSOT. \`FRAMEWORK-VERSION\`
+  records the adopted Sekai release. \`package.json.version\` mirrors \`VERSION\`
+  without the leading \`v\`.
 - **Architecture diagrams (engineering SSOT):** \`docs/diagrams/*.drawio\`.
 
 ## How the site builds
@@ -491,26 +494,25 @@ export function writeInstance(root, cfg) {
   write('CHANGELOG.md', renderChangelog(cfg));
 
   // package.json/package-lock.json: package identity belongs to the adopter;
-  // scripts and dependency contracts remain framework-owned. Release versions
-  // do not live in either npm manifest: VERSION and FRAMEWORK-VERSION are their
-  // respective SSOTs.
+  // scripts and dependency contracts remain framework-owned. package versions
+  // mirror the adopter's VERSION without its leading v.
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   pkg.name = slugify(cfg.place.name);
   pkg.private = true;
   pkg.description = `AI-native open knowledge base for ${cfg.place.name}.`;
-  delete pkg.version;
+  pkg.version = '0.0.0';
   write('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
 
   const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
   lock.name = pkg.name;
-  delete lock.version;
+  lock.version = pkg.version;
   lock.packages[''].name = pkg.name;
-  delete lock.packages[''].version;
+  lock.packages[''].version = pkg.version;
   write('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`);
 
   // VERSION is the adopter's own release SSOT. FRAMEWORK-VERSION is the exact
-  // sekai-kb release adopted by this checkout. The template carries the latter;
-  // init preserves its v-prefixed value instead of deriving it from package.json.
+  // sekai-kb release adopted by this checkout. The template carries only the
+  // latter; init creates VERSION and preserves the framework value.
   write('VERSION', 'v0.0.0\n');
   const frameworkVersion = readFileSync(join(root, 'FRAMEWORK-VERSION'), 'utf8').trim();
   write('FRAMEWORK-VERSION', `${frameworkVersion}\n`);

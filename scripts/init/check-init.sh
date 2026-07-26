@@ -188,15 +188,15 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
 if (pkg.name !== expectedPackageName) throw new Error(`unexpected package name: ${pkg.name}`);
 if (pkg.private !== true) throw new Error('package is not private');
-if (Object.hasOwn(pkg, 'version')) throw new Error('package.json.version survived init');
+if (pkg.version !== '0.0.0') throw new Error(`unexpected adopter package version: ${pkg.version}`);
 if (pkg.description !== `AI-native open knowledge base for ${expectedPlaceName}.`) {
   throw new Error(`unexpected package description: ${pkg.description}`);
 }
 if (lock.name !== pkg.name || lock.packages?.['']?.name !== pkg.name) {
   throw new Error('package-lock root names do not match package.json');
 }
-if (Object.hasOwn(lock, 'version') || Object.hasOwn(lock.packages?.[''] ?? {}, 'version')) {
-  throw new Error('package-lock root version survived init');
+if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version) {
+  throw new Error('package-lock root versions do not match package.json');
 }
 NODE
 # AGENTS.md is the instance's agent-instruction SSOT; its header is the place name.

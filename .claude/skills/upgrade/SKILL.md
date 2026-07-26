@@ -37,6 +37,7 @@ git config merge.ours.driver true   # load-bearing: see below
 git status --porcelain
 cat VERSION 2>/dev/null || echo "no VERSION (pre-contract instance)"
 cat FRAMEWORK-VERSION 2>/dev/null || echo "no FRAMEWORK-VERSION (pre-wizard instance)"
+npm run version:check
 ```
 
 - **Set the `ours` merge driver first.** `.gitattributes merge=ours` names a
@@ -114,6 +115,21 @@ what the instance owned.
   show the user the diagnostic. Do not guess whether to delete or install
   dev-plugin state; the remedy line names both deliberate repairs.
 
+Capture the adopter-owned fields from the mixed-ownership npm manifests before
+the merge. Sekai owns scripts and dependencies; the adopter owns package name,
+description, privacy, and the `VERSION` mirror:
+
+```bash
+PACKAGE_HELPER=scripts/upgrade/package-state.mjs
+test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
+  git show sekai-kb-vX.Y.Z:scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
+```
+
+The capture accepts the versionless npm manifests produced by v1.0.8 so the
+first migration to the synchronized manifest contract does not require manual
+pre-editing.
+
 ## 4. Merge the tag (never `main`)
 
 ```bash
@@ -126,7 +142,9 @@ instance-owned file (`place.config.ts`, `knowledge/**`, `public/media/**`,
 `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) — those do not
 conflict. It says nothing about a path the instance **deleted** (`.agent-toolkit/`
 on a wizard-adopted instance) or never had: git applies no merge driver there, so
-step 5 owns that case.
+step 5 owns that case. `package.json` and `package-lock.json` are deliberately
+not `merge=ours`: their scripts and dependencies must come from the framework,
+while their adopter-owned fields are restored in step 5.
 
 Run step 5 next whether the merge stopped on conflicts or completed on its own.
 
@@ -134,6 +152,7 @@ Run step 5 next whether the merge stopped on conflicts or completed on its own.
 
 ```bash
 node "$HELPER" reconcile --state <stripped|installed>   # the state from step 3
+node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 ```
 
 - **`stripped`** → removes every `.agent-toolkit/` path the merge brought in,
@@ -151,6 +170,10 @@ node "$HELPER" reconcile --state <stripped|installed>   # the state from step 3
   `git rm -f -- <path>` before finalizing). The upgrade does not decide.
 - A nonzero exit is a stop, not a warning. The commonest cause is the `ours`
   driver missing from this clone (step 0); the diagnostic names the repair.
+- Package reconciliation takes the incoming framework manifests, then restores
+  the captured adopter name, description, privacy flag, and `VERSION` mirror. It
+  resolves recurring version-line conflicts without discarding new framework
+  scripts or dependencies.
 
 ## 6. Conflict report — walk each file WITH the user
 
@@ -175,6 +198,10 @@ the two sides (`git diff`). Then propose the resolution and its rationale:
 - **A change the instance intentionally forked** → propose keeping the local
   edit, and note it should be upstreamed to sekai-kb so it stops conflicting every
   release (SPEC ownership rule).
+- **`VERSION` modify/delete conflict on the first upgrade from v1.0.8** → keep
+  the adopter file. v1.0.8 mistakenly tracked a framework `VERSION`; the next
+  framework release deletes it. This is a one-time migration conflict. Later
+  framework releases do not carry the path.
 
 Apply only what the user approves (`git checkout --theirs/--ours <file>` or a
 hand-merge), then `git add <file>`. Never `git checkout -f` the whole tree.
@@ -255,6 +282,9 @@ commit (or a preceding one):
 printf 'vX.Y.Z\n' > FRAMEWORK-VERSION
 git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> vX.Y.Z"
 ```
+
+Do not change `package.json.version` here. It mirrors the adopter's unchanged
+`VERSION`, not `FRAMEWORK-VERSION`.
 
 ## 10. Report
 

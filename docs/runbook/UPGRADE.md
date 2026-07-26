@@ -49,6 +49,8 @@ git config merge.ours.driver true
 #    them (see "Instance-owned files" below), then:
 git remote add framework https://github.com/wilsonkichoi/sekai-kb.git
 git fetch framework --tags
+TARGET=sekai-kb-v1.0.9
+TARGET_VERSION="${TARGET#sekai-kb-}"
 
 # 3. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
 #    Releases before v1.0.5 did not ship the helper, so on a first merge run it
@@ -56,17 +58,27 @@ git fetch framework --tags
 #    establishing is older. The extracted copy lives inside .git, never in your tree.
 HELPER=scripts/upgrade/dev-plugin-state.mjs
 test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
-  git show sekai-kb-v1.0.5:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+  git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
+
+# 4. Capture adopter-owned package identity before the mixed-ownership manifests
+#     merge. For the first upgrade to a release carrying this helper, extract it
+#     from that target tag into .git, as shown for the dev-plugin helper above.
+PACKAGE_HELPER=scripts/upgrade/package-state.mjs
+test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
+  git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 #    Exit 3 = inconsistent state (only one half of the dev workflow present):
 #    stop here and repair it deliberately, as the diagnostic says.
 
-# 4. The first merge — the ONLY one that needs --allow-unrelated-histories:
-git merge --allow-unrelated-histories sekai-kb-v1.0.0
+# 5. The first merge — the ONLY one that needs --allow-unrelated-histories:
+git merge --allow-unrelated-histories "$TARGET"
 
-# 5. Reconcile dev-plugin state, immediately after the merge command — whether it
+# 6. Reconcile dev-plugin and package state immediately after the merge command,
+#    whether it
 #    stopped on conflicts or completed on its own:
 node "$HELPER" reconcile --state "$STATE"
+node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 ```
 
 > **The `merge.ours.driver true` line is load-bearing and per-clone.** It is not
@@ -95,7 +107,12 @@ The merge outcome, file by file:
   rule: `src/` and `scripts/` are framework-owned):
 
 ```bash
-# Take framework for every remaining (framework-owned) conflict:
+# v1.0.8 -> v1.0.9 only: keep the adopter's VERSION when the framework deletes
+# its mistaken template copy.
+git diff --name-only --diff-filter=U | grep -Fxq VERSION \
+  && git checkout --ours VERSION && git add VERSION || true
+
+# Take framework for every remaining framework-owned conflict:
 for f in $(git diff --name-only --diff-filter=U); do git checkout --theirs "$f" && git add "$f"; done
 ```
 
@@ -111,7 +128,7 @@ git rm --ignore-unmatch .sekai-template
 # start (correct whether or not the merge is committed yet — unlike HEAD@{1}).
 # List and remove them (yours are untouched by merge=ours):
 comm -13 <(git ls-tree -r --name-only ORIG_HEAD -- knowledge/ | sort) \
-         <(git ls-tree -r --name-only sekai-kb-v1.0.0 -- knowledge/ | sort) \
+         <(git ls-tree -r --name-only "$TARGET" -- knowledge/ | sort) \
   | while read -r f; do git rm -f -- "$f"; done
 ```
 
@@ -120,8 +137,8 @@ Build-verify, finalize, record the version:
 ```bash
 npm run build
 git commit --no-edit
-printf 'v1.0.0\n' > FRAMEWORK-VERSION
-git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> v1.0.0"
+printf '%s\n' "$TARGET_VERSION" > FRAMEWORK-VERSION
+git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> $TARGET_VERSION"
 ```
 
 From here on, upgrades are the routine flow below — no `--allow-unrelated-histories`
@@ -145,19 +162,27 @@ git fetch framework --tags
 git tag -l 'sekai-kb-v*' | sort -V
 cat VERSION
 cat FRAMEWORK-VERSION
+TARGET=sekai-kb-v1.0.9
+TARGET_VERSION="${TARGET#sekai-kb-}"
 
 # 3. Read the target's CHANGELOG entry first — especially its Upgrade note.
-git show sekai-kb-v1.0.1:CHANGELOG.md | awk '/^## \[1\.0\.1\]/{p=1;print;next} p&&/^## \[/{exit} p'
+git show "$TARGET":CHANGELOG.md | awk -v h="## [${TARGET_VERSION#v}]" '$0==h{p=1} p&&$0!=h&&/^## \[/{exit} p'
 
 # 4. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
 #    Exit 3 = inconsistent state: stop and repair it deliberately.
 HELPER=scripts/upgrade/dev-plugin-state.mjs
 test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
-  git show sekai-kb-v1.0.1:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+  git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 
+# 4b. Capture adopter-owned package identity and version before merging.
+PACKAGE_HELPER=scripts/upgrade/package-state.mjs
+test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
+  git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
+
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
-git merge --no-ff sekai-kb-v1.0.1 -m "chore: upgrade framework to sekai-kb-v1.0.1"
+git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
 
 # 6. Reconcile dev-plugin state, immediately after the merge command — whether it
 #    stopped on conflicts or completed on its own. Stripped: the framework's
@@ -166,8 +191,11 @@ git merge --no-ff sekai-kb-v1.0.1 -m "chore: upgrade framework to sekai-kb-v1.0.
 #    config and rules are asserted byte-for-byte unchanged, and any framework path
 #    the merge ADDED under .agent-toolkit/ is reported for you to keep or remove.
 node "$HELPER" reconcile --state "$STATE"
+node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 
-# 7. If conflicts remain: they can only be framework-owned files you edited locally.
+# 7. If conflicts remain: they can only be framework-owned files you edited locally,
+#    or the one-time VERSION modify/delete conflict when leaving v1.0.8. Keep the
+#    adopter VERSION in that one case. For framework-owned files, read the CHANGELOG.
 #    Read the CHANGELOG line for each, then take framework unless you intentionally
 #    forked it (in which case: upstream it to sekai-kb so it stops conflicting):
 git diff --name-only --diff-filter=U
@@ -176,8 +204,8 @@ git diff --name-only --diff-filter=U
 
 # 8. Build-verify, then record the newly adopted framework version.
 npm run build
-printf 'v1.0.1\n' > FRAMEWORK-VERSION
-git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> v1.0.1"
+printf '%s\n' "$TARGET_VERSION" > FRAMEWORK-VERSION
+git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> $TARGET_VERSION"
 ```
 
 **New `place.config` keys never require surgery.** Every new config key defaults
@@ -214,6 +242,21 @@ merges keep the instance's version:
 Adopters add their own instance-specific files to `.gitattributes` the same way.
 The list is append-only from the framework baseline; the framework never removes a
 `merge=ours` entry, so an upgrade cannot start overwriting a file you own.
+
+`package.json` and `package-lock.json` are mixed-ownership files, so they do not
+use `merge=ours`. Sekai owns scripts, dependencies, and lock resolution. The
+adopter owns package name, description, privacy, and the version mirrored from
+`VERSION`. Every upgrade captures those adopter fields before merging, takes the
+incoming framework manifests, then restores the captured fields with
+`scripts/upgrade/package-state.mjs`. This deterministic reconciliation prevents
+recurring framework/adopter version conflicts while still delivering dependency
+updates.
+
+Sekai v1.0.8 mistakenly carried a template `VERSION`. The first later upgrade
+deletes that framework path, which can produce a modify/delete conflict against
+the adopter's copy. Resolve that one path with `git checkout --ours VERSION &&
+git add VERSION`. Subsequent Sekai releases do not track `VERSION`, so the conflict
+does not recur.
 
 **`merge=ours` protects content, not absence.** It applies to a path that exists on
 both sides of the merge. A path you deliberately deleted gets no merge driver at
