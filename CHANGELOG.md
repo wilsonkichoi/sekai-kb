@@ -34,6 +34,14 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **`/sekai-framework-release`** now cuts framework releases end to end: guarded
+  version and changelog preparation, full verification, release PR and green-CI
+  merge, lightweight `sekai-kb-vX.Y.Z` tag publication, and branch cleanup. Its
+  deterministic helper preserves `pyproject.toml` as independent internal tooling
+  metadata and changes only the four framework release files.
+
 ## [1.0.9] — 2026-07-26
 
 Corrects cross-agent skill discovery and establishes separate adopter and framework release

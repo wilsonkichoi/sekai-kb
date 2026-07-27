@@ -94,12 +94,16 @@ live under Claude's default `.claude/skills/` path.
 
 The skills under `.agents/skills/` — `/sekai-write`, `/sekai-validate`,
 `/sekai-factcheck`, the `/sekai-kb` router, plus `/sekai-adopt`,
-`/sekai-seed-articles`, `/sekai-upgrade`, and `/sekai-release` — are
+`/sekai-seed-articles`, `/sekai-upgrade`, `/sekai-release`, and the
+template-only `/sekai-framework-release` — are
 **framework-owned**, the same class as `src/` and `scripts/`. The `sekai-`
 namespace prevents collisions with adopter and tool-provided skills. They are
 managed through framework upgrades; customize them the way you customize `src/`:
 through `place.config.ts`, `knowledge/`, and the playbook, not by editing the
 skill bodies.
+
+`/sekai-framework-release` is the sole template-maintainer skill. It hard-stops
+after adoption when `.sekai-template` is absent; all other skills are adopter-facing.
 
 - **Adding a skill is free.** A new skill is a new directory under
   `.agents/skills/`, so it never conflicts on `/sekai-upgrade`. The `/sekai-kb`
