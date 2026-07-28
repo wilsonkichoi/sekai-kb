@@ -66,11 +66,16 @@ const OTHER_REMOVED_AT_ADOPTION = ['.agent-toolkit', '.sekai-template'];
 const REGENERATED_AT_ADOPTION = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'CHANGELOG.md'];
 
 // Files that must name the stripped paths in order to strip, assert, or gate them.
-// Naming a path in a removal list is not a link a reader follows.
+// A path in a removal list or a guard registry is data, not a link a reader follows,
+// and each of these already handles the adopted case: the wizard removes only what is
+// present, and both guards report a registered statement in a removed document as
+// skipped rather than missing. Keep this list to strip mechanisms only — exempting an
+// ordinary document here would hollow the scan out.
 const STRIP_MECHANISM_FILES = [
   WIZARD,
   'scripts/init/check-init.sh',
   'scripts/ci/check-framework-docs.mjs',
+  'scripts/ci/check-scan-root-docs.mjs',
 ];
 
 const PRUNED_DIRS = new Set(['node_modules', '.git', 'dist', '.astro', '.venv', '__pycache__']);
