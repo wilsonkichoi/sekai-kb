@@ -64,23 +64,32 @@ test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state
   git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 
-# 4. Capture adopter-owned package identity before the mixed-ownership manifests
+# 4. Classify maintainer-doc state BEFORE merging (see "Maintainer-doc state"
+#    below). Same extraction pattern for a target that predates the helper.
+MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
+test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
+  git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+node "$MDOCS_HELPER" classify
+
+# 4b. Capture adopter-owned package identity before the mixed-ownership manifests
 #     merge. For the first upgrade to a release carrying this helper, extract it
 #     from that target tag into .git, as shown for the dev-plugin helper above.
 PACKAGE_HELPER=scripts/upgrade/package-state.mjs
 test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
   git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
 PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
-#    Exit 3 = inconsistent state (only one half of the dev workflow present):
-#    stop here and repair it deliberately, as the diagnostic says.
+#    Exit 3 = inconsistent state (only one half of the dev workflow present), or a
+#    maintainer-doc path set that could not be derived: stop here and repair it
+#    deliberately, as the diagnostic says.
 
 # 5. The first merge — the ONLY one that needs --allow-unrelated-histories:
 git merge --allow-unrelated-histories "$TARGET"
 
-# 6. Reconcile dev-plugin and package state immediately after the merge command,
-#    whether it
+# 6. Reconcile dev-plugin, maintainer-doc, and package state immediately after the
+#    merge command, whether it
 #    stopped on conflicts or completed on its own:
 node "$HELPER" reconcile --state "$STATE"
+node "$MDOCS_HELPER" reconcile
 node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 ```
 
@@ -178,7 +187,15 @@ test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state
   git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 
-# 4b. Capture adopter-owned package identity and version before merging.
+# 4b. Classify maintainer-doc state BEFORE merging (see "Maintainer-doc state"
+#     below). Per path, so owning one of those paths and not the others is fine.
+#     Exit 3 = the path set could not be derived: stop rather than merge blind.
+MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
+test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
+  git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+node "$MDOCS_HELPER" classify
+
+# 4c. Capture adopter-owned package identity and version before merging.
 PACKAGE_HELPER=scripts/upgrade/package-state.mjs
 test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
   git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
@@ -187,13 +204,17 @@ PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
 
-# 6. Reconcile dev-plugin state, immediately after the merge command — whether it
-#    stopped on conflicts or completed on its own. Stripped: the framework's
-#    .agent-toolkit/ is removed again (conflicts and additions alike) so you never
-#    resolve a dev-plugin conflict by hand. Installed: nothing is touched; your
-#    config and rules are asserted byte-for-byte unchanged, and any framework path
-#    the merge ADDED under .agent-toolkit/ is reported for you to keep or remove.
+# 6. Reconcile dev-plugin, maintainer-doc, and package state immediately after the
+#    merge command — whether it stopped on conflicts or completed on its own.
+#    Stripped: the framework's .agent-toolkit/ is removed again (conflicts and
+#    additions alike) so you never resolve a dev-plugin conflict by hand.
+#    Installed: nothing is touched; your config and rules are asserted
+#    byte-for-byte unchanged, and any framework path the merge ADDED under
+#    .agent-toolkit/ is reported for you to keep or remove. The maintainer-doc
+#    reconcile applies the same rule per path: absent stays absent, yours stays
+#    yours, and it stops if the merge touched a document you own.
 node "$HELPER" reconcile --state "$STATE"
+node "$MDOCS_HELPER" reconcile
 node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 
 # 7. If conflicts remain: they can only be framework-owned files you edited locally,
@@ -290,6 +311,38 @@ state is never reacquired implicitly — running `dev:setup`, which writes your 
 config and reference, is the only way in. A framework or first-instance checkout
 that keeps its own `.agent-toolkit/` is `installed` and relies on `merge=ours` so a
 framework tag never replaces its dev config with the framework's.
+
+## Maintainer-doc state — classified on every upgrade
+
+The framework keeps its own maintainer documents — its product, architecture,
+delivery, and decision records — beside the code they govern, and `npm run init`
+removes them from your clone: they describe how the framework is built, never how
+your instance is operated. Your editorial playbook and this runbook are adopter
+docs and always stay.
+
+Their absence has the same problem as an absent `.agent-toolkit/`: `merge=ours`
+cannot protect a path you do not have, so without a reconcile step every release
+that touched those documents would put the framework's copies back in your tree.
+`node scripts/upgrade/maintainer-docs-state.mjs classify` records the split before
+the merge, **per path** — the paths are independent, and there is no inconsistent
+state to stop on:
+
+| Per-path state | Means | The upgrade does |
+| -------------- | ----- | ---------------- |
+| `stripped` | you have no document at that path (every wizard-adopted instance, for every path) | Keeps it absent. `reconcile` removes whatever the merge introduced there — conflicted or cleanly added — and amends the merge commit if the merge already committed. You never resolve one of these conflicts by hand. |
+| `owned` | you keep your own document at that path | Keeps yours. `reconcile` asserts it came through byte-for-byte and never deletes it, then reports any framework file the merge *added* underneath it for you to keep or `git rm -f`. |
+
+Owning some of these paths and not others is a normal state and never stops the
+upgrade. What does stop it is an owned path the merge **changed or conflicted**:
+that means the path is not marked `merge=ours` in your `.gitattributes`, or
+`merge.ours.driver` is not set in this clone. Both repairs are named in the
+diagnostic. The upgrade never lets the framework's copy overwrite a document you
+wrote.
+
+The path set is derived from the init wizard's own strip list at runtime rather
+than restated, so the upgrade cannot disagree with what adoption removed; if that
+list cannot be read, the helper stops instead of assuming there is nothing to
+protect.
 
 ## Reconciling instance-owned starter files (every upgrade)
 

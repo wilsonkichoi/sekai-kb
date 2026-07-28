@@ -92,11 +92,77 @@ lands, which is the only routing information a session needs.
   moved documents therefore say "the instance" where they once named a place, and
   "the maintainer" where they named a person, except in ADR provenance headers, where
   naming the decider is the point.
-- **Open: an existing stripped adopter reacquires the maintainer docs on upgrade.** The
-  wizard strip protects a *fresh* adoption. A later framework tag merge adds the four
-  paths back as theirs-only additions, exactly the failure ADR 006's addendum documented
-  for `.agent-toolkit/`, and for the same reason: `merge=ours` cannot protect an absent
-  path. `/sekai-upgrade` needs a classify/reconcile pass for maintainer-doc state, distinct
-  from the dev-plugin one because an instance that legitimately owns documents at those
-  paths (instance #1) must never have them deleted. That work is tracked separately and is
-  not carried by this decision.
+- **A stripped adopter would reacquire the maintainer docs on upgrade.** The wizard strip
+  protects a *fresh* adoption only; a later framework tag merge re-adds the paths, because
+  `merge=ours` cannot protect an absent path. This decision did not carry the fix. The
+  **Addendum** below now does.
+
+## Addendum: maintainer-doc state across an upgrade (2026-07-28)
+
+**Status:** Accepted. **Executes:** LB-63. Closes the open consequence above.
+
+The problem is ADR 006's addendum in a second location. A stripped adopter has none of the
+four paths; git therefore applies no merge driver to them and re-adds the framework's copies
+on every tag merge that touched them — as theirs-only additions on an unrelated-history
+first merge, as a modify/delete conflict on shared history. `/sekai-upgrade` classifies
+maintainer-doc state before the merge and reconciles it immediately after, the same
+before/after shape the dev-plugin helper uses. Five design questions separate this case from
+that one:
+
+**(a) Classification is per path, not whole-set.** Dev-plugin state is classified from two
+signals — the tree and the active reference that activates it — so a half-present state is
+an inconsistency that stops the upgrade. Maintainer docs have no activation signal:
+pre-merge presence is the entire classification, and the paths are mutually independent.
+An adopter may legitimately write their own product document at one of these paths and
+never have a decision-record directory. Applying ADR 006's mixed-state hard stop would
+break that adopter for doing something correct, so a partially owned set is a normal
+state and never a stop. Present pre-merge = **owned**: never deleted, asserted unchanged.
+Absent pre-merge = **stripped**: whatever the merge introduced there is removed.
+
+**(b) The path set is derived from the wizard at runtime, never restated.** The helper reads
+`scripts/init/writer.mjs`'s exported `MAINTAINER_DOCS` from the repository it operates on —
+the same single source `scripts/ci/check-framework-docs.mjs` derives from. A hardcoded copy
+in the upgrade path would drift from the strip it exists to preserve, and a helper that
+names the paths in its own source would also have to be exempted from the
+dangling-reference scan. The parser itself lives in the helper, because the helper must run
+standalone when extracted from a tag (see (e)) and so cannot import it from the gate; the
+gate imports it from the helper instead. One parser over one source, in one direction — the
+two cannot read the wizard differently. If the wizard is missing or its array unparseable,
+the helper stops rather
+than guessing: a silently empty path set would classify every path as absent and delete
+nothing while reporting success.
+
+**(c) The classification is captured, not recomputed after the merge.** `classify` writes a
+state file under `.git/`, in the `package-state.mjs` idiom, because after the merge the tree
+no longer shows what the instance owned. `reconcile` re-derives the path list from the
+*merged* tree, so a path the target tag newly declares maintainer-owned is also handled: it
+is not in the captured state, and its pre-merge presence is read directly from the pre-merge
+revision. A newer strip list therefore takes effect on the upgrade that introduces it,
+rather than one release later.
+
+**(d) Owned-but-unprotected stops the upgrade; it is never silently overwritten.** An
+instance that carries these paths without `merge=ours` on them, or without
+`merge.ours.driver` configured in that clone, hits a real content conflict or a driver
+fallback. Reconcile treats any owned path that is unmerged or changed against the pre-merge
+revision as a hard stop naming both repairs. The framework's copy never wins by default over
+a document the instance wrote. Framework paths the merge *adds* under an owned directory are
+**reported, not deleted** — the same rule ADR 006's addendum applies to framework
+dev-plugin paths, for the same reason: that is a content decision the maintainer makes.
+
+**(e) The helper is a sibling, not a generalization of the dev-plugin helper.**
+`dev-plugin-state.mjs` is built around a tree plus an activation reference in an entry file;
+maintainer docs have neither. Generalizing it would rewrite a shipped, regression-tested
+contract to serve a case that shares only the before/after call shape. The sibling reuses
+the hard-won mechanics — `ORIG_HEAD` for the pre-merge revision, `--git-path MERGE_HEAD`
+resolved absolutely for linked worktrees, distinct-path counting over `git ls-files -u`,
+amending the merge commit when git auto-committed it — and both are driven by the same
+regression harness. Instances upgrading from a release older than this helper obtain it the
+way they already obtain the dev-plugin one: extracted from the target tag into the git
+directory, never into the working tree.
+
+**Consequences of the addendum.** A stripped adopter's upgrade is clean with no manual
+step, which retires the manual instruction in the v1.0.12 upgrade note. An instance that
+owns documents at these paths must still mark them `merge=ours` before its first merge of a
+release carrying them; the helper detects the omission and stops, but does not repair it.
+`scripts/upgrade/check-upgrade-state.sh` covers both helpers, and its `--selftest`
+non-vacuity proof extends to the new cases.

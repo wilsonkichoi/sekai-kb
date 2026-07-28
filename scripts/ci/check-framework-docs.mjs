@@ -7,7 +7,9 @@
 // and each one is DERIVED here from the source it describes rather than restated:
 //
 //   1. STRIP CONTRACT -- the set of paths adoption removes comes from
-//      `scripts/init/writer.mjs`'s exported MAINTAINER_DOCS. In template mode every
+//      `scripts/init/writer.mjs`'s exported MAINTAINER_DOCS, parsed by the function this
+//      file imports from `scripts/upgrade/maintainer-docs-state.mjs`, so the gate and the
+//      upgrade that preserves the strip cannot read the wizard differently. In template mode every
 //      listed path must exist (a rename that made the strip a no-op is a failure, not
 //      a pass), both adopter doc trees must survive, and NO file that an adopter keeps
 //      may carry a link into a removed path. A dangling reference in an adopted clone
@@ -46,6 +48,12 @@ import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+// The strip-list parser lives with the upgrade helper, which must run standalone
+// when extracted from a release tag and therefore cannot import it from here. One
+// parser over one source: this gate and the upgrade cannot read the wizard
+// differently (ADR 008 addendum (b)).
+import { deriveMaintainerDocs } from '../upgrade/maintainer-docs-state.mjs';
+
 const WIZARD = 'scripts/init/writer.mjs';
 const GITATTRIBUTES = '.gitattributes';
 const PACKAGE_JSON = 'package.json';
@@ -82,18 +90,6 @@ const PRUNED_DIRS = new Set(['node_modules', '.git', 'dist', '.astro', '.venv', 
 const PRUNED_PATHS = ['src/content', 'src/data', 'public/kb'];
 
 /* -- Derivations: every expectation comes from the source, never from here -- */
-
-// writer.mjs declares the strip list as one array literal:
-//   export const MAINTAINER_DOCS = ['docs/PRD.md', ...];
-function deriveMaintainerDocs(src) {
-  const m = /export\s+const\s+MAINTAINER_DOCS\s*=\s*\[([^\]]*)\]/.exec(src);
-  if (!m) return null;
-  const docs = m[1]
-    .split(',')
-    .map((t) => t.trim().replace(/^['"]|['"]$/g, ''))
-    .filter(Boolean);
-  return docs.length > 0 ? docs : null;
-}
 
 // .gitattributes declares instance ownership one path per line: `<path> merge=ours`.
 function deriveMergeOursPaths(src) {

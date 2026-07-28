@@ -113,6 +113,23 @@ sekai-kb/
 > adopter may carry a link into a removed path —
 > `scripts/ci/check-framework-docs.mjs` is the gate.
 
+> **Maintainer-doc state persistence (2026-07-28, ADR 008 addendum):** the maintainer docs
+> are subject to the same `merge=ours` limit as `.agent-toolkit/` — the attribute protects
+> content on a path that exists on both merge sides and cannot preserve an intentionally
+> absent one. `/sekai-upgrade` therefore classifies maintainer-doc state before merging and
+> reconciles it immediately after, **per path** rather than as a set: a path present
+> pre-merge is **owned** and is never deleted; a path absent pre-merge is **stripped** and
+> whatever the merge introduced there is removed, across both shared-history upgrades and
+> unrelated-history first tag merges. Unlike dev-plugin state there is no activation signal
+> and no mixed state: an instance may legitimately own some of these paths and not others,
+> so a partial set is normal and never stops the upgrade. An owned path that is unmerged or
+> changed against the pre-merge revision **does** stop it — that is `merge=ours` missing from
+> `.gitattributes` or `merge.ours.driver` unset in the clone, and the framework's copy must
+> never win over a document the instance wrote. Framework paths the merge adds *under* an
+> owned directory are reported, not deleted. The path set is derived at runtime from the
+> wizard's `MAINTAINER_DOCS`, so the upgrade and the strip cannot disagree;
+> `scripts/upgrade/check-upgrade-state.sh` is the gate for both helpers.
+
 > **Skill ownership (task 5.6):** the framework skills under
 > `.agents/skills/` (`/sekai-write`, `/sekai-validate`, `/sekai-factcheck`, router, plus
 > `/sekai-adopt`, `/sekai-seed-articles`, `/sekai-upgrade`, `/sekai-release`) are

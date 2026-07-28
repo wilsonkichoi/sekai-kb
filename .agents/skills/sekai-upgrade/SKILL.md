@@ -118,6 +118,40 @@ what the instance owned.
   show the user the diagnostic. Do not guess whether to delete or install
   dev-plugin state; the remedy line names both deliberate repairs.
 
+## 3b. Classify maintainer-doc state — also before merging
+
+The framework's own maintainer documents (its product, architecture, delivery, and
+decision records) are removed by `npm run init` for the same reason the dev-plugin
+tree is: they describe how the framework is built, never how an instance is
+operated. `merge=ours` cannot protect their absence either, so the same
+classify-then-reconcile pass applies — **per path**, because these paths carry no
+activation signal and an instance may legitimately keep its own document at one of
+them while having none of the others:
+
+```bash
+MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
+# Releases that predate this helper did not ship it. On the first upgrade to a
+# release that has it, run it from the tag; every later upgrade uses the copy in
+# the instance. The extracted copy lives inside .git, so it never touches the
+# working tree.
+test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
+  git show sekai-kb-vX.Y.Z:scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+node "$MDOCS_HELPER" classify   # prints the owned / stripped split; records it under .git/
+```
+
+The path set is derived from the wizard's own strip list, never restated, so the
+upgrade and the adoption strip cannot disagree. Exit 3 means that list could not be
+derived — stop and report it rather than merging blind. Keep `$MDOCS_HELPER` for
+step 5; unlike the dev-plugin helper, the classification itself is recorded in the
+git directory, so `reconcile` takes no state argument.
+
+- **owned** (the instance has a document at that path) → it is never deleted and
+  must come through the merge byte-for-byte. If the user's instance owns any of
+  these paths and has not marked them `merge=ours`, say so now: adding the
+  attribute is a pre-merge action, and step 5 will otherwise stop the upgrade.
+- **stripped** (absent) → the absence is preserved through the merge, exactly like
+  dev-plugin state.
+
 Capture the adopter-owned fields from the mixed-ownership npm manifests before
 the merge. Sekai owns scripts and dependencies; the adopter owns package name,
 description, privacy, and the `VERSION` mirror:
@@ -155,6 +189,7 @@ Run step 5 next whether the merge stopped on conflicts or completed on its own.
 
 ```bash
 node "$HELPER" reconcile --state <stripped|installed>   # the state from step 3
+node "$MDOCS_HELPER" reconcile                          # the state recorded in step 3b
 node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 ```
 
@@ -171,6 +206,15 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
   added under `.agent-toolkit/`. Those are framework-development state, not
   adopter content: show the list and let the user decide per file (keep it, or
   `git rm -f -- <path>` before finalizing). The upgrade does not decide.
+- **Maintainer docs** → per path: an absent path has whatever the merge introduced
+  removed (resolving both the modify/delete conflict and the theirs-only addition,
+  amending the merge commit if the merge already committed), and a path the
+  instance owns is asserted byte-for-byte unchanged and never deleted. Framework
+  files the merge added *under* an owned path are **reported** for the user to
+  decide, the same rule the installed dev-plugin case follows. A partially owned
+  set is normal and does not stop the upgrade; an owned path the merge changed or
+  conflicted **does** stop it, because that means the attribute or the driver is
+  missing and the framework's copy would otherwise overwrite the user's document.
 - A nonzero exit is a stop, not a warning. The commonest cause is the `ours`
   driver missing from this clone (step 0); the diagnostic names the repair.
 - Package reconciliation takes the incoming framework manifests, then restores
@@ -293,7 +337,8 @@ Do not change `package.json.version` here. It mirrors the adopter's unchanged
 
 Tell the user: the adopted framework version moved from → to, the adopter's
 `VERSION` remained unchanged, the dev-plugin state classified in
-step 3 and what reconcile did with it, which files (if any) conflicted and how
-each was resolved, the build result, and any Upgrade-note opt-ins they declined
-(new feature flags left off). Push is theirs to make — on an instance, pushing
+step 3 and what reconcile did with it, the maintainer-doc split classified in step
+3b and what reconcile removed, kept, or reported for their decision, which files
+(if any) conflicted and how each was resolved, the build result, and any
+Upgrade-note opt-ins they declined (new feature flags left off). Push is theirs to make — on an instance, pushing
 `main` deploys.

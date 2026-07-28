@@ -34,6 +34,46 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **`/sekai-upgrade` classifies and reconciles maintainer-doc state.**
+  `scripts/upgrade/maintainer-docs-state.mjs` is the sibling of the dev-plugin state
+  helper: `classify` records, before the merge, which of the framework's maintainer-doc
+  paths this instance carries, and `reconcile` applies that answer immediately after.
+  Classification is **per path** — these paths have no activation signal and are mutually
+  independent, so an instance may own one and not the others, and a partial set is a
+  normal state rather than a stop. A path you do not have stays absent across shared and
+  unrelated history; a path you own is asserted byte-for-byte unchanged, never deleted,
+  and framework files the merge adds underneath it are reported for you to decide.
+  The path set is derived at runtime from the init wizard's own strip list — the same
+  single source `npm run framework-docs` derives from, whose parser now lives with the
+  upgrade helper so there is one derivation rather than two.
+- **Upgrade-state regressions cover both helpers.**
+  `scripts/upgrade/check-upgrade-state.sh` gains five maintainer-doc cases (stripped on
+  shared history, stripped on an unrelated-history first merge, fully owned, partially
+  owned, and owned-but-unprotected in two shapes), each an independent disposable git
+  repository, with fixtures derived from the wizard rather than restated.
+  `--selftest` non-vacuity extends to the new reconcile-dependent cases: with reconcile
+  skipped, each must fail.
+
+### Changed
+
+- **Adopter documentation states the maintainer-doc contract.** The `/sekai-upgrade`
+  skill gains the classify and reconcile steps, and `docs/runbook/UPGRADE.md` gains the
+  copy-pasteable equivalent plus a per-path state table, in both the first-merge and
+  routine flows.
+
+**Upgrade note.** Nothing to do. The manual clean-up that v1.0.12 asked wizard-adopted
+instances to perform after every merge is now automatic: the upgrade removes the
+framework's maintainer documents itself and never commits them into your instance.
+
+- **If your instance keeps its own documents at any of those paths**, the requirement is
+  unchanged and still yours to meet *before* merging: mark them `merge=ours` in
+  `.gitattributes`, and confirm `git config merge.ours.driver true` in that clone (it is
+  per-clone and not version-controlled). The upgrade now detects the omission and stops
+  with both repairs named, rather than letting the framework's copy overwrite your
+  document — but it does not perform the repair for you.
+
 ## [1.0.12] — 2026-07-28
 
 Moves framework maintainer documents beside the code they govern and strips them from adopter clones.
@@ -93,8 +133,10 @@ use for their own documents.
 - **If your instance was adopted through `npm run init` and has none of those paths:**
   the merge adds the framework's copies as new files. They are framework-development
   state, not yours — delete them after the merge and commit the deletion.
-  `/sekai-upgrade` does not yet classify maintainer-doc state the way it classifies
-  dev-plugin state, so this step is manual for now (ADR 008, Consequences).
+  `/sekai-upgrade` does not classify maintainer-doc state in **this** release the way it
+  classifies dev-plugin state, so this step is manual here. **Superseded:** the next
+  release automates it (see that entry's Upgrade note); this instruction applies only
+  when v1.0.12 is the tag you are merging.
 
 ## [1.0.11] — 2026-07-28
 
