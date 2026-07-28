@@ -116,12 +116,10 @@ non-vacuity fixture in `test` — which proves the wiring still fails an unclass
 rule file — *is* guarded on that file, because a stripped adopter has no rules for
 it to prove anything about.
 
-### Doctrine
-
-- `.agent-toolkit/rules/dod-is-the-scope.md` — the claimed task's Objective + DoD is the whole scope; every criterion is implemented before hand-off.
-- `.agent-toolkit/rules/dod-guard-suite-must-run-in-ci.md` — a test suite cited as a DoD guard counts only when the CI workflow runs it.
-- `.agent-toolkit/rules/genericity-gate-scope.md` — the framework's exact genericity + English-only gate scope, denylist sources, scanned text, and exclusions.
-- `.agent-toolkit/rules/guard-or-explain-prose-drift.md` — a task correcting prose that drifted from code ships a machine guard deriving the value from source, or names why one is infeasible or already exists.
+Doctrine rules are not indexed below: the resolver inlines every one of them into
+each dev session, so a summary line would restate content already in context. The
+gotcha table is indexed, because gotchas load only on a trigger match. Either way
+the resolver's source of truth is each file's own frontmatter, never this list.
 
 ### Gotchas
 
