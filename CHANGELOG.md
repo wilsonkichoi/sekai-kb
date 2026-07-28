@@ -34,6 +34,15 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **Doctrine: guard-or-explain for prose that drifted from code.**
+  `.agent-toolkit/rules/guard-or-explain-prose-drift.md` requires a task whose
+  objective is correcting a stale statement about the code to ship a machine
+  guard deriving the value from its source, or to name why one is infeasible or
+  already exists. Dev-plugin state only: the init wizard strips
+  `.agent-toolkit/`, so adopters inherit nothing from this change.
+
 ## [1.0.10] — 2026-07-26
 
 Adds an end-to-end guarded framework release workflow covering version and changelog preparation, verification, PR merge, lightweight tag publication, and branch cleanup.
