@@ -19,7 +19,10 @@ allowed-tools:
 # /sekai-upgrade — Merge a framework release into this instance
 
 Instances track sekai-kb by merging **immutable release tags, never framework
-`main`** (ADR 004, SPEC §Repo topology). This skill wraps the tagged-release
+`main`** — the decision and the repo-topology contract behind it live with the
+framework's own decision records in the
+[sekai-kb repository](https://github.com/wilsonkichoi/sekai-kb), not in an adopted
+instance. This skill wraps the tagged-release
 merge flow; it does **not** auto-resolve conflicts — framework-owned code
 conflicts are walked with the user, one file at a time, against the CHANGELOG.
 
@@ -88,8 +91,8 @@ not preserve an intentionally **absent** path: an instance adopted through
 `.agent-toolkit/` produces a modify/delete conflict on shared history and adds the
 whole framework tree back as a theirs-only addition on an unrelated-history first
 merge. Dev-plugin presence or absence is therefore persistent instance state that
-the upgrade must classify **before** merging (ADR 006 addendum, SPEC §Repo
-topology):
+the upgrade must classify **before** merging (recorded in the framework's decision
+records upstream):
 
 ```bash
 HELPER=scripts/upgrade/dev-plugin-state.mjs

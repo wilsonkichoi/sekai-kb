@@ -21,6 +21,9 @@
  *   .sekai-template                            removed (template → instance)
  *   .agent-toolkit/                            removed (dev-plugin state, not
  *                                              shipped to adopters)
+ *   docs/PRD.md, docs/SPEC.md,                 removed (framework maintainer docs,
+ *   docs/ROADMAP.md, docs/adr/                 ADR 008). docs/playbook/ and
+ *                                              docs/runbook/ stay.
  *
  * Writing is a pure function of the resolved config, with no timestamps or
  * environment reads, so the same answers always produce byte-identical output.
@@ -434,6 +437,27 @@ const DENYLIST_LOCAL_HEADER = `# genericity-denylist.local.txt — INSTANCE-OWNE
 # denylist, which stays framework-owned so upgrades never conflict.
 `;
 
+/**
+ * Framework maintainer docs, removed at adoption (ADR 008).
+ *
+ * These are the framework's own product, architecture, and delivery SSOTs: they
+ * describe how sekai-kb is built, never how an instance is operated. Same class as
+ * `.agent-toolkit/` below — framework-development state that a fresh instance ships
+ * none of. `docs/playbook/` and `docs/runbook/` deliberately do NOT appear here:
+ * those are how an adopter writes articles and runs the site.
+ *
+ * This array is the single declaration of what adoption removes.
+ * `scripts/ci/check-framework-docs.mjs` derives the list from this source rather
+ * than restating it, and proves no file an adopter keeps links into a removed path;
+ * `scripts/init/check-init.sh` asserts both halves against a really stripped tree.
+ */
+export const MAINTAINER_DOCS = [
+  'docs/PRD.md',
+  'docs/SPEC.md',
+  'docs/ROADMAP.md',
+  'docs/adr',
+];
+
 /** Denylist terms for a place name: the full name plus its no-space form. */
 export function denylistTerms(name) {
   const full = name.toLowerCase().trim();
@@ -571,6 +595,22 @@ export function writeInstance(root, cfg) {
   if (existsSync(agentToolkit)) {
     rmSync(agentToolkit, { recursive: true, force: true });
     actions.push('removed .agent-toolkit/ (dev-plugin state not shipped to adopters)');
+  }
+
+  // Maintainer-doc strip (ADR 008): same reasoning as the dev-plugin strip above —
+  // framework-development state, removed so a fresh instance carries only the docs it
+  // operates with. docs/playbook/ and docs/runbook/ are untouched by construction:
+  // they are not in MAINTAINER_DOCS. Each path is removed only when present, so the
+  // wizard stays runnable on a tree that already lacks them.
+  const removedDocs = [];
+  for (const rel of MAINTAINER_DOCS) {
+    const path = join(root, rel);
+    if (!existsSync(path)) continue;
+    rmSync(path, { recursive: true, force: true });
+    removedDocs.push(rel);
+  }
+  if (removedDocs.length > 0) {
+    actions.push(`removed ${removedDocs.join(', ')} (framework maintainer docs)`);
   }
 
   return actions;

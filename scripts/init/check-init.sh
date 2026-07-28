@@ -15,6 +15,10 @@
 #      CHANGELOG.md, knowledge/{Category}/
 #      dirs, INBOX.md, CNAME, the local genericity denylist, and the removed
 #      .sekai-template marker.
+#   3b. Asserts the ADR 008 maintainer-doc strip: docs/PRD.md, docs/SPEC.md,
+#      docs/ROADMAP.md, and docs/adr/ are absent while docs/playbook/ and
+#      docs/runbook/ survive — then plants each inverse against the same predicate
+#      and requires it to fail, so the four absent paths cannot pass vacuously.
 #   4. Plants the test place name in src/ and asserts check-genericity.sh FAILS
 #      (the local denylist is live); removes it and asserts the gate passes.
 #
@@ -99,6 +103,35 @@ assert_rejected_claude_shim() {
   fi
 }
 
+# ── ADR 008: framework maintainer docs are stripped, adopter doc trees survive ──
+#
+# Kept as a predicate (silent, exit status only) so the SAME code path can be run
+# against planted inverse fixtures below. An assertion that cannot fail is not
+# evidence, and a stripped-tree check is exactly the shape that passes vacuously.
+MAINTAINER_DOCS="docs/PRD.md docs/SPEC.md docs/ROADMAP.md docs/adr"
+ADOPTER_DOC_TREES="docs/playbook docs/runbook"
+
+docs_correctly_stripped() {
+  local tree="$1" rel
+  for rel in $MAINTAINER_DOCS; do
+    [ ! -e "$tree/$rel" ] || return 1
+  done
+  for rel in $ADOPTER_DOC_TREES; do
+    [ -d "$tree/$rel" ] || return 1
+  done
+  return 0
+}
+
+# Plant a maintainer doc back into a fixture tree: a file for the .md paths, a
+# directory carrying a file for docs/adr (the predicate tests existence either way).
+plant_maintainer_doc() {
+  local tree="$1" rel="$2"
+  case "$rel" in
+    *.md) mkdir -p "$(dirname "$tree/$rel")"; printf 'planted\n' > "$tree/$rel" ;;
+    *)    mkdir -p "$tree/$rel"; printf 'planted\n' > "$tree/$rel/planted.md" ;;
+  esac
+}
+
 snapshot() {
   mkdir -p "$1"
   git -C "$ROOT" archive HEAD | tar -x -C "$1"
@@ -110,6 +143,14 @@ snapshot() {
 echo "── tier 1: double init on scratch copies of HEAD ──"
 snapshot "$TMP/run1"
 snapshot "$TMP/run2"
+# Recorded BEFORE init: on the framework template HEAD carries the maintainer docs,
+# so the strip assertion below has something real to prove. An adopted instance's
+# HEAD carries none of them (the wizard removed them at adoption), where the planted
+# inverse fixtures are the whole non-vacuity argument.
+PRE_INIT_HAS_MAINTAINER_DOCS=false
+if [ -f "$TMP/run1/docs/SPEC.md" ]; then
+  PRE_INIT_HAS_MAINTAINER_DOCS=true
+fi
 node "$TMP/run1/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 node "$TMP/run2/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 
@@ -271,6 +312,45 @@ fi
 if grep -Fxq "## Template mode" "$R/AGENTS.md"; then
   fail "AGENTS.md carries template-only '## Template mode'"
 fi
+
+# ADR 008: the four framework maintainer paths are gone and both adopter doc trees
+# survive, asserted against the tree the wizard really stripped.
+docs_correctly_stripped "$R" \
+  || fail "maintainer docs survived init, or an adopter doc tree was removed (expected absent: $MAINTAINER_DOCS; expected present: $ADOPTER_DOC_TREES)"
+
+# Planted inverse: the predicate above must REJECT each way the strip can go wrong.
+# Without this, an assertion over four absent paths would pass on any tree at all,
+# including one where the wizard silently stopped removing them.
+DOCS_FIXTURE="$TMP/docs-strip-fixture"
+mkdir -p "$DOCS_FIXTURE"
+cp -R "$R/docs" "$DOCS_FIXTURE/docs"
+docs_correctly_stripped "$DOCS_FIXTURE" \
+  || fail "the docs fixture copied from the stripped instance is not itself correctly stripped"
+
+for rel in $MAINTAINER_DOCS; do
+  plant_maintainer_doc "$DOCS_FIXTURE" "$rel"
+  if docs_correctly_stripped "$DOCS_FIXTURE"; then
+    fail "strip assertion accepted a tree still carrying $rel"
+  fi
+  rm -rf "${DOCS_FIXTURE:?}/$rel"
+  docs_correctly_stripped "$DOCS_FIXTURE" \
+    || fail "removing the planted $rel did not restore the fixture baseline"
+done
+
+for rel in $ADOPTER_DOC_TREES; do
+  mv "$DOCS_FIXTURE/$rel" "$DOCS_FIXTURE/$rel.withheld"
+  if docs_correctly_stripped "$DOCS_FIXTURE"; then
+    fail "strip assertion accepted a tree missing the adopter doc tree $rel"
+  fi
+  mv "$DOCS_FIXTURE/$rel.withheld" "$DOCS_FIXTURE/$rel"
+done
+
+if [ "$PRE_INIT_HAS_MAINTAINER_DOCS" = true ]; then
+  echo "✓ maintainer docs stripped, adopter doc trees kept (non-vacuous: HEAD carried them; the planted inverses fail the same predicate)"
+else
+  echo "✓ maintainer docs stripped, adopter doc trees kept (HEAD carried none — this checkout is an adopted instance; the planted inverses are the non-vacuity proof)"
+fi
+
 echo "✓ seeded artifacts present (VERSION, FRAMEWORK-VERSION, adopter package identity, instance CHANGELOG.md, complete instance AGENTS.md, byte-exact CLAUDE.md shim, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ removed + template/dev-plugin AGENTS.md content absent)"
 
 # DoD-4: a planted place-name string in src/ fails the gate; framework denylist

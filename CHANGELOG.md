@@ -34,6 +34,64 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+Moves the framework's own product, architecture, and delivery documents into this
+repository and keeps them out of adopter clones.
+
+### Added
+
+- **Framework maintainer docs.** `docs/PRD.md` (what the framework is for, who adopts
+  it, north star, non-goals), `docs/SPEC.md` (stack, repo topology, `place.config.ts`,
+  content model, build pipeline, pages, new builds, phase 9-11 extension capabilities,
+  risk controls, negative requirements), `docs/ROADMAP.md` (the phase 6-11 task blocks
+  `/dev:plan` converts packets from), and ADRs 003-007, which govern framework code and
+  moved here keeping their numbers and filenames. **ADR 008** records the split: the
+  ownership boundary, the wizard strip, the `merge=ours` requirement for an instance that
+  already has documents at those paths, and why the tracker stays a single project.
+  Phases 0-5, the extraction map, the inherited-fork disposition, and ADRs 001-002 are
+  the first instance's rebuild history and stay in its repository.
+- **`npm run framework-docs`** — the maintainer-doc gate, wired into the CI genericity
+  job with a self-test that plants seven defect classes and requires each to fail. It
+  derives the stripped-path list from the wizard, the instance-owned `merge=ours` list
+  from `.gitattributes`, and the prebuild/post-build job lists from `package.json`, then
+  fails on any prose that disagrees with its source or on any file an adopter keeps that
+  links into a stripped path.
+
+### Changed
+
+- **`npm run init` strips the framework maintainer docs.** `docs/PRD.md`,
+  `docs/SPEC.md`, `docs/ROADMAP.md`, and `docs/adr/` are removed at adoption, the same
+  class as `.agent-toolkit/`: they describe how the framework is built, never how an
+  instance is operated. `docs/playbook/` and `docs/runbook/` are untouched.
+  `scripts/init/check-init.sh` asserts both halves on a tree the wizard really stripped,
+  then re-runs the same predicate against planted inverse fixtures so an all-absent
+  assertion cannot pass vacuously.
+- Adopter-facing prose that cited a framework decision record by section now points at
+  the upstream repository instead (`docs/runbook/UPGRADE.md`, the `/sekai-upgrade` skill,
+  `scripts/init/README.md`), so nothing an adopter keeps refers to a document adoption
+  removed.
+
+**Upgrade note.** This release adds four paths under `docs/` that some instances already
+use for their own documents.
+
+- **If your instance has its own `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, or
+  `docs/adr/`:** add them to your `.gitattributes` as `merge=ours` **before** merging
+  this tag, or the merge will conflict with — or overwrite — your documents.
+
+  ```
+  docs/PRD.md merge=ours
+  docs/SPEC.md merge=ours
+  docs/ROADMAP.md merge=ours
+  docs/adr/** merge=ours
+  ```
+
+  The `ours` driver is per-clone and not version-controlled, so confirm
+  `git config merge.ours.driver true` in that clone as well.
+- **If your instance was adopted through `npm run init` and has none of those paths:**
+  the merge adds the framework's copies as new files. They are framework-development
+  state, not yours — delete them after the merge and commit the deletion.
+  `/sekai-upgrade` does not yet classify maintainer-doc state the way it classifies
+  dev-plugin state, so this step is manual for now (ADR 008, Consequences).
+
 ## [1.0.11] — 2026-07-28
 
 Ships a guard-or-explain doctrine rule for prose that drifted from code.

@@ -5,7 +5,10 @@ flow for non-AI users; the `/sekai-upgrade` skill (`.agents/skills/sekai-upgrade
 identical steps for an AI CLI. Keep the two in sync.
 
 Instances track the sekai-kb framework by merging **immutable release tags, never
-framework `main`** (ADR 004, SPEC §Repo topology). A tag is reproducible: everyone
+framework `main`** — the tagged-release decision and the repo-topology contract behind
+it live with the framework's own decision records in the
+[sekai-kb repository](https://github.com/wilsonkichoi/sekai-kb), which adoption does not
+copy into your instance. A tag is reproducible: everyone
 at `sekai-kb-v1.2.3` has byte-identical
 framework code, and the merge is deterministic because instance-owned files carry
 `.gitattributes merge=ours`.
@@ -269,7 +272,8 @@ it is why the flows above carry a classify step and a reconcile step.
 
 `AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files, and whether the
 dev workflow is installed is **persistent instance state** the upgrade preserves in
-either direction (ADR 006 addendum, SPEC §Repo topology). `/sekai-upgrade` and the flows
+either direction (recorded in the framework's decision records upstream).
+`/sekai-upgrade` and the flows
 above classify it before merging with
 `node scripts/upgrade/dev-plugin-state.mjs classify`:
 

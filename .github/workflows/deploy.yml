@@ -49,6 +49,14 @@ jobs:
         run: bash scripts/ci/check-skills-gated.sh
       - name: Self-test — the scan-root docs guard fails on doc, script, and anchor drift
         run: bash scripts/ci/check-scan-root-docs-selftest.sh
+      # ADR 008: the maintainer docs adoption strips, the instance-owned merge=ours
+      # list, and the build-pipeline job lists are all derived from their sources and
+      # compared against the prose that restates them; nothing an adopter keeps may
+      # link into a stripped path.
+      - name: Framework maintainer-doc contract (strip list, dangling links, derived enumerations)
+        run: npm run framework-docs
+      - name: Self-test — the maintainer-doc guard fails on every planted defect class
+        run: npm run framework-docs:selftest
 
   test:
     name: Test

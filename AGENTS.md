@@ -165,5 +165,19 @@ task/PR/CI/review/verify lifecycle). Adopters do not need any of this — the in
 wizard strips the `.agent-toolkit/` tree and the reference line below when you
 adopt the template, so a fresh instance ships zero dev-plugin state.
 
+**Framework maintainer docs** (ADR 008) live beside the code they govern and are
+stripped at adoption in the same pass:
+
+- [`docs/PRD.md`](docs/PRD.md) — product SSOT: what the framework is for, who adopts
+  it, north star, non-goals.
+- [`docs/SPEC.md`](docs/SPEC.md) + [`docs/adr/`](docs/adr/) — engineering SSOT:
+  architecture, contracts, risk controls, negative requirements, accepted decisions.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — delivery SSOT: the phase 6-11 task blocks
+  `/dev:plan` converts packets from.
+
+`docs/playbook/` and `docs/runbook/` are adopter-facing and deliberately survive
+adoption. `npm run framework-docs` gates the whole contract: the strip list is derived
+from the wizard, and nothing an adopter keeps may link into a stripped path.
+
 Dev workflow (agent-toolkit dev plugin): @.agent-toolkit/dev.md
 <!-- dev-plugin:end -->

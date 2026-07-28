@@ -37,6 +37,8 @@
     "genericity": "bash scripts/ci/check-genericity.sh && node scripts/ci/check-english-only.mjs && node scripts/ci/check-scan-root-docs.mjs",
     "genericity:selftest": "bash scripts/ci/check-skills-gated.sh",
     "genericity:docs-selftest": "bash scripts/ci/check-scan-root-docs-selftest.sh",
+    "framework-docs": "node scripts/ci/check-framework-docs.mjs",
+    "framework-docs:selftest": "node scripts/ci/check-framework-docs.mjs --selftest",
     "dev-plugin:check": "node scripts/ci/check-dev-plugin-action.mjs",
     "version:check": "node scripts/ci/check-version-contract.mjs",
     "release:bump": "node scripts/release/bump-version.mjs",

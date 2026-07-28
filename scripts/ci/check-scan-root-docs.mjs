@@ -30,7 +30,8 @@
 //   - `framework`  -- framework-owned file, present in every checkout. Missing
 //     file or missing anchor is a failure in both modes.
 //   - `instance`   -- a file the adopter owns (`merge=ours`: AGENTS.md,
-//     README.md, .agent-toolkit/**) or that adoption removes (.sekai-template).
+//     README.md, .agent-toolkit/**) or that adoption removes (.sekai-template,
+//     the framework maintainer docs under docs/ -- ADR 008).
 //     Required in TEMPLATE mode, where this repository authors the text. In an
 //     adopted instance an absent file or a reworded anchor is reported as
 //     skipped, because the adopter owns that prose -- but a statement that IS
@@ -172,6 +173,22 @@ const REGISTRY = [
     label: 'Quality gates section, English-only gate roots',
     gate: 'english-only',
     scope: 'framework',
+    anchor: /the\s+English-only\s+gate\s+scans\s+([^;]+);/,
+  },
+  {
+    // Framework maintainer doc (ADR 008): authored here, removed at adoption, so it
+    // is required in template mode and skipped once the wizard has run.
+    file: 'docs/SPEC.md',
+    label: 'Negative requirements, denylist gate roots',
+    gate: 'genericity',
+    scope: 'instance',
+    anchor: /the\s+place-name\s+denylist\s+gate\s+scans\s+([^;]+);/,
+  },
+  {
+    file: 'docs/SPEC.md',
+    label: 'Negative requirements, English-only gate roots',
+    gate: 'english-only',
+    scope: 'instance',
     anchor: /the\s+English-only\s+gate\s+scans\s+([^;]+);/,
   },
   {

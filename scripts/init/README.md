@@ -25,7 +25,8 @@ npm run init -- --answers '{"place":{...}}'  # inline JSON also accepted
 | `FRAMEWORK-VERSION` | The checked-out Sekai framework release this instance adopted. Instance-owned and merge-protected; `/sekai-upgrade` bumps it after verification. |
 | `scripts/ci/genericity-denylist.local.txt` | The adopter's place name (lowercased, plus its no-space form) as **instance-owned** gate terms. `check-genericity.sh` reads this file additively; the framework denylist is never touched, so upgrades never conflict. Appends idempotently if the file already exists. |
 | `.sekai-template` | Removed: the genericity/English-only gates revert from whole-tree (template mode) to code-trees-only (instance mode). |
-| `.agent-toolkit/` | Removed, and the regenerated `AGENTS.md` carries no `@.agent-toolkit/dev.md` reference: a fresh instance ships zero dev-plugin state. That absence is **persistent instance state**, not a one-time deletion — `merge=ours` cannot protect a deleted path, so `/sekai-upgrade` classifies dev-plugin state before every merge and keeps it stripped (`docs/runbook/UPGRADE.md` §Dev-plugin state, ADR 006 addendum). Adopters who want the dev workflow opt in with `dev:setup`. |
+| `.agent-toolkit/` | Removed, and the regenerated `AGENTS.md` carries no `@.agent-toolkit/dev.md` reference: a fresh instance ships zero dev-plugin state. That absence is **persistent instance state**, not a one-time deletion — `merge=ours` cannot protect a deleted path, so `/sekai-upgrade` classifies dev-plugin state before every merge and keeps it stripped (`docs/runbook/UPGRADE.md` §Dev-plugin state, and the dev-plugin decision record in the [framework repository](https://github.com/wilsonkichoi/sekai-kb)). Adopters who want the dev workflow opt in with `dev:setup`. |
+| Framework maintainer docs | Removed: the framework's own product, architecture, and delivery documents plus its decision records. They describe how the framework is built, never how an instance is operated, so a fresh instance ships none of them. `docs/playbook/` (editorial canon) and `docs/runbook/` (operations) are **kept** — they are what you run the site with. The removal list is declared once, in `writer.mjs`; `npm run framework-docs` derives it from there and fails if anything an adopter keeps links into a removed path. |
 
 **Re-run guard:** on an established instance (no `.sekai-template` marker and
 articles already under `knowledge/`) the wizard aborts, because it reseeds
@@ -115,7 +116,10 @@ the absent-safe spec rule: default to feature-off when missing.
   byte-compares the two `place.config.ts` outputs; runs the **interactive**
   mode (piped stdin) with the same answers on a third copy and byte-compares
   it against the `--answers` output (the cross-mode no-drift contract);
-  asserts every seeded artifact; plants a place-name string in `src/` and
+  asserts every seeded artifact; asserts the maintainer-doc strip (four paths
+  gone, both adopter doc trees kept) and re-runs that same predicate against
+  planted inverse fixtures, requiring each to fail so an all-absent assertion
+  cannot pass vacuously; plants a place-name string in `src/` and
   asserts the genericity gate fails via the local denylist, then passes once
   removed.
 - **Tier 2** (`--build`; **destructive** — runs init in the current working
