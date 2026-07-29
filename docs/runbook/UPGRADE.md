@@ -336,8 +336,10 @@ Owning some of these paths and not others is a normal state and never stops the
 upgrade. What does stop it is an owned path the merge **changed or conflicted**:
 that means the path is not marked `merge=ours` in your `.gitattributes`, or
 `merge.ours.driver` is not set in this clone. Both repairs are named in the
-diagnostic. The upgrade never lets the framework's copy overwrite a document you
-wrote.
+diagnostic, along with the undo that works from where you are: `git merge --abort`
+while the merge is still in progress, `git reset --hard ORIG_HEAD` once git has
+committed it (which it does when the framework's edits applied without a conflict).
+The upgrade never lets the framework's copy overwrite a document you wrote.
 
 The path set is derived from the init wizard's own strip list at runtime rather
 than restated, so the upgrade cannot disagree with what adoption removed; if that

@@ -281,6 +281,17 @@ function reconcile(repo, override) {
   }
 
   if (failures.length > 0) {
+    // The undo depends on whether git stopped or committed. A merge that applied
+    // the framework's edits without a conflict is ALREADY on this branch, and
+    // `git merge --abort` fails there with `no merge to abort` — the state this
+    // diagnostic exists to get the user out of.
+    const state = mergeInProgress
+      ? '  The merge has not been committed yet.'
+      : '  The merge is ALREADY COMMITTED on this branch and currently carries the framework\'s\n'
+        + '  copies of those documents. Undo it before pushing.';
+    const undo = mergeInProgress
+      ? '`git merge --abort`'
+      : '`git reset --hard ORIG_HEAD` (ORIG_HEAD is the commit this merge started from)';
     throw new UpgradeStateError(
       [
         'maintainer-doc state was not preserved:',
@@ -288,7 +299,8 @@ function reconcile(repo, override) {
         '  These paths hold documents this instance owns, so the merge must not have touched',
         '  them. Either `.gitattributes` does not mark them `merge=ours`, or the `ours` driver',
         '  is not configured in this clone (it is per-clone and not version-controlled).',
-        '  remedy: `git merge --abort`, add the paths to `.gitattributes` as `merge=ours`, run',
+        state,
+        `  remedy: ${undo}, mark the paths \`merge=ours\` in \`.gitattributes\`, run`,
         '          `git config merge.ours.driver true`, then re-run the upgrade.',
       ].join('\n'),
       EXIT_FAILURE,

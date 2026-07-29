@@ -70,14 +70,20 @@
 #      never deleted.
 #   9. partially owned instance: per-path outcome, and the run does NOT stop —
 #      owning some of these paths and not others is a legitimate adopter state.
-#  10. owned but unprotected, in two shapes (no merge=ours attribute; attribute
-#      present but merge.ours.driver unset in the clone): reconcile stops, names
-#      both repairs, and the framework's copy never wins.
+#  10. owned but unprotected, in three shapes (no merge=ours attribute; attribute
+#      present but merge.ours.driver unset; and the framework's edits merging
+#      cleanly so git auto-commits): reconcile stops, names both repairs, and the
+#      framework's copy never wins. The undo it prescribes depends on the shape —
+#      `git merge --abort` mid-merge, `git reset --hard ORIG_HEAD` once the merge
+#      is committed — and the auto-commit sub-case runs the prescribed command and
+#      asserts it restores the instance's own documents.
 #
-# `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7 and 9
-# with the reconcile step DELIBERATELY SKIPPED and requires each case's own
+# `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9
+# and 10 with the reconcile step DELIBERATELY SKIPPED and requires each case's own
 # assertions to FAIL. A skipped-reconcile run that passes means the case cannot
-# detect the regression it exists to guard, and --selftest exits nonzero.
+# detect the regression it exists to guard, and --selftest exits nonzero. No
+# reconcile-dependent assertion is gated on the skip toggle, because gating one out
+# is how a case silently becomes vacuous.
 #
 # Fixtures use only generic names (Example / Instance / fw-v1) — this repo is in
 # whole-tree template mode, so the genericity + English-only gates scan this file
@@ -346,8 +352,10 @@ assert_mdocs_reconcile_ok() { # dir label
 }
 
 # An owned path the merge touched must STOP the upgrade and name both repairs.
+# Routed through run_mdocs_reconcile so --selftest can skip it: an upgrade that
+# does NOT stop is exactly the regression this assertion guards.
 assert_mdocs_reconcile_stops() { # dir label
-  run_mdocs "$1" reconcile
+  run_mdocs_reconcile "$1" "$2"
   [ "$HELPER_STATUS" -ne 0 ] \
     || fail "$2: reconcile exited 0 on an unprotected owned path — the framework copy was allowed to win"
   [ -n "$HELPER_ERR" ] || fail "$2: reconcile failed with no diagnostic on stderr"
@@ -1147,20 +1155,20 @@ case_mdocs_owned_preserved() { # workdir
   assert_mdocs_reconcile_ok "$inst" "case 8"
 
   # Reported, not deleted: the framework record the merge ADDED under the owned
-  # directory path.
-  if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
-    printf '%s\n%s\n' "$HELPER_OUT" "$HELPER_ERR" | grep -q '002-added-in-fw-v2\.md' \
-      || fail "case 8: reconcile did not report the framework file the merge added under an owned path; stdout: '$HELPER_OUT'"
-    ok "case 8: reconcile reports the framework-added record"
-    for docdir in $MAINTAINER_DOCS; do
-      case "$docdir" in
-        *.md) ;;
-        *) [ -f "$inst/$docdir/002-added-in-fw-v2.md" ] \
-             || fail "case 8: reconcile DELETED the framework-added record (it must report, not delete)" ;;
-      esac
-    done
-    ok "case 8: reconcile deleted nothing"
-  fi
+  # directory path. Deliberately NOT gated on SKIP_RECONCILE — the report is the
+  # only reconcile-dependent behavior in this case, so gating it out would make the
+  # case pass without reconcile and leave it vacuous.
+  printf '%s\n%s\n' "$HELPER_OUT" "$HELPER_ERR" | grep -q '002-added-in-fw-v2\.md' \
+    || fail "case 8: reconcile did not report the framework file the merge added under an owned path; stdout: '$HELPER_OUT'"
+  ok "case 8: reconcile reports the framework-added record"
+  for docdir in $MAINTAINER_DOCS; do
+    case "$docdir" in
+      *.md) ;;
+      *) [ -f "$inst/$docdir/002-added-in-fw-v2.md" ] \
+           || fail "case 8: reconcile DELETED the framework-added record (it must report, not delete)" ;;
+    esac
+  done
+  ok "case 8: reconcile deleted nothing"
 
   finalize_merge "$inst" "case 8"
 
@@ -1267,7 +1275,13 @@ case_mdocs_owned_unprotected() { # workdir
     assert_mdocs_classify "$inst" "case 10/$variant" "$MAINTAINER_DOCS" ""
 
     git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+    git -C "$inst" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+      || fail "case 10/$variant: fixture guard — expected the merge to stop mid-merge (both sides edited these paths)"
     assert_mdocs_reconcile_stops "$inst" "case 10/$variant"
+    if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
+      printf '%s' "$HELPER_ERR" | grep -q 'merge --abort' \
+        || fail "case 10/$variant: mid-merge diagnostic does not prescribe the abort: $HELPER_ERR"
+    fi
 
     # The instance's own document must still be its own: nothing committed, and the
     # committed content at the pre-merge revision untouched.
@@ -1277,6 +1291,54 @@ case_mdocs_owned_unprotected() { # workdir
       || fail "case 10/$variant: the failed reconcile advanced HEAD"
     ok "case 10/$variant: the framework copy did not win and HEAD did not move"
   done
+
+  # 10c — the same unprotected instance, but the framework's edits apply WITHOUT a
+  # conflict, so git auto-commits the merge. `git merge --abort` does not work once
+  # the merge is committed, so the diagnostic must send the user to ORIG_HEAD
+  # instead. Review finding B1 on PR #39: the earlier remedy was unconditional and
+  # failed with `no merge to abort` in exactly this shape.
+  local inst3 fw3 before3
+  fw3="$work/clean-auto-merge/fw"
+  inst3="$work/clean-auto-merge/instance"
+  mkdir -p "$work/clean-auto-merge"
+  build_framework "$fw3"
+  clone_at_v1 "$fw3" "$inst3"
+  # The instance carries the maintainer docs from its own history and never edited
+  # them, and never marked them merge=ours — so fw-v2's edits merge cleanly. It
+  # also drops the framework's VERSION the same way fw-v2 does, because that
+  # one-time modify/delete conflict would otherwise stop the merge for an unrelated
+  # reason and this fixture needs git to auto-commit.
+  git -C "$inst3" rm -q -f VERSION
+  write_instance_agents_md "$inst3/AGENTS.md" no-reference
+  git -C "$inst3" add -A
+  git -C "$inst3" commit -q -m "Instance carries the maintainer-doc paths unprotected"
+  before3="$(git -C "$inst3" rev-parse HEAD)"
+
+  assert_mdocs_classify "$inst3" "case 10/clean-auto-merge" "$MAINTAINER_DOCS" ""
+
+  git -C "$inst3" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  if git -C "$inst3" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    fail "case 10/clean-auto-merge: fixture no longer auto-commits the merge, so the committed-merge remedy is not exercised"
+  fi
+  ok "case 10/clean-auto-merge: the framework's doc edits merged cleanly and git committed the merge"
+
+  assert_mdocs_reconcile_stops "$inst3" "case 10/clean-auto-merge"
+  if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
+    printf '%s' "$HELPER_ERR" | grep -q 'ORIG_HEAD' \
+      || fail "case 10/clean-auto-merge: the diagnostic does not name the committed-merge undo (ORIG_HEAD): $HELPER_ERR"
+    if printf '%s' "$HELPER_ERR" | grep -q 'merge --abort'; then
+      fail "case 10/clean-auto-merge: the diagnostic prescribes \`git merge --abort\`, which fails once the merge is committed: $HELPER_ERR"
+    fi
+    ok "case 10/clean-auto-merge: the diagnostic prescribes the undo that actually works here"
+    # The prescribed remedy must really return the instance to its own documents.
+    git -C "$inst3" reset --hard ORIG_HEAD >/dev/null 2>&1 \
+      || fail "case 10/clean-auto-merge: the prescribed \`git reset --hard ORIG_HEAD\` failed"
+    [ "$(git -C "$inst3" rev-parse HEAD)" = "$before3" ] \
+      || fail "case 10/clean-auto-merge: the prescribed undo did not restore the pre-merge commit"
+    grep -Fq 'fw-v1' "$inst3/$owned" \
+      || fail "case 10/clean-auto-merge: after the undo, $owned does not hold the instance's pre-merge content"
+    ok "case 10/clean-auto-merge: the prescribed undo restores the instance's pre-merge documents"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1342,8 +1404,10 @@ run_selftest() {
   expect_case_to_fail case_stripped_unrelated_history "$TMP/selftest-case2" "case 2 (stripped, unrelated history)"
   expect_case_to_fail case_mdocs_stripped_shared_history "$TMP/selftest-case6" "case 6 (maintainer docs, stripped, shared history)"
   expect_case_to_fail case_mdocs_stripped_unrelated_history "$TMP/selftest-case7" "case 7 (maintainer docs, stripped, unrelated history)"
+  expect_case_to_fail case_mdocs_owned_preserved "$TMP/selftest-case8" "case 8 (maintainer docs, fully owned)"
   expect_case_to_fail case_mdocs_partially_owned "$TMP/selftest-case9" "case 9 (maintainer docs, partially owned)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7 and 9 all fail when reconcile is skipped."
+  expect_case_to_fail case_mdocs_owned_unprotected "$TMP/selftest-case10" "case 10 (maintainer docs, owned but unprotected)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9 and 10 all fail when reconcile is skipped."
 }
 
 main() {
