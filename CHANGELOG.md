@@ -34,6 +34,27 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **The maintainer-doc gate no longer rejects an instance that owns documents at those
+  paths.** `scripts/ci/check-framework-docs.mjs` treated every mention of
+  `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, or `docs/adr/` as a dangling
+  reference and checked its registered statements against whatever file sat at those
+  paths — correct for a wizard-adopted clone, which really has none of them, but wrong
+  for an instance that keeps its own planning documents there. That instance was told to
+  remove the `merge=ours` lines that protect those very documents. In instance mode the
+  gate now treats a maintainer-doc path **present** in the checkout as instance-owned and
+  excludes it from both checks, using the same presence signal `reconcile` uses to
+  classify a path `owned`. Template mode is unchanged and still exhaustive, and a
+  wizard-adopted instance whose paths are genuinely absent still fails on a dangling
+  reference — both are now planted cases in `--selftest`, which additionally asserts two
+  legitimate instance-owned states pass.
+
+**Upgrade note.** Nothing to do. If you kept your own documents at those paths and saw
+`npm run framework-docs` fail after adopting v1.0.12 or v1.0.13, this release fixes it;
+no change to your `.gitattributes` is needed, and the four `merge=ours` lines remain
+required.
+
 ## [1.0.13] — 2026-07-29
 
 /sekai-upgrade classifies and reconciles framework maintainer-doc state per path, and the upgrade-state harness covers both helpers.

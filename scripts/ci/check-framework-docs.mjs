@@ -241,6 +241,21 @@ function run(root) {
   let scannedFiles = 0;
   let danglingChecked = 0;
 
+  // A maintainer-doc path an INSTANCE owns is not a dangling target, and its
+  // document is not the framework's to police. Instance #1 is that case: it keeps
+  // its own PRD, SPEC, ROADMAP, and ADRs at these paths and marks them
+  // `merge=ours`. Presence is the same signal the maintainer-doc reconcile uses to
+  // classify a path `owned` (ADR 008 addendum), so the gate and the upgrade agree
+  // by construction rather than by a second list.
+  //
+  // In template mode nothing is owned: every listed path is the framework's own
+  // document, due to be stripped, so the scan stays exhaustive there.
+  const instanceOwned = templateMode ? [] : maintainerDocs.filter((doc) => existsSync(join(root, doc)));
+  const danglingTargets = maintainerDocs.filter((doc) => !instanceOwned.includes(doc));
+  for (const doc of instanceOwned) {
+    skipped.push(`${doc} (instance-owned: present here, so a reference to it resolves)`);
+  }
+
   for (const rel of walk(root, root)) {
     if (removed.some((prefix) => isUnder(rel, prefix))) continue;
     if (exempt.has(rel)) continue;
@@ -252,7 +267,7 @@ function run(root) {
     }
     if (text.includes('\u0000')) continue; // binary
     scannedFiles += 1;
-    for (const doc of maintainerDocs) {
+    for (const doc of danglingTargets) {
       let index = text.indexOf(doc);
       while (index !== -1) {
         const line = text.slice(0, index).split('\n').length;
@@ -303,15 +318,22 @@ function run(root) {
     const abs = join(root, site.file);
     const registeredInRemovedDoc = removed.some((prefix) => isUnder(site.file, prefix));
 
+    // A registered statement lives in a document adoption removes. In an adopted
+    // instance that document is either absent (wizard-adopted) or the instance's
+    // OWN document at the same path (instance #1). Both are outside this gate's
+    // reach: the framework's registry describes the framework's prose, and an
+    // instance's SPEC is not a copy of it that could go stale. Checking anchors
+    // against an instance-authored document reports drift that does not exist.
+    if (registeredInRemovedDoc && !templateMode) {
+      skipped.push(`${site.file} (${existsSync(abs) ? 'instance-owned' : 'removed at adoption'}: ${site.label})`);
+      continue;
+    }
+
     if (!existsSync(abs)) {
-      if (registeredInRemovedDoc && !templateMode) {
-        skipped.push(`${site.file} (removed at adoption)`);
-      } else {
-        failures.push(
-          `${site.file}: registered file is missing (${site.label}). A registered ` +
-            'statement that cannot be checked is a failure, not a pass.',
-        );
-      }
+      failures.push(
+        `${site.file}: registered file is missing (${site.label}). A registered ` +
+          'statement that cannot be checked is a failure, not a pass.',
+      );
       continue;
     }
 
@@ -439,6 +461,46 @@ function selftest() {
       plant: () => write(WIZARD, 'export const OTHER = 1;\n'),
       expect: /no MAINTAINER_DOCS array literal found/,
     },
+    {
+      // Non-regression for the instance-owned cases below: dropping the template
+      // marker must NOT switch the dangling scan off. A wizard-adopted instance
+      // really has none of these paths, so a reference in a file it keeps still
+      // dangles and must still fail.
+      what: 'a dangling reference in a wizard-adopted instance (paths really absent)',
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        rmSync(join(fixture, 'docs/PRD.md'));
+        rmSync(join(fixture, 'docs/adr'), { recursive: true });
+        write('docs/runbook/DEPLOY.md', 'See docs/PRD.md for intent.\n');
+      },
+      expect: /links into "docs\/PRD\.md"/,
+    },
+  ];
+
+  // Cases that must PASS. An instance that keeps its OWN documents at the
+  // maintainer-doc paths (instance #1) is a legitimate state, not a defect: the
+  // reference resolves, and the instance's document is not a stale copy of the
+  // framework's prose. Only "must fail" cases would let a gate that rejects that
+  // state look healthy.
+  const passCases = [
+    {
+      what: 'an instance that owns a maintainer-doc path, referenced from a file it keeps',
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        // docs/PRD.md and docs/adr/ stay: this instance wrote its own.
+        write('docs/runbook/DEPLOY.md', 'Intent for this instance lives in docs/PRD.md.\n');
+      },
+    },
+    {
+      what: "an instance-owned SPEC that does not carry the framework's registered statements",
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
+        // The instance's SPEC is its own document, with none of the framework
+        // anchors in it. That is the split working, not drift.
+        write('docs/SPEC.md', 'This instance deploys to Pages behind a CDN. Categories live in config.\n');
+      },
+    },
   ];
 
   try {
@@ -466,12 +528,26 @@ function selftest() {
         return 1;
       }
     }
+
+    for (const testCase of passCases) {
+      build();
+      testCase.plant();
+      const result = run(fixture);
+      if (result.failures.length > 0) {
+        console.error(
+          `FAIL: framework-docs self-test -- the guard REJECTED a legitimate state: ${testCase.what}.`,
+        );
+        for (const f of result.failures) console.error(`  ${f}`);
+        return 1;
+      }
+    }
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
 
   console.log(
-    `OK: framework-docs self-test passed -- the guard catches all ${cases.length} planted defect classes`,
+    `OK: framework-docs self-test passed -- the guard catches all ${cases.length} planted defect ` +
+      `classes and accepts all ${passCases.length} legitimate instance-owned states`,
   );
   return 0;
 }

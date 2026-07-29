@@ -111,7 +111,14 @@ sekai-kb/
 > `.agent-toolkit/`. The init wizard removes them; `docs/playbook/` and `docs/runbook/`
 > stay, because they are what an adopter operates the site with. No file that ships to an
 > adopter may carry a link into a removed path —
-> `scripts/ci/check-framework-docs.mjs` is the gate.
+> `scripts/ci/check-framework-docs.mjs` is the gate. An instance that keeps its **own**
+> document at one of these paths is a legitimate state, not a violation: the reference
+> resolves there, and that document is the instance's, never a copy of the framework's
+> prose that could go stale. In instance mode the gate therefore treats a maintainer-doc
+> path **present** in the checkout as instance-owned — excluded from the dangling-reference
+> scan and from the registered-statement anchors — using the same presence signal the
+> upgrade's `reconcile` uses to classify a path `owned`. In template mode nothing is
+> owned, so both checks stay exhaustive.
 
 > **Maintainer-doc state persistence (2026-07-28, ADR 008 addendum):** the maintainer docs
 > are subject to the same `merge=ours` limit as `.agent-toolkit/` — the attribute protects
