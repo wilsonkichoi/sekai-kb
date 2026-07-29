@@ -148,10 +148,14 @@ jobs:
       # inconsistent state stops the upgrade (ADR 006 addendum) — and its
       # maintainer-doc state, classified per path, where an absent path stays absent
       # and a path the instance owns is never deleted or overwritten (ADR 008
-      # addendum). The harness builds disposable git repos and drives the same
-      # scripts/upgrade/ helpers users run, so it is framework-owned and never
-      # guarded away on an adopter.
-      - name: Upgrade state regressions (dev-plugin + maintainer docs)
+      # addendum), including the first upgrade to the release that introduces the
+      # strip list, where the path set can only come from the tag. It must also
+      # preserve FRAMEWORK-VERSION: `merge=ours` does not fire on a file the instance
+      # has not edited since the merge base, so the value is captured and restored
+      # and only the explicit post-verification bump moves it. The harness builds
+      # disposable git repos and drives the same scripts/upgrade/ helpers users run,
+      # so it is framework-owned and never guarded away on an adopter.
+      - name: Upgrade state regressions (dev-plugin, maintainer docs, FRAMEWORK-VERSION)
         run: |
           git config --global user.email "ci@example.invalid"
           git config --global user.name "CI"

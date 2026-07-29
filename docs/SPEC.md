@@ -45,7 +45,8 @@ framework main**; determinism is guaranteed by (a) immutable semver tags + CHANG
 upgrade notes, (b) zero place content in the template, (c) `merge=ours` on instance-owned
 files (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
 `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`,
-`docs/baselines/**`, `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`),
+`docs/baselines/**`, `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`,
+`docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/**`),
 (d) the **ownership rule**: an instance's `src/` and `scripts/` are framework-owned —
 customization flows through config/content/media; anything more is upstreamed to sekai-kb
 first and pulled back as a release. `.gitattributes` in each repository is the operative
@@ -90,7 +91,7 @@ sekai-kb/
 ├── docs/adr/                  # framework maintainer docs; removed by init
 ├── CHANGELOG.md               # framework release log; init replaces it with instance history
 ├── VERSION                    # adopter only: instance release; merge=ours
-├── FRAMEWORK-VERSION          # adopted tag; merge=ours, then /sekai-upgrade bumps it
+├── FRAMEWORK-VERSION          # adopted tag; captured/restored across the merge, then bumped
 ├── AGENTS.md                  # instance-owned agent-instruction SSOT
 └── CLAUDE.md                  # one-line @AGENTS.md shim
 ```
@@ -375,8 +376,14 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   and records instance work only. The init wizard replaces the template's framework
   release log with an instance changelog. `/sekai-upgrade` reads framework release notes
   from the target tag and preserves the local changelog through `merge=ours`.
-  `FRAMEWORK-VERSION` is also merge-protected; `/sekai-upgrade` bumps it explicitly after
-  successful verification.
+  `FRAMEWORK-VERSION` carries the attribute too, but the attribute alone does not hold
+  it: a merge driver runs only on a three-way content merge, so an instance whose copy
+  still equals the merge base has git resolve to theirs without consulting the driver.
+  `/sekai-upgrade` therefore captures the pre-merge value in `package-state.mjs` and
+  restores it immediately after the merge (amending the merge commit when git
+  auto-committed), so the file still reads the old version until the explicit bump after
+  successful verification — which asserts the result rather than assuming its write took
+  effect. `scripts/upgrade/check-upgrade-state.sh` is the gate for that contract.
 - **2026-07-19, LB-44 delta:** added the dev-plugin state-persistence
   contract for framework upgrades. This corrects the false assumption that
   `.gitattributes merge=ours` preserves a deleted `.agent-toolkit/` path.

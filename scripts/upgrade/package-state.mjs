@@ -1,11 +1,36 @@
 #!/usr/bin/env node
+//
+// package-state.mjs — carry adopter-owned state across a framework tag merge.
+//
+// Two things ride this helper, for the same reason and through the same
+// capture -> merge -> restore -> amend shape:
+//
+//   1. The mixed-ownership npm manifests. Sekai owns scripts, dependencies, and
+//      lock resolution; the adopter owns package name, description, privacy, and
+//      the version mirrored from VERSION. They are deliberately NOT `merge=ours`,
+//      because the framework half must come through.
+//   2. FRAMEWORK-VERSION. It IS marked `merge=ours`, and that is not enough: a
+//      merge driver only runs on a three-way conflict, and an instance that has
+//      not touched the file since the merge base has `ours == base`, so git
+//      fast-forwards to theirs and the file silently claims the incoming release
+//      before anything has verified. The upgrade's contract is that it still reads
+//      the OLD version until the explicit post-verification bump, so the pre-merge
+//      value is captured here and restored immediately after the merge. Restoring
+//      an absent file means removing whatever the merge introduced: an instance
+//      that had no FRAMEWORK-VERSION must not gain one that predates its own
+//      verification.
+//
+// `scripts/upgrade/check-upgrade-state.sh` is the regression gate for the
+// FRAMEWORK-VERSION half; `scripts/upgrade/check-package-state.mjs` for the
+// manifest half.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const VERSION_RE = /^v\d+\.\d+\.\d+$/;
+const FRAMEWORK_VERSION = 'FRAMEWORK-VERSION';
 
 const git = (root, args, options = {}) => execFileSync('git', ['-C', root, ...args], {
   encoding: 'utf8',
@@ -41,6 +66,14 @@ const validateAdopter = (root) => {
   return { version, pkg, lock };
 };
 
+// Raw bytes, so the restore is byte-for-byte; `null` records "the instance had no
+// FRAMEWORK-VERSION", which is a real pre-wizard state and not the same as "not
+// captured" (an absent key, written by an older release of this helper).
+const readFrameworkVersion = (root) => {
+  const path = resolve(root, FRAMEWORK_VERSION);
+  return existsSync(path) ? readFileSync(path, 'utf8') : null;
+};
+
 export const capturePackageState = (root, output = gitPath(root, 'sekai-package-state.json')) => {
   const base = resolve(root);
   const { version, pkg } = validateAdopter(base);
@@ -49,6 +82,7 @@ export const capturePackageState = (root, output = gitPath(root, 'sekai-package-
     description: pkg.description,
     private: pkg.private,
     version,
+    frameworkVersion: readFrameworkVersion(base),
   };
   writeFileSync(output, `${JSON.stringify(state, null, 2)}\n`);
   return output;
@@ -101,6 +135,22 @@ export const reconcilePackageState = (root, statePath = gitPath(root, 'sekai-pac
   writeJsonAtomic(resolve(base, 'package-lock.json'), lock);
   git(base, ['add', '--', 'package.json', 'package-lock.json']);
 
+  // A state file written before this helper carried FRAMEWORK-VERSION has no key
+  // at all; touching the file on that evidence would be a guess.
+  const frameworkVersionCaptured = Object.hasOwn(state, 'frameworkVersion');
+  if (frameworkVersionCaptured) {
+    const path = resolve(base, FRAMEWORK_VERSION);
+    if (state.frameworkVersion === null) {
+      git(base, ['rm', '-q', '-f', '--ignore-unmatch', '--', FRAMEWORK_VERSION]);
+      if (existsSync(path)) unlinkSync(path);
+    } else {
+      // Also resolves the path when the merge left it unmerged: the instance's
+      // pre-merge bytes are the answer, and staging them settles the conflict.
+      writeFileSync(path, state.frameworkVersion);
+      git(base, ['add', '--', FRAMEWORK_VERSION]);
+    }
+  }
+
   let mergeInProgress = true;
   try {
     git(base, ['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
@@ -109,10 +159,29 @@ export const reconcilePackageState = (root, statePath = gitPath(root, 'sekai-pac
   }
   if (!mergeInProgress) git(base, ['commit', '--amend', '--no-edit'], { stdio: 'ignore' });
   unlinkSync(statePath);
-  return { name: state.name, version: state.version, amended: !mergeInProgress };
+  return {
+    name: state.name,
+    version: state.version,
+    frameworkVersion: frameworkVersionCaptured ? state.frameworkVersion : undefined,
+    amended: !mergeInProgress,
+  };
 };
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+// `realpathSync` is load-bearing, exactly as in `maintainer-docs-state.mjs`:
+// `import.meta.url` is the resolved real path while `process.argv[1]` keeps the
+// symlinks it was invoked through (a temp directory under `/var` on macOS is
+// really `/private/var`). Comparing the two unresolved makes this file a silent
+// no-op when it is run from the copy the upgrade extracts out of a release tag —
+// which is the documented first-upgrade bootstrap.
+const entryPoint = (() => {
+  if (!process.argv[1]) return null;
+  try {
+    return pathToFileURL(realpathSync(resolve(process.argv[1]))).href;
+  } catch {
+    return null;
+  }
+})();
+const isMain = entryPoint !== null && import.meta.url === entryPoint;
 if (isMain) {
   const [command, ...args] = process.argv.slice(2);
   try {
@@ -120,7 +189,15 @@ if (isMain) {
       console.log(capturePackageState(process.cwd(), args[0]));
     } else if (command === 'reconcile' && args.length <= 1) {
       const result = reconcilePackageState(process.cwd(), args[0]);
-      console.log(`package-state: restored ${result.name} ${result.version}${result.amended ? ' and amended the merge commit' : ''}`);
+      const framework = result.frameworkVersion === undefined
+        ? ''
+        : `, ${FRAMEWORK_VERSION} held at ${
+          result.frameworkVersion === null ? 'absent' : result.frameworkVersion.trim()
+        } until the post-verification bump`;
+      console.log(
+        `package-state: restored ${result.name} ${result.version}${framework}`
+          + `${result.amended ? ' and amended the merge commit' : ''}`,
+      );
     } else {
       console.error('usage: node scripts/upgrade/package-state.mjs <capture|reconcile> [state-file]');
       process.exit(2);

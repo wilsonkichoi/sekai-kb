@@ -24,6 +24,40 @@ packet's `Execution repo:` field says where its code lands (absent → `sekai-kb
 for framework work). Both repos read their own `.agent-toolkit/dev.md`; this one
 governs work committed here.
 
+**Which repo a session runs in.** This is the framework-side half of the rule the
+first instance's `.agent-toolkit/dev.md` carries; the two must state the same thing.
+`gh` resolves against the working-directory repository, so the working directory is
+what makes cross-repo targeting correct — not a per-call `-R` flag. **A session runs
+in the repository that owns the documents it reads and the commits it makes**, which
+are always the same repository:
+
+- **Execution skills** — `/dev:execute`, `/dev:review-pr`, `/dev:verify` — run in the
+  repository named by the packet's `Execution repo:` field. Framework work (Phase 6+,
+  anything touching `src/`, `scripts/`, `.agents/skills/`, or the maintainer docs) runs
+  here, so PR numbers, CI runs, and review threads resolve against this repository with
+  no flag and no bare-`#N` ambiguity. A packet about an instance's own content, config,
+  feature flags, or `/sekai-upgrade` adoption names that instance and runs there.
+- **`/dev:plan`** runs in the repository whose ROADMAP carries the phase being
+  decomposed, and amends that ROADMAP there. Phases 6-11 are framework phases: plan them
+  here against `docs/ROADMAP.md`. A constraint that lands on the other repository is
+  recorded in the packet and surfaced to the maintainer, never written into the other
+  repository's ROADMAP from this side.
+- **`/dev:backlog`** runs where the change lands. A stub that becomes framework work is
+  triaged here against `docs/SPEC.md` + `docs/ROADMAP.md`; a stub about an instance's
+  content, config, or adoption is triaged there. The Linear stub itself is repo-neutral —
+  triage picks the side, and the resulting packet's `Execution repo:` field records it.
+- **`/dev:status` and `/dev:retro`** read the tracker, which spans both repositories, so
+  either working directory answers correctly. Run `/dev:retro` in the repository whose
+  rules it may promote into: a lesson about framework code belongs in this tree's
+  `.agent-toolkit/rules/`, one about an instance's process belongs in that instance's.
+  A retro producing both writes each rule on its own side.
+- Every packet states `Execution repo:` — that field is what makes this mechanical.
+  Record the full PR URL on the Linear task either way: the tracker spans both
+  repositories and PR numbering does not.
+
+Where the two copies disagree, this one governs framework commits and the instance's
+governs its own — and the disagreement is a defect to report, not a choice to make.
+
 ## Binding docs
 
 - **Product SSOT:** `docs/PRD.md` — what the framework is for, who adopts it, north

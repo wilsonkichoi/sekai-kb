@@ -27,3 +27,15 @@ scripts/ci/genericity-denylist.local.txt merge=ours
 # framework's own dev config. (Adopters that keep no dev workflow have this tree
 # stripped at adoption by the init wizard.)
 .agent-toolkit/** merge=ours
+
+# Maintainer-doc paths (ADR 008). The init wizard strips the framework's own copies,
+# so most instances have nothing here and these lines are inert. An instance that
+# keeps its OWN product, architecture, delivery, or decision records at these paths
+# is a legitimate state, and its documents are never the framework's to overwrite —
+# shipping the attribute means such an instance is protected by default instead of
+# having to remember to add it before its next merge. Absence is a different problem
+# that no attribute can solve; scripts/upgrade/maintainer-docs-state.mjs owns it.
+docs/PRD.md merge=ours
+docs/SPEC.md merge=ours
+docs/ROADMAP.md merge=ours
+docs/adr/** merge=ours

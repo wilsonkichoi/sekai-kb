@@ -3,9 +3,9 @@
 // maintainer-docs-state.mjs — classify and preserve an instance's maintainer-doc
 // state across a framework tag merge (ADR 008 addendum, SPEC "Repo topology").
 //
-//   node scripts/upgrade/maintainer-docs-state.mjs classify  [--repo <dir>] [--state <file>]
-//   node scripts/upgrade/maintainer-docs-state.mjs reconcile [--repo <dir>] [--state <file>]
-//   node scripts/upgrade/maintainer-docs-state.mjs paths     [--repo <dir>]
+//   node scripts/upgrade/maintainer-docs-state.mjs classify  [--repo <dir>] [--from-tag <tag>] [--state <file>]
+//   node scripts/upgrade/maintainer-docs-state.mjs reconcile [--repo <dir>] [--from-tag <tag>] [--state <file>]
+//   node scripts/upgrade/maintainer-docs-state.mjs paths     [--repo <dir>] [--from-tag <tag>]
 //
 // Why this exists: `.gitattributes merge=ours` protects the CONTENT of a path that
 // exists on both merge sides. It does not preserve an intentionally ABSENT path.
@@ -21,6 +21,16 @@
 // `scripts/ci/check-framework-docs.mjs` derives from, which imports the parser
 // below and asserts both agree. A hardcoded copy in the upgrade path would drift
 // from the strip it exists to preserve.
+//
+// `--from-tag <tag>` moves only the DERIVATION to that tag, reading the wizard with
+// `git show <tag>:scripts/init/writer.mjs`; path PRESENCE is still read from the
+// pre-merge working tree, which is the only place that records what the instance
+// owns. It exists for the first upgrade to a release that introduces the strip
+// list: the helper is bootstrapped out of that tag, but the working tree's wizard
+// still predates the export, so deriving from the working tree exits 3 and the
+// classification the whole pass depends on cannot be produced at all. Later
+// upgrades may pass it or not — after the first merge both sources agree, because
+// the wizard is framework-owned.
 //
 // Classification is PER PATH, not whole-set (ADR 008 addendum (a)): these paths
 // carry no activation signal and are mutually independent, so an instance may
@@ -103,29 +113,51 @@ function distinctPaths(lines) {
   return [...new Set(lines.map((line) => (line.includes('\t') ? line.split('\t').pop() : line)))];
 }
 
-/** Maintainer-doc paths, derived from the wizard in the given tree. */
-function maintainerDocs(repo) {
+/**
+ * The wizard source the path set is derived from: the working tree by default, or
+ * the tag named by `--from-tag`. Returns null when that source has no wizard.
+ */
+function wizardSource(repo, fromTag) {
+  if (fromTag) {
+    return git(repo, ['show', `${fromTag}:${WIZARD}`], { allowFailure: true });
+  }
   const wizard = join(repo, WIZARD);
-  if (!existsSync(wizard)) {
+  return existsSync(wizard) ? readFileSync(wizard, 'utf8') : null;
+}
+
+/** Maintainer-doc paths, derived from the wizard in the working tree or in `--from-tag`. */
+function maintainerDocs(repo, fromTag) {
+  const where = fromTag ? `${fromTag}:${WIZARD}` : WIZARD;
+  const src = wizardSource(repo, fromTag);
+  if (src === null) {
     throw new UpgradeStateError(
       [
-        `cannot derive the maintainer-doc contract: ${WIZARD} is missing.`,
+        `cannot derive the maintainer-doc contract: ${where} is missing.`,
         '  This helper never hardcodes the path set; it reads the init wizard so the upgrade',
         '  and the adoption strip cannot disagree.',
-        '  remedy: run this from an instance repository that carries the framework scripts,',
-        '          or pass --repo pointing at one.',
+        fromTag
+          ? '  remedy: name a tag that carries the framework scripts, or drop --from-tag to read'
+            + '\n          the working tree.'
+          : '  remedy: run this from an instance repository that carries the framework scripts,'
+            + '\n          or pass --repo pointing at one.',
       ].join('\n'),
       EXIT_UNDERIVABLE,
     );
   }
-  const docs = deriveMaintainerDocs(readFileSync(wizard, 'utf8'));
+  const docs = deriveMaintainerDocs(src);
   if (!docs) {
     throw new UpgradeStateError(
       [
-        `cannot derive the maintainer-doc contract: no MAINTAINER_DOCS array literal in ${WIZARD}.`,
+        `cannot derive the maintainer-doc contract: no MAINTAINER_DOCS array literal in ${where}.`,
         '  Treating that as an empty set would classify every path as absent, delete nothing,',
         '  and report success — so this stops instead.',
-        '  remedy: re-point the derivation in the same commit that moved or renamed the list.',
+        fromTag
+          ? '  remedy: name a release tag whose wizard exports MAINTAINER_DOCS, or re-point the'
+            + '\n          derivation in the same commit that moved or renamed the list.'
+          : '  remedy: on the FIRST upgrade to a release that introduces the strip list, this tree\'s'
+            + '\n          wizard predates it — re-run with `--from-tag <the tag being merged>` so the'
+            + '\n          path set comes from that tag while presence is still read from this tree.'
+            + '\n          Otherwise: re-point the derivation in the same commit that moved the list.',
       ].join('\n'),
       EXIT_UNDERIVABLE,
     );
@@ -176,8 +208,8 @@ function preMergeRevision(repo, mergeInProgress) {
 }
 
 /** Working-tree presence, the whole classification for a maintainer-doc path. */
-function classify(repo) {
-  const paths = maintainerDocs(repo);
+function classify(repo, fromTag) {
+  const paths = maintainerDocs(repo, fromTag);
   const owned = [];
   const stripped = [];
   for (const rel of paths) {
@@ -187,8 +219,8 @@ function classify(repo) {
   return { owned, stripped };
 }
 
-function writeState(repo, override) {
-  const state = classify(repo);
+function writeState(repo, override, fromTag) {
+  const state = classify(repo, fromTag);
   const file = statePath(repo, override);
   writeFileSync(file, `${JSON.stringify({ version: 1, ...state }, null, 2)}\n`);
   return { ...state, file };
@@ -219,7 +251,7 @@ function existedAt(repo, rev, rel) {
   return gitLines(repo, ['ls-tree', '-r', '--name-only', rev, '--', rel]).length > 0;
 }
 
-function reconcile(repo, override) {
+function reconcile(repo, override, fromTag) {
   const notes = [];
   const failures = [];
   const captured = readState(repo, override);
@@ -230,7 +262,7 @@ function reconcile(repo, override) {
   // maintainer-owned is handled on the upgrade that introduces it, rather than one
   // release later. Anything the capture did not classify is decided from the
   // pre-merge revision directly.
-  const declared = maintainerDocs(repo);
+  const declared = maintainerDocs(repo, fromTag);
   const all = [...new Set([...captured.owned, ...captured.stripped, ...declared])].sort();
 
   let staged = false;
@@ -354,19 +386,19 @@ function reconcile(repo, override) {
   return notes;
 }
 
+const OPTIONS = { '--repo': 'repo', '--state': 'state', '--from-tag': 'fromTag' };
+
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { repo: process.cwd(), state: null };
+  const options = { repo: process.cwd(), state: null, fromTag: null };
   for (let i = 0; i < rest.length; i += 1) {
     const flag = rest[i];
     const value = rest[i + 1];
-    if (flag === '--repo' || flag === '--state') {
-      if (value === undefined) throw new UpgradeStateError(`${flag} needs a value`, EXIT_USAGE);
-      options[flag === '--repo' ? 'repo' : 'state'] = value;
-      i += 1;
-    } else {
-      throw new UpgradeStateError(`unknown argument: ${flag}`, EXIT_USAGE);
-    }
+    const key = OPTIONS[flag];
+    if (!key) throw new UpgradeStateError(`unknown argument: ${flag}`, EXIT_USAGE);
+    if (value === undefined) throw new UpgradeStateError(`${flag} needs a value`, EXIT_USAGE);
+    options[key] = value;
+    i += 1;
   }
   return { command, options };
 }
@@ -376,12 +408,12 @@ function main(argv) {
   const repoRoot = git(options.repo, ['rev-parse', '--show-toplevel']);
 
   if (command === 'paths') {
-    for (const rel of maintainerDocs(repoRoot)) process.stdout.write(`${rel}\n`);
+    for (const rel of maintainerDocs(repoRoot, options.fromTag)) process.stdout.write(`${rel}\n`);
     return;
   }
 
   if (command === 'classify') {
-    const state = writeState(repoRoot, options.state);
+    const state = writeState(repoRoot, options.state, options.fromTag);
     process.stdout.write(`maintainer-docs-state: owned: ${state.owned.join(', ') || 'none'}\n`);
     process.stdout.write(`maintainer-docs-state: stripped: ${state.stripped.join(', ') || 'none'}\n`);
     process.stdout.write(`maintainer-docs-state: recorded ${state.file}\n`);
@@ -389,7 +421,7 @@ function main(argv) {
   }
 
   if (command === 'reconcile') {
-    for (const note of reconcile(repoRoot, options.state)) {
+    for (const note of reconcile(repoRoot, options.state, options.fromTag)) {
       process.stdout.write(`maintainer-docs-state: ${note}\n`);
     }
     process.stdout.write('maintainer-docs-state: maintainer-doc state preserved\n');
@@ -397,9 +429,12 @@ function main(argv) {
   }
 
   throw new UpgradeStateError(
-    'usage: maintainer-docs-state.mjs classify  [--repo <dir>] [--state <file>]\n' +
-      '       maintainer-docs-state.mjs reconcile [--repo <dir>] [--state <file>]\n' +
-      '       maintainer-docs-state.mjs paths     [--repo <dir>]',
+    'usage: maintainer-docs-state.mjs classify  [--repo <dir>] [--from-tag <tag>] [--state <file>]\n' +
+      '       maintainer-docs-state.mjs reconcile [--repo <dir>] [--from-tag <tag>] [--state <file>]\n' +
+      '       maintainer-docs-state.mjs paths     [--repo <dir>] [--from-tag <tag>]\n' +
+      '  --from-tag moves only the path-set derivation to that tag; presence is always read\n' +
+      '  from the working tree. Use it on the first upgrade to a release that introduces the\n' +
+      '  strip list, when this tree\'s wizard still predates it.',
     EXIT_USAGE,
   );
 }

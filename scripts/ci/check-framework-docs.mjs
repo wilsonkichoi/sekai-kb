@@ -17,7 +17,12 @@
 //      never existed.
 //   2. MERGE=OURS LIST -- the instance-owned file list comes from `.gitattributes`.
 //      SPEC §Repo topology and ADR 006's consequences both enumerate it in prose; that
-//      list has drifted from reality before (ADR 006 exists partly to correct it).
+//      list has drifted from reality before (ADR 006 exists partly to correct it). The
+//      two ADOPTER-FACING restatements are registered too -- `docs/runbook/UPGRADE.md`'s
+//      instance-owned table and the `/sekai-upgrade` skill's step 4 -- because those are
+//      the copies an adopter actually reads, and they survive adoption. Both are checked
+//      for containment rather than equality in an adopted clone, since an adopter's
+//      `.gitattributes` legitimately grows paths the framework's documents do not list.
 //   3. BUILD PIPELINE -- the prebuild and post-build job names come from
 //      `package.json`. SPEC §Build pipeline enumerates both.
 //
@@ -86,6 +91,13 @@ const STRIP_MECHANISM_FILES = [
   'scripts/ci/check-scan-root-docs.mjs',
 ];
 
+// The ownership source. `.gitattributes` must name a maintainer-doc path in order to
+// PROTECT an instance's own document there (ADR 008), and a path in an attribute line
+// is data git reads, never a link a reader follows. It is exempt for the same reason
+// the strip mechanisms are, and for no broader one: this list stays at the single file
+// the merge=ours enumeration is derived FROM.
+const OWNERSHIP_DECLARATION_FILES = ['.gitattributes'];
+
 const PRUNED_DIRS = new Set(['node_modules', '.git', 'dist', '.astro', '.venv', '__pycache__']);
 const PRUNED_PATHS = ['src/content', 'src/data', 'public/kb'];
 
@@ -134,11 +146,32 @@ function parseList(span) {
     .filter(Boolean);
 }
 
+/** A markdown table's first column: one path per row, backticks and padding stripped. */
+function parseTableFirstColumn(span) {
+  return span
+    .split('\n')
+    .map((row) => row.split('|')[1] ?? '')
+    .map((cell) => cell.replace(/[`'"\\]/g, '').trim())
+    .map((cell) => cell.replace(/\/+$/, ''))
+    .filter(Boolean);
+}
+
 /* -- The registry: which prose statement restates which derived list -- */
 //
 // Each anchor has exactly one capture group holding ONLY the enumeration. Anchors
 // carry prose, never list members, so they stay valid when the source changes and
 // fail loudly when the prose is reworded.
+//
+// `parse` defaults to the comma-separated `parseList`; a markdown table uses
+// `parseTableFirstColumn`.
+//
+// `instanceSubset` marks a site that SURVIVES adoption, so it is checked in an
+// adopter's clone too. There the framework's document is fixed while `.gitattributes`
+// is append-only per adopter ("Adopters add their own instance-specific files the same
+// way"), so exact equality would fail every adopter that ever added a path. Those sites
+// require containment in instance mode -- every documented row must really be declared --
+// and full equality in template mode, where the two lists are the framework's own and
+// must match exactly.
 
 const REGISTRY = [
   {
@@ -152,6 +185,21 @@ const REGISTRY = [
     label: 'Consequences, instance-owned merge=ours list',
     source: 'merge-ours',
     anchor: /The\s+`merge=ours`\s+list\s+is\s+now:\s*([\s\S]*?)\.\n/,
+  },
+  {
+    file: 'docs/runbook/UPGRADE.md',
+    label: 'Instance-owned files table',
+    source: 'merge-ours',
+    anchor: /\|\s*Path\s*\|\s*Why instance-owned\s*\|\n\|[\s|:-]+\|\n((?:\|.*\n)+)/,
+    parse: parseTableFirstColumn,
+    instanceSubset: true,
+  },
+  {
+    file: '.agents/skills/sekai-upgrade/SKILL.md',
+    label: 'Step 4, instance-owned file list',
+    source: 'merge-ours',
+    anchor: /instance-owned\s+file\s+\(([^)]+)\)/,
+    instanceSubset: true,
   },
   {
     file: 'docs/SPEC.md',
@@ -184,6 +232,41 @@ function* walk(root, dir) {
 }
 
 const isUnder = (rel, prefix) => rel === prefix || rel.startsWith(`${prefix}/`);
+
+/**
+ * Blank out a span, keeping newlines so every later line number is unchanged.
+ */
+function maskSpan(text, start, end) {
+  const blanked = text.slice(start, end).replace(/[^\n]/g, ' ');
+  return text.slice(0, start) + blanked + text.slice(end);
+}
+
+/**
+ * Where each registered enumeration sits in its file. The dangling-reference scan
+ * masks those spans: a registered list is derived data, checked against its source
+ * a few lines below, not a link a reader would follow. Without this a document that
+ * an adopter keeps could not record that `docs/PRD.md` is a path they may own --
+ * the very statement ADR 008 requires it to make.
+ */
+function registeredSpans(root) {
+  const spans = new Map();
+  for (const site of REGISTRY) {
+    const abs = join(root, site.file);
+    if (!existsSync(abs)) continue;
+    let text;
+    try {
+      text = readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
+    const match = site.anchor.exec(text);
+    if (!match) continue;
+    const list = spans.get(site.file) ?? [];
+    list.push([match.index, match.index + match[0].length]);
+    spans.set(site.file, list);
+  }
+  return spans;
+}
 
 /* -- The three checks -- */
 
@@ -237,7 +320,12 @@ function run(root) {
   }
 
   const removed = [...maintainerDocs, ...OTHER_REMOVED_AT_ADOPTION];
-  const exempt = new Set([...REGENERATED_AT_ADOPTION, ...STRIP_MECHANISM_FILES]);
+  const exempt = new Set([
+    ...REGENERATED_AT_ADOPTION,
+    ...STRIP_MECHANISM_FILES,
+    ...OWNERSHIP_DECLARATION_FILES,
+  ]);
+  const masked = registeredSpans(root);
   let scannedFiles = 0;
   let danglingChecked = 0;
 
@@ -266,6 +354,10 @@ function run(root) {
       continue; // unreadable (permissions, races): not this guard's concern
     }
     if (text.includes('\u0000')) continue; // binary
+    // Registered enumerations are derived data, not prose links (see registeredSpans).
+    // Masking preserves line numbers, so a real reference outside the span still
+    // reports the line it is on.
+    for (const [start, end] of masked.get(rel) ?? []) text = maskSpan(text, start, end);
     scannedFiles += 1;
     for (const doc of danglingTargets) {
       let index = text.indexOf(doc);
@@ -292,8 +384,10 @@ function run(root) {
   /* 2 + 3. Registered enumerations against their derived sources. */
 
   const expected = {};
+  const expectedPaths = {};
   try {
-    expected['merge-ours'] = asSet(deriveMergeOursPaths(read(GITATTRIBUTES)));
+    expectedPaths['merge-ours'] = deriveMergeOursPaths(read(GITATTRIBUTES));
+    expected['merge-ours'] = asSet(expectedPaths['merge-ours']);
   } catch (err) {
     failures.push(`${GITATTRIBUTES}: cannot be read (${err.message}).`);
   }
@@ -347,13 +441,31 @@ function run(root) {
       continue;
     }
 
-    const found = asSet(parseList(match[1]));
+    const foundPaths = (site.parse ?? parseList)(match[1]);
+    const found = asSet(foundPaths);
+    const derivedFrom = site.source === 'merge-ours' ? GITATTRIBUTES : PACKAGE_JSON;
+    const line = text.slice(0, match.index).split('\n').length;
+
+    // A surviving site in an adopted clone: every documented path must be declared,
+    // but the adopter's own additions need not be documented (see `instanceSubset`).
+    if (site.instanceSubset && !templateMode) {
+      const declared = new Set(expectedPaths[site.source] ?? []);
+      const undeclared = [...new Set(foundPaths)].filter((path) => !declared.has(path)).sort();
+      if (undeclared.length > 0) {
+        failures.push(
+          `${site.file}:${line}: ${site.label} (derived from ${derivedFrom})\n` +
+            `      documented but not declared: ${undeclared.join(', ')}\n` +
+            `      declared: ${expected[site.source]}`,
+        );
+        continue;
+      }
+      checked += 1;
+      continue;
+    }
+
     if (found !== expected[site.source]) {
-      const line = text.slice(0, match.index).split('\n').length;
       failures.push(
-        `${site.file}:${line}: ${site.label} (derived from ${
-          site.source === 'merge-ours' ? GITATTRIBUTES : PACKAGE_JSON
-        })\n` +
+        `${site.file}:${line}: ${site.label} (derived from ${derivedFrom})\n` +
           `      found:    ${found || '(none)'}\n` +
           `      expected: ${expected[site.source]}`,
       );
@@ -405,6 +517,20 @@ function selftest() {
     write(
       'docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
       'The `merge=ours` list is now: `CLAUDE.md`, `knowledge/**`.\n',
+    );
+    write(
+      'docs/runbook/UPGRADE.md',
+      '## Instance-owned files (`merge=ours`)\n\n' +
+        '| Path | Why instance-owned |\n' +
+        '| ---- | ------------------ |\n' +
+        '| `CLAUDE.md` | the shim |\n' +
+        '| `knowledge/**` | the content |\n\n' +
+        'Adopters add their own the same way.\n',
+    );
+    write(
+      '.agents/skills/sekai-upgrade/SKILL.md',
+      'The merge keeps the existing copy of every\n' +
+        'instance-owned file (`CLAUDE.md`, `knowledge/**`) -- those do not conflict.\n',
     );
   };
 
@@ -462,6 +588,68 @@ function selftest() {
       expect: /no MAINTAINER_DOCS array literal found/,
     },
     {
+      what: 'a merge=ours path missing from the adopter-facing runbook table',
+      plant: () =>
+        write(
+          'docs/runbook/UPGRADE.md',
+          '## Instance-owned files (`merge=ours`)\n\n' +
+            '| Path | Why instance-owned |\n' +
+            '| ---- | ------------------ |\n' +
+            '| `CLAUDE.md` | the shim |\n\n' +
+            'Adopters add their own the same way.\n',
+        ),
+      expect: /Instance-owned files table/,
+    },
+    {
+      what: 'a reworded (unfindable) runbook table heading',
+      plant: () =>
+        write(
+          'docs/runbook/UPGRADE.md',
+          '| File | Why yours |\n| ---- | --------- |\n| `CLAUDE.md` | the shim |\n',
+        ),
+      expect: /anchor NOT FOUND/,
+    },
+    {
+      what: 'a merge=ours path missing from the upgrade skill list',
+      plant: () =>
+        write(
+          '.agents/skills/sekai-upgrade/SKILL.md',
+          'The merge keeps the existing copy of every\ninstance-owned file (`CLAUDE.md`) -- those do not conflict.\n',
+        ),
+      expect: /Step 4, instance-owned file list/,
+    },
+    {
+      // The containment rule must still catch the direction that matters: a document
+      // an adopter reads may not claim a path their `.gitattributes` does not protect.
+      what: 'an adopted instance whose runbook documents a path that is not declared',
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        write(
+          'docs/runbook/UPGRADE.md',
+          '| Path | Why instance-owned |\n| ---- | ------------------ |\n' +
+            '| `CLAUDE.md` | the shim |\n| `knowledge/**` | the content |\n' +
+            '| `docs/PRD.md` | never declared anywhere |\n',
+        );
+      },
+      expect: /documented but not declared: docs\/PRD\.md/,
+    },
+    {
+      // Non-regression for the registered-span mask: masking the table must not
+      // switch the dangling scan off for the rest of the same file.
+      what: 'a dangling reference elsewhere in a file whose table is masked',
+      plant: () =>
+        write(
+          'docs/runbook/UPGRADE.md',
+          '## Instance-owned files (`merge=ours`)\n\n' +
+            '| Path | Why instance-owned |\n' +
+            '| ---- | ------------------ |\n' +
+            '| `CLAUDE.md` | the shim |\n' +
+            '| `knowledge/**` | the content |\n\n' +
+            'Background reading: docs/PRD.md explains the intent.\n',
+        ),
+      expect: /links into "docs\/PRD\.md"/,
+    },
+    {
       // Non-regression for the instance-owned cases below: dropping the template
       // marker must NOT switch the dangling scan off. A wizard-adopted instance
       // really has none of these paths, so a reference in a file it keeps still
@@ -489,6 +677,37 @@ function selftest() {
         rmSync(join(fixture, '.sekai-template'));
         // docs/PRD.md and docs/adr/ stay: this instance wrote its own.
         write('docs/runbook/DEPLOY.md', 'Intent for this instance lives in docs/PRD.md.\n');
+      },
+    },
+    {
+      // An adopter's `.gitattributes` is append-only per instance, so a path they
+      // added is not drift in a framework document that predates it.
+      what: 'an adopted instance that declared its own extra merge=ours path',
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        // The framework's own SPEC/ADR restatements live in removed documents, so
+        // only the two surviving sites are in play here -- which is the real shape.
+        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
+        write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\nmy-notes.md merge=ours\n');
+      },
+    },
+    {
+      // The maintainer-doc row the split requires an adopter-facing document to
+      // carry: declared in `.gitattributes`, documented in the table, and NOT a
+      // dangling reference even though the instance has no file there.
+      what: 'a maintainer-doc path documented as instance-ownable in a surviving document',
+      plant: () => {
+        rmSync(join(fixture, '.sekai-template'));
+        rmSync(join(fixture, 'docs/PRD.md'));
+        rmSync(join(fixture, 'docs/adr'), { recursive: true });
+        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
+        write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\ndocs/PRD.md merge=ours\n');
+        write(
+          'docs/runbook/UPGRADE.md',
+          '| Path | Why instance-owned |\n| ---- | ------------------ |\n' +
+            '| `CLAUDE.md` | the shim |\n| `knowledge/**` | the content |\n' +
+            '| `docs/PRD.md` | your own product doc, if you keep one |\n',
+        );
       },
     },
     {

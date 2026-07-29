@@ -17,8 +17,9 @@ tags, never framework `main`** (ADR 004, SPEC
    act on at merge time (a renamed `place.config.ts` key, a new required field, a
    moved file) goes under an explicit **Upgrade note** in that version's entry.
    New `place.config` keys MUST default to feature-off when absent (SPEC
-   §place.config.ts absent-safe rule), so an instance that ignores the note still
-   builds — the note tells it what it is opting out of.
+   §Negative requirements, "New `place.config` keys must be absent-safe"), so an
+   instance that ignores the note still builds — the note tells it what it is
+   opting out of.
 3. **Instances merge tags only.** The release flow is: land the change on `main`
    with its CHANGELOG entry → bump `FRAMEWORK-VERSION` and its npm manifest
    mirrors → tag
@@ -27,12 +28,93 @@ tags, never framework `main`** (ADR 004, SPEC
 4. **Instance-owned files are never overwritten.** Files an instance owns
    (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
    `AGENTS.md`, `README.md`, `CHANGELOG.md`, adopter-only `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
-   `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`) carry
+   `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, and the
+   maintainer-doc paths `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`,
+   `docs/adr/**`) carry
    `.gitattributes merge=ours` on the instance, so a tag merge keeps the
    instance's copy. Framework changes to those paths are therefore inert on
-   instances by design — do not rely on them propagating.
+   instances by design — do not rely on them propagating. The attribute protects
+   *content on a path that exists on both sides and differs from the merge base*;
+   it does not preserve an absent path (the upgrade's classify/reconcile pass owns
+   that), and it does not fire on a file the instance has not edited since the
+   merge base (which is why `FRAMEWORK-VERSION` is captured and restored instead).
 
 ## [Unreleased]
+
+The maintainer-doc upgrade path works on a first upgrade, `FRAMEWORK-VERSION` survives the merge, and the adopter-facing upgrade documents resolve.
+
+### Fixed
+
+- **`classify` can derive its path set on the first upgrade that introduces it.**
+  `scripts/upgrade/maintainer-docs-state.mjs classify` gains `--from-tag <tag>`, which
+  takes the `MAINTAINER_DOCS` derivation from the release being merged while still
+  reading path **presence** from the pre-merge working tree. Extracting the helper out
+  of the tag was never enough on its own: the helper reads `scripts/init/writer.mjs`,
+  and on exactly the upgrade that introduces the strip list the instance's copy still
+  predates the export, so `classify` exited 3 and the classification the whole pass
+  depends on could not be produced at all. `/sekai-upgrade` step 3b and
+  `docs/runbook/UPGRADE.md` now pass the flag on every `classify`; `reconcile` still
+  needs no flag, because after the merge the framework-owned wizard is the tag's.
+- **`FRAMEWORK-VERSION` keeps its value through the merge.** It is marked `merge=ours`,
+  and that was never sufficient: a merge driver runs only on a three-way content merge,
+  so an instance that has not edited the file since the merge base has `ours == base`
+  and git fast-forwards the incoming value straight in — the file claimed the new
+  release before anything had verified it, contradicting the documented flow.
+  `scripts/upgrade/package-state.mjs` now captures the pre-merge value alongside the
+  adopter's npm-manifest fields and restores it immediately after the merge, amending
+  the merge commit when git auto-committed. An instance that had no `FRAMEWORK-VERSION`
+  keeps having none. The explicit post-verification bump is unchanged in placement but
+  now **asserts** the resulting value rather than assuming its write took effect.
+  That helper's entry-point check also gained the `realpathSync` resolution its sibling
+  already had, without which running it from the copy the upgrade extracts into `.git`
+  was a silent no-op on any path reached through a symlink.
+- **Adopter-facing upgrade references resolve.** `docs/runbook/UPGRADE.md` cited a
+  `§G risk 4` section lettering and a `SPEC §place.config.ts absent-safe rule` document
+  location that no longer exist; both now name the framework SPEC section that owns
+  them (§Risk controls "Two-repo drift", §Negative requirements "New `place.config`
+  keys must be absent-safe") and point at the upstream repository an adopter can
+  actually reach. The `/sekai-upgrade` skill carried the same stale citation and is
+  fixed with it.
+
+### Added
+
+- **The maintainer-doc paths ship as `merge=ours`.** `docs/PRD.md`, `docs/SPEC.md`,
+  `docs/ROADMAP.md`, and `docs/adr/**` are now declared instance-owned in the
+  framework's `.gitattributes`, and `docs/runbook/UPGRADE.md`'s instance-owned table
+  records them with their rationale. They are inert for a wizard-adopted instance,
+  which has nothing at those paths; they matter for an instance that keeps its **own**
+  product, architecture, delivery, or decision records there, which ADR 008 explicitly
+  allows. Shipping the attribute means such an instance is protected from its first
+  merge onward instead of having to remember to add it.
+- **The adopter-facing instance-owned lists are machine-derived.**
+  `scripts/ci/check-framework-docs.mjs` now registers `docs/runbook/UPGRADE.md`'s table
+  and the `/sekai-upgrade` skill's step 4 list against `.gitattributes`, alongside the
+  SPEC and ADR 006 restatements it already checked. Both survive adoption, so they are
+  checked for containment rather than equality in an adopted clone, where an adopter's
+  `.gitattributes` legitimately grows paths the framework's documents do not list. A
+  registered enumeration is also masked out of the dangling-reference scan, so a
+  surviving document can record that `docs/PRD.md` is a path an instance may own
+  without that being read as a link into a stripped file. Five new planted defect
+  classes and two new legitimate states are in `--selftest`.
+- **Regression coverage for both fixes, in CI.**
+  `scripts/upgrade/check-upgrade-state.sh` gains case 11 (a first-upgrade fixture whose
+  wizard predates `MAINTAINER_DOCS`, where `classify` without the flag must exit 3 and
+  `--from-tag` must still produce the classification) and case 12 (`FRAMEWORK-VERSION`
+  held at its pre-merge value through the merge and moved only by the explicit bump,
+  with sub-case 12b covering the auto-commit/amend shape). Both pin the underlying
+  defect with a fixture guard before asserting the fix, and `--selftest` non-vacuity
+  extends to both. A third check derives the options the two upgrade documents tell a
+  user to pass from the helper's own option parser, so a renamed flag fails CI rather
+  than leaving a runbook that no longer works.
+
+**Upgrade note.** Nothing to do. Both fixes are in the upgrade path itself and take
+effect on the upgrade that adopts this release: the first-upgrade hard stop and the
+premature `FRAMEWORK-VERSION` move are gone. If you keep your own documents at the
+maintainer-doc paths, the four new `merge=ours` lines arrive with this release, so you
+no longer need to maintain them by hand — an existing hand-added copy is harmless.
+Follow `docs/runbook/UPGRADE.md` as written: `classify` now takes
+`--from-tag "$TARGET"`, and `FRAMEWORK-VERSION` deliberately still reads your old
+version until the final bump step.
 
 ## [1.0.14] — 2026-07-29
 
