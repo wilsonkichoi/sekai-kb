@@ -152,10 +152,13 @@ jobs:
       # strip list, where the path set can only come from the tag. It must also
       # preserve FRAMEWORK-VERSION: `merge=ours` does not fire on a file the instance
       # has not edited since the merge base, so the value is captured and restored
-      # and only the explicit post-verification bump moves it. The harness builds
+      # and only the explicit post-verification bump moves it. Case 13 covers the
+      # bootstrap itself: every helper is run from the target tag, never from the
+      # instance's tree copy, which shipped with the release being left and would
+      # otherwise deny a release its own helper fix. The harness builds
       # disposable git repos and drives the same scripts/upgrade/ helpers users run,
       # so it is framework-owned and never guarded away on an adopter.
-      - name: Upgrade state regressions (dev-plugin, maintainer docs, FRAMEWORK-VERSION)
+      - name: Upgrade state regressions (dev-plugin, maintainer docs, FRAMEWORK-VERSION, tag-first bootstrap)
         run: |
           git config --global user.email "ci@example.invalid"
           git config --global user.name "CI"
