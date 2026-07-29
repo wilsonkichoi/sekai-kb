@@ -97,14 +97,26 @@
 #      fixture pins that, with the attribute set and the driver configured, before
 #      requiring reconcile to undo it. Sub-case 12b is the no-conflict shape, where
 #      git auto-commits and reconcile must amend the merge commit.
+#  12c. The other half of that contract: an instance that had NO FRAMEWORK-VERSION
+#      must not gain one. This is the `frameworkVersion === null` branch, a state
+#      `/sekai-upgrade` step 0 names explicitly ("pre-wizard instance"), and a
+#      regression in it would leave every present-value fixture above green.
 #
-# The documented-bootstrap check closes the loop from the other side: the options
-# the adopter-facing upgrade documents tell a user to pass are derived from the
-# helper's own option parser, so a renamed flag fails CI rather than leaving a
-# runbook that no longer works.
+# Two option-contract checks close the loop from the other side:
+#
+#   - `reconcile` must REJECT `--from-tag` (exit 2). Reconciliation derives from the
+#     MERGED tree on purpose: that is how a merge which did not bring the wizard
+#     through gets exposed rather than papered over by reading the tag instead.
+#   - The options the adopter-facing upgrade documents tell a user to pass are
+#     checked, PER INVOKED COMMAND, against the helper's own COMMAND_OPTIONS table,
+#     so a renamed or misplaced flag fails CI rather than leaving a runbook that
+#     exits 2 at runtime. The extraction is scoped to that literal and carries a
+#     non-vacuity probe, because the helper's source is full of single-quoted git
+#     arguments (`--quiet`, `--ignore-unmatch`, ...) that a whole-file grep would
+#     wrongly report as accepted CLI options.
 #
 # `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9,
-# 10, 11 and 12 with the reconcile step DELIBERATELY SKIPPED and requires each
+# 10, 11, 12 and 12c with the reconcile step DELIBERATELY SKIPPED and requires each
 # case's own assertions to FAIL. A skipped-reconcile run that passes means the case
 # cannot detect the regression it exists to guard, and --selftest exits nonzero. No
 # reconcile-dependent assertion is gated on the skip toggle, because gating one out
@@ -115,7 +127,7 @@
 # and everything it writes into scripts/.
 #
 # Usage:
-#   bash scripts/upgrade/check-upgrade-state.sh             all twelve cases
+#   bash scripts/upgrade/check-upgrade-state.sh             all thirteen cases
 #   bash scripts/upgrade/check-upgrade-state.sh --selftest  non-vacuity proof
 #
 # Portability: macOS bash 3.2 + CI bash 5 (no mapfile/readarray, no associative
@@ -1669,6 +1681,63 @@ case_framework_version_survives_merge() { # workdir
 }
 
 # ---------------------------------------------------------------------------
+# Case 12c — the instance had NO FRAMEWORK-VERSION before the merge.
+#
+# `/sekai-upgrade` step 0 names this state explicitly ("no FRAMEWORK-VERSION
+# (pre-wizard instance)"), and it is the other half of DoD 2's contract: restoring
+# an absent file means removing whatever the merge introduced. It exercises a
+# distinct `frameworkVersion === null` branch, so a regression there would leave
+# every present-value fixture green while a pre-wizard instance silently gained the
+# incoming version before anything verified it.
+# ---------------------------------------------------------------------------
+case_framework_version_absent_stays_absent() { # workdir
+  local work="$1" fw inst state
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_version_framework "$fw" versionless
+
+  git clone -q "$fw" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  git -C "$inst" rm -q -f FRAMEWORK-VERSION
+  printf 'v7.0.0\n' > "$inst/VERSION"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt Example framework at fw-v1 without a FRAMEWORK-VERSION"
+
+  [ ! -e "$inst/FRAMEWORK-VERSION" ] \
+    || fail "case 12c: fixture guard — the instance still carries a FRAMEWORK-VERSION"
+  state="$(run_package_capture "$inst" "case 12c")"
+  grep -q '"frameworkVersion": null' "$state" \
+    || fail "case 12c: capture did not record the absent FRAMEWORK-VERSION as null: $(cat "$state")"
+  ok "case 12c: capture recorded the absent FRAMEWORK-VERSION as null"
+
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  [ -e "$inst/FRAMEWORK-VERSION" ] \
+    || fail "case 12c: fixture guard — the merge did not bring FRAMEWORK-VERSION in, so there is nothing to remove"
+  ok "case 12c: the merge re-introduced FRAMEWORK-VERSION into an instance that had none"
+
+  run_package_reconcile "$inst" "$state" "case 12c"
+  [ ! -e "$inst/FRAMEWORK-VERSION" ] \
+    || fail "case 12c: FRAMEWORK-VERSION survives in the working tree after reconcile (expected absent)"
+  [ -z "$(git -C "$inst" ls-files -- FRAMEWORK-VERSION)" ] \
+    || fail "case 12c: FRAMEWORK-VERSION is still tracked in the index after reconcile"
+  ok "case 12c: reconcile removed the FRAMEWORK-VERSION the merge introduced"
+
+  finalize_merge "$inst" "case 12c"
+  assert_is_merge_commit "$inst" "case 12c"
+  [ -z "$(git -C "$inst" ls-tree -r --name-only HEAD -- FRAMEWORK-VERSION)" ] \
+    || fail "case 12c: the finalized merge commit carries a FRAMEWORK-VERSION the instance never adopted"
+  ok "case 12c: the merge commit carries no FRAMEWORK-VERSION"
+
+  # The explicit post-verification bump is what creates it for the first time.
+  bump_framework_version "$inst" "v1.0.1" "case 12c"
+  assert_framework_version "$inst" "v1.0.1" "case 12c" "after the explicit bump"
+  assert_framework_version_committed "$inst" "v1.0.1" "case 12c"
+}
+
+# ---------------------------------------------------------------------------
 # Documented-bootstrap contract — the flags the adopter-facing docs tell a user to
 # run must be flags the helper actually accepts.
 #
@@ -1680,27 +1749,99 @@ case_framework_version_survives_merge() { # workdir
 # ---------------------------------------------------------------------------
 UPGRADE_DOCS="$ROOT/.agents/skills/sekai-upgrade/SKILL.md $ROOT/docs/runbook/UPGRADE.md"
 
+# The accepted options of ONE command, read out of the helper's COMMAND_OPTIONS
+# literal. Scoping the extraction to that block is load-bearing: the helper's source
+# is full of single-quoted git arguments (`--quiet`, `--verify`, `--ignore-unmatch`,
+# `--no-edit`, ...), and a grep over the whole file would report them as accepted CLI
+# options, so the guard would pass on a document telling a user to run a command that
+# exits 2. Per command, because `--from-tag` is deliberately not an option of
+# `reconcile`.
+accepted_options_for() { # command
+  awk -v cmd="$1" '
+    /^const COMMAND_OPTIONS = \{/ { inblock = 1; next }
+    inblock && /^\};/            { inblock = 0 }
+    inblock && $0 ~ ("^  " cmd ": \\{")  { print }
+  ' "$MDOCS_HELPER_SRC" | grep -o -- "'--[a-z-]*'" | tr -d "'" | sort -u
+}
+
 case_documented_flags_exist() {
-  local doc flag accepted used
-  # The parser's own option table is the source: `'--flag': '...'` entries.
-  accepted="$(grep -o -- "'--[a-z-]*'" "$MDOCS_HELPER_SRC" | tr -d "'" | sort -u)"
-  [ -n "$accepted" ] \
-    || fail "documented flags: could not derive the accepted option set from $MDOCS_HELPER_SRC"
+  local doc line cmd flag flags accepted used probe
+
+  # Non-vacuity: the helper really does contain single-quoted arguments that are NOT
+  # CLI options. Pin one, so a derivation that widens back to "every quoted string"
+  # is caught here rather than by a user whose documented command exits 2.
+  probe='--ignore-unmatch'
+  grep -q -- "'$probe'" "$MDOCS_HELPER_SRC" \
+    || fail "documented flags: the non-vacuity probe '$probe' is gone from the helper; pin another internal git argument"
+  for cmd in classify reconcile paths; do
+    if accepted_options_for "$cmd" | grep -qx -- "$probe"; then
+      fail "documented flags: '$cmd' accepts the internal git argument $probe, so the option set is not derived from COMMAND_OPTIONS"
+    fi
+  done
+  ok "documented flags: the derived option set excludes the helper's internal git arguments"
+
+  # `--from-tag` belongs to classify and not to reconcile; derive both facts rather
+  # than restating them, so the table and this guard cannot disagree.
+  accepted_options_for classify | grep -qx -- '--from-tag' \
+    || fail "documented flags: COMMAND_OPTIONS no longer gives classify --from-tag"
+  if accepted_options_for reconcile | grep -qx -- '--from-tag'; then
+    fail "documented flags: COMMAND_OPTIONS gives reconcile --from-tag; reconcile must derive from the merged tree"
+  fi
 
   for doc in $UPGRADE_DOCS; do
     [ -f "$doc" ] || fail "documented flags: $doc is missing"
-    # Options on the lines that INVOKE the helper. Both documents bootstrap it into
-    # a `$MDOCS_HELPER` variable first, so matching the filename instead would pick
-    # up the `git rev-parse --git-dir` on the extraction line.
-    used="$(grep -- 'node "$MDOCS_HELPER"' "$doc" | grep -o -- '--[a-z-]*' | sort -u)"
-    for flag in $used; do
-      printf '%s\n' "$accepted" | grep -qx -- "$flag" \
-        || fail "documented flags: $(basename "$doc") tells the user to pass $flag to maintainer-docs-state.mjs, which its option parser does not accept"
-    done
-    printf '%s\n' "$used" | grep -qx -- '--from-tag' \
-      || fail "documented flags: $(basename "$doc") no longer shows --from-tag on a helper invocation, so the first-upgrade bootstrap it documents cannot derive the path set"
+    used=""
+    # Every line that INVOKES the helper. Both documents bootstrap it into a
+    # `$MDOCS_HELPER` variable first, so matching the filename instead would pick up
+    # the `git rev-parse --git-dir` on the extraction line.
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      cmd="$(printf '%s' "$line" | sed -n 's/.*node "\$MDOCS_HELPER" *\([a-z][a-z-]*\).*/\1/p')"
+      [ -n "$cmd" ] || fail "documented flags: $(basename "$doc") invokes the helper with no subcommand: $line"
+      accepted="$(accepted_options_for "$cmd")"
+      # `|| true`: an invocation with no options is normal (`reconcile` takes none
+      # here), and a grep that matches nothing exits 1, which `set -e` would turn
+      # into a silent abort of the whole run.
+      flags="$(printf '%s' "$line" | grep -o -- '--[a-z-]*' || true)"
+      for flag in $flags; do
+        printf '%s\n' "$accepted" | grep -qx -- "$flag" \
+          || fail "documented flags: $(basename "$doc") tells the user to pass $flag to \`$cmd\`, which its option table does not accept"
+      done
+      used="$used $cmd:$(printf '%s' "$flags" | paste -sd ',' -)"
+    done <<EOF
+$(grep -- 'node "$MDOCS_HELPER"' "$doc")
+EOF
+    [ -n "$used" ] || fail "documented flags: $(basename "$doc") has no helper invocation to check"
+    case "$used" in
+      *"classify:"*"--from-tag"*) ;;
+      *) fail "documented flags: $(basename "$doc") no longer passes --from-tag to classify, so the first-upgrade bootstrap it documents cannot derive the path set" ;;
+    esac
   done
-  ok "documented flags: both upgrade documents pass only options the helper accepts, and both still show --from-tag"
+  ok "documented flags: both upgrade documents pass only options the invoked command accepts, and both still pass --from-tag to classify"
+}
+
+# The parser must enforce what the table declares, not merely describe it.
+case_reconcile_rejects_from_tag() { # workdir
+  local work="$1" inst
+  inst="$work/instance"
+  mkdir -p "$work"
+  init_repo "$inst"
+  lay_instance_skeleton "$inst"
+  write_instance_agents_md "$inst/AGENTS.md" no-reference
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Example instance"
+
+  run_mdocs "$inst" reconcile --from-tag fw-v2
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "reconcile options: reconcile --from-tag exited $HELPER_STATUS (expected 2); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -qi 'merged' \
+    || fail "reconcile options: the rejection does not explain that reconcile derives from the merged tree: $HELPER_ERR"
+  ok "reconcile options: reconcile --from-tag exits 2 and explains the merged-tree derivation"
+
+  run_mdocs "$inst" classify --from-tag no-such-tag
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "reconcile options: classify --from-tag on an unknown tag exited $HELPER_STATUS (expected 3); stderr: '$HELPER_ERR'"
+  ok "reconcile options: classify --from-tag on an unknown tag exits 3, not a silent empty set"
 }
 
 # ---------------------------------------------------------------------------
@@ -1747,10 +1888,16 @@ run_all_cases() {
   echo "── case 12: FRAMEWORK-VERSION survives the merge, bumps only after verification ──"
   case_framework_version_survives_merge "$TMP/case12"
   echo ""
+  echo "── case 12c: an instance that had NO FRAMEWORK-VERSION does not gain one ──"
+  case_framework_version_absent_stays_absent "$TMP/case12c"
+  echo ""
+  echo "── option contract: reconcile rejects --from-tag ──"
+  case_reconcile_rejects_from_tag "$TMP/case-options"
+  echo ""
   echo "── documented bootstrap: the docs' helper options are options the parser accepts ──"
   case_documented_flags_exist
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, unprotected stop, tag-derived first upgrade) and the FRAMEWORK-VERSION bump contract hold on all twelve fixtures."
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, unprotected stop, tag-derived first upgrade) and the FRAMEWORK-VERSION bump contract, present and absent, hold on all thirteen fixtures."
 }
 
 # Run one case with reconcile skipped, in a subshell whose EXIT trap is cleared
@@ -1780,7 +1927,8 @@ run_selftest() {
   expect_case_to_fail case_mdocs_owned_unprotected "$TMP/selftest-case10" "case 10 (maintainer docs, owned but unprotected)"
   expect_case_to_fail case_mdocs_first_upgrade_from_tag "$TMP/selftest-case11" "case 11 (maintainer docs, first upgrade from tag)"
   expect_case_to_fail case_framework_version_survives_merge "$TMP/selftest-case12" "case 12 (FRAMEWORK-VERSION survives the merge)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11 and 12 all fail when reconcile is skipped."
+  expect_case_to_fail case_framework_version_absent_stays_absent "$TMP/selftest-case12c" "case 12c (absent FRAMEWORK-VERSION stays absent)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12 and 12c all fail when reconcile is skipped."
 }
 
 main() {

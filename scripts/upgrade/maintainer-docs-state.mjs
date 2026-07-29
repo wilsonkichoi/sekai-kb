@@ -4,7 +4,7 @@
 // state across a framework tag merge (ADR 008 addendum, SPEC "Repo topology").
 //
 //   node scripts/upgrade/maintainer-docs-state.mjs classify  [--repo <dir>] [--from-tag <tag>] [--state <file>]
-//   node scripts/upgrade/maintainer-docs-state.mjs reconcile [--repo <dir>] [--from-tag <tag>] [--state <file>]
+//   node scripts/upgrade/maintainer-docs-state.mjs reconcile [--repo <dir>] [--state <file>]
 //   node scripts/upgrade/maintainer-docs-state.mjs paths     [--repo <dir>] [--from-tag <tag>]
 //
 // Why this exists: `.gitattributes merge=ours` protects the CONTENT of a path that
@@ -251,7 +251,7 @@ function existedAt(repo, rev, rel) {
   return gitLines(repo, ['ls-tree', '-r', '--name-only', rev, '--', rel]).length > 0;
 }
 
-function reconcile(repo, override, fromTag) {
+function reconcile(repo, override) {
   const notes = [];
   const failures = [];
   const captured = readState(repo, override);
@@ -262,7 +262,7 @@ function reconcile(repo, override, fromTag) {
   // maintainer-owned is handled on the upgrade that introduces it, rather than one
   // release later. Anything the capture did not classify is decided from the
   // pre-merge revision directly.
-  const declared = maintainerDocs(repo, fromTag);
+  const declared = maintainerDocs(repo);
   const all = [...new Set([...captured.owned, ...captured.stripped, ...declared])].sort();
 
   let staged = false;
@@ -386,16 +386,51 @@ function reconcile(repo, override, fromTag) {
   return notes;
 }
 
-const OPTIONS = { '--repo': 'repo', '--state': 'state', '--from-tag': 'fromTag' };
+// Options are declared PER COMMAND, not globally, and this table is the single
+// source both the parser and the documentation guard read. `--from-tag` is
+// deliberately absent from `reconcile`: reconciliation must derive from the MERGED
+// tree, so that a merge which did not bring the framework's wizard through is
+// exposed here rather than papered over by reading the tag instead. Accepting the
+// flag there would let a caller opt out of the check the step exists to make.
+// `scripts/upgrade/check-upgrade-state.sh` derives the accepted set from this
+// literal and asserts the upgrade documents pass only options it really contains.
+const COMMAND_OPTIONS = {
+  classify: { '--repo': 'repo', '--state': 'state', '--from-tag': 'fromTag' },
+  reconcile: { '--repo': 'repo', '--state': 'state' },
+  paths: { '--repo': 'repo', '--from-tag': 'fromTag' },
+};
+
+const USAGE = 'usage: maintainer-docs-state.mjs classify  [--repo <dir>] [--from-tag <tag>] [--state <file>]\n'
+  + '       maintainer-docs-state.mjs reconcile [--repo <dir>] [--state <file>]\n'
+  + '       maintainer-docs-state.mjs paths     [--repo <dir>] [--from-tag <tag>]\n'
+  + '  --from-tag moves only the path-set derivation to that tag; presence is always read\n'
+  + '  from the working tree. Use it on the first upgrade to a release that introduces the\n'
+  + '  strip list, when this tree\'s wizard still predates it. `reconcile` does not take it:\n'
+  + '  after the merge the path set must come from the merged tree.';
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
+  const accepted = COMMAND_OPTIONS[command];
+  if (!accepted) return { command, options: null };
   const options = { repo: process.cwd(), state: null, fromTag: null };
   for (let i = 0; i < rest.length; i += 1) {
     const flag = rest[i];
     const value = rest[i + 1];
-    const key = OPTIONS[flag];
-    if (!key) throw new UpgradeStateError(`unknown argument: ${flag}`, EXIT_USAGE);
+    const key = accepted[flag];
+    if (!key) {
+      const known = Object.values(COMMAND_OPTIONS).some((table) => flag in table);
+      throw new UpgradeStateError(
+        known
+          ? `${flag} is not an option of \`${command}\`.\n`
+            + (flag === '--from-tag'
+              ? '  reconcile must derive the path set from the MERGED tree: that is how a merge\n'
+                + '  which did not bring the wizard through is caught. Pass --from-tag to `classify`\n'
+                + '  before the merge instead.'
+              : `  run \`${command}\` with the options its usage line lists.`)
+          : `unknown argument: ${flag}`,
+        EXIT_USAGE,
+      );
+    }
     if (value === undefined) throw new UpgradeStateError(`${flag} needs a value`, EXIT_USAGE);
     options[key] = value;
     i += 1;
@@ -405,6 +440,7 @@ function parseArgs(argv) {
 
 function main(argv) {
   const { command, options } = parseArgs(argv);
+  if (options === null) throw new UpgradeStateError(USAGE, EXIT_USAGE);
   const repoRoot = git(options.repo, ['rev-parse', '--show-toplevel']);
 
   if (command === 'paths') {
@@ -421,22 +457,14 @@ function main(argv) {
   }
 
   if (command === 'reconcile') {
-    for (const note of reconcile(repoRoot, options.state, options.fromTag)) {
+    for (const note of reconcile(repoRoot, options.state)) {
       process.stdout.write(`maintainer-docs-state: ${note}\n`);
     }
     process.stdout.write('maintainer-docs-state: maintainer-doc state preserved\n');
     return;
   }
 
-  throw new UpgradeStateError(
-    'usage: maintainer-docs-state.mjs classify  [--repo <dir>] [--from-tag <tag>] [--state <file>]\n' +
-      '       maintainer-docs-state.mjs reconcile [--repo <dir>] [--from-tag <tag>] [--state <file>]\n' +
-      '       maintainer-docs-state.mjs paths     [--repo <dir>] [--from-tag <tag>]\n' +
-      '  --from-tag moves only the path-set derivation to that tag; presence is always read\n' +
-      '  from the working tree. Use it on the first upgrade to a release that introduces the\n' +
-      '  strip list, when this tree\'s wizard still predates it.',
-    EXIT_USAGE,
-  );
+  throw new UpgradeStateError(USAGE, EXIT_USAGE);
 }
 
 // Run only when executed directly: `check-framework-docs.mjs` imports the parser

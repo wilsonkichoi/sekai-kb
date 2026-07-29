@@ -103,8 +103,14 @@ replaces the template's framework changelog with a new instance changelog. `/sek
 continues to read the target framework release notes directly from the immutable tag via
 `git show <tag>:CHANGELOG.md`; it never reconciles or overwrites the instance changelog.
 `FRAMEWORK-VERSION` remains separate and records only which framework tag is adopted. It
-also carries `merge=ours`: a tag merge preserves the old value, then `/sekai-upgrade` updates
-it explicitly after the merged site passes verification.
+also carries `merge=ours`, and that attribute alone does **not** preserve it: a merge
+driver runs only on a three-way content merge, so an instance whose copy still equals the
+merge base has git resolve to theirs without consulting the driver. Preservation is
+therefore explicit — `/sekai-upgrade` captures the pre-merge value before merging and
+restores it immediately after (`scripts/upgrade/package-state.mjs`), then updates it after
+the merged site passes verification. Corrected 2026-07-29 (LB-67); the original text
+attributed the preservation to the attribute, which instance #1's first real upgrade
+disproved.
 
 `VERSION` separately records the adopter's own release. It carries `merge=ours` and is
 never changed by `/sekai-upgrade` (ADR 007).

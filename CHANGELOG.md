@@ -53,8 +53,11 @@ The maintainer-doc upgrade path works on a first upgrade, `FRAMEWORK-VERSION` su
   and on exactly the upgrade that introduces the strip list the instance's copy still
   predates the export, so `classify` exited 3 and the classification the whole pass
   depends on could not be produced at all. `/sekai-upgrade` step 3b and
-  `docs/runbook/UPGRADE.md` now pass the flag on every `classify`; `reconcile` still
-  needs no flag, because after the merge the framework-owned wizard is the tag's.
+  `docs/runbook/UPGRADE.md` now pass the flag on every `classify`. `reconcile`
+  **rejects** it (exit 2): reconciliation must derive from the merged tree, because that
+  is how a merge which did not bring the framework's wizard through is exposed rather
+  than papered over by reading the tag instead. Options are declared per command in one
+  table the parser and the documentation guard both read.
 - **`FRAMEWORK-VERSION` keeps its value through the merge.** It is marked `merge=ours`,
   and that was never sufficient: a merge driver runs only on a three-way content merge,
   so an instance that has not edited the file since the merge base has `ours == base`
@@ -101,11 +104,15 @@ The maintainer-doc upgrade path works on a first upgrade, `FRAMEWORK-VERSION` su
   wizard predates `MAINTAINER_DOCS`, where `classify` without the flag must exit 3 and
   `--from-tag` must still produce the classification) and case 12 (`FRAMEWORK-VERSION`
   held at its pre-merge value through the merge and moved only by the explicit bump,
-  with sub-case 12b covering the auto-commit/amend shape). Both pin the underlying
-  defect with a fixture guard before asserting the fix, and `--selftest` non-vacuity
-  extends to both. A third check derives the options the two upgrade documents tell a
-  user to pass from the helper's own option parser, so a renamed flag fails CI rather
-  than leaving a runbook that no longer works.
+  with sub-case 12b covering the auto-commit/amend shape and 12c the pre-wizard
+  instance that had no `FRAMEWORK-VERSION` and must not gain one). Each pins the
+  underlying defect with a fixture guard before asserting the fix, and `--selftest`
+  non-vacuity extends to all of them. Two option-contract checks close the loop: one
+  asserts `reconcile` rejects `--from-tag`, and one checks the options the two upgrade
+  documents tell a user to pass, per invoked command, against the helper's own option
+  table — scoped to that literal and carrying a non-vacuity probe, since the helper's
+  source is full of single-quoted git arguments a whole-file grep would wrongly report
+  as accepted CLI options.
 
 **Upgrade note.** Nothing to do. Both fixes are in the upgrade path itself and take
 effect on the upgrade that adopts this release: the first-upgrade hard stop and the
