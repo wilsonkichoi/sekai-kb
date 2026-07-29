@@ -102,6 +102,15 @@
 #      `/sekai-upgrade` step 0 names explicitly ("pre-wizard instance"), and a
 #      regression in it would leave every present-value fixture above green.
 #
+#  13. Helper version skew: every upgrade helper is bootstrapped from the TARGET
+#      TAG, never from the copy in the instance's working tree — that copy shipped
+#      with the release the instance is leaving, so preferring it means a release
+#      which CHANGES a helper never applies the change on the upgrade that ships
+#      it. 13a derives the bootstrap form from both adopter-facing documents; 13b
+#      drives the skew end to end (fw-v1 ships a package-state.mjs with no
+#      FRAMEWORK-VERSION handling, fw-v2 ships the real one) and pins that the
+#      retired tree-first form loses the marker, so 13a guards a real difference.
+#
 # Two option-contract checks close the loop from the other side:
 #
 #   - `reconcile` must REJECT `--from-tag` (exit 2). Reconciliation derives from the
@@ -116,7 +125,7 @@
 #     wrongly report as accepted CLI options.
 #
 # `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9,
-# 10, 11, 12 and 12c with the reconcile step DELIBERATELY SKIPPED and requires each
+# 10, 11, 12, 12c and 13 with the reconcile step DELIBERATELY SKIPPED and requires each
 # case's own assertions to FAIL. A skipped-reconcile run that passes means the case
 # cannot detect the regression it exists to guard, and --selftest exits nonzero. No
 # reconcile-dependent assertion is gated on the skip toggle, because gating one out
@@ -127,7 +136,7 @@
 # and everything it writes into scripts/.
 #
 # Usage:
-#   bash scripts/upgrade/check-upgrade-state.sh             all thirteen cases
+#   bash scripts/upgrade/check-upgrade-state.sh             all fourteen cases
 #   bash scripts/upgrade/check-upgrade-state.sh --selftest  non-vacuity proof
 #
 # Portability: macOS bash 3.2 + CI bash 5 (no mapfile/readarray, no associative
@@ -1738,6 +1747,220 @@ case_framework_version_absent_stays_absent() { # workdir
 }
 
 # ---------------------------------------------------------------------------
+# Case 13 — helper version skew: the documented bootstrap runs the TARGET TAG's
+# helper, never the copy in the instance's working tree.
+#
+# The tree's copy is not a cache of the same file: it shipped with the release the
+# instance is LEAVING. A bootstrap that prefers it means a release which CHANGES a
+# helper never applies that change on the upgrade that ships it — the one upgrade
+# where it matters. That is not hypothetical: the FRAMEWORK-VERSION capture in
+# package-state.mjs arrived in v1.0.15, so an instance on v1.0.11 carries a copy
+# with no FRAMEWORK-VERSION handling at all, and the retired `test -f <tree copy>
+# || <from tag>` form selected exactly that copy to adopt v1.0.15.
+#
+# 13a derives the bootstrap form from the two adopter-facing documents, so the
+# retired shape cannot come back in prose. 13b drives the skew end to end: one
+# instance bootstraps as documented and keeps its FRAMEWORK-VERSION, an identical
+# instance bootstraps the retired way and loses it. The second half is the
+# non-vacuity proof — a fixture where both forms behave the same would make 13a a
+# guard over nothing.
+# ---------------------------------------------------------------------------
+
+# A pre-v1.0.15 package-state.mjs: it carries the adopter's npm identity across the
+# merge and knows nothing about FRAMEWORK-VERSION. Written rather than checked out
+# of this repo's own history, because a fixture must not depend on the tags of the
+# checkout running it. Its only job is to be faithfully OLD and distinguishable.
+write_stale_package_helper() { # path
+  cat > "$1" <<'EOF'
+#!/usr/bin/env node
+// Pre-FRAMEWORK-VERSION package-state helper (fixture). Captures and restores the
+// adopter-owned npm manifest fields only.
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const root = process.cwd();
+const gitDir = resolve(root, execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim());
+const statePath = resolve(gitDir, 'sekai-package-state.json');
+const pkgPath = resolve(root, 'package.json');
+const lockPath = resolve(root, 'package-lock.json');
+const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
+const writeJson = (p, v) => writeFileSync(p, `${JSON.stringify(v, null, 2)}\n`);
+const OWNED = ['name', 'version', 'private', 'description'];
+
+const [command, arg] = process.argv.slice(2);
+if (command === 'capture') {
+  const pkg = readJson(pkgPath);
+  const state = {};
+  for (const key of OWNED) state[key] = pkg[key];
+  writeJson(statePath, state);
+  process.stdout.write(`${statePath}\n`);
+} else if (command === 'reconcile') {
+  const state = readJson(arg || statePath);
+  const pkg = readJson(pkgPath);
+  const lock = readJson(lockPath);
+  for (const key of OWNED) {
+    if (state[key] === undefined) delete pkg[key];
+    else pkg[key] = state[key];
+  }
+  if (state.name !== undefined) lock.name = state.name;
+  if (state.version !== undefined) lock.version = state.version;
+  if (lock.packages && lock.packages['']) {
+    if (state.name !== undefined) lock.packages[''].name = state.name;
+    if (state.version !== undefined) lock.packages[''].version = state.version;
+  }
+  writeJson(pkgPath, pkg);
+  writeJson(lockPath, lock);
+} else {
+  process.stderr.write('usage: package-state.mjs <capture|reconcile [state]>\n');
+  process.exit(2);
+}
+EOF
+}
+
+# A framework whose fw-v1 ships the STALE helper and whose fw-v2 ships the REAL
+# one — the release-changes-a-helper shape, which build_version_framework (same
+# helper on both tags) cannot express.
+build_skew_framework() { # dir
+  local fw="$1"
+  init_repo "$fw"
+  mkdir -p "$fw/src" "$fw/scripts/upgrade"
+  write_gitattributes "$fw"
+  printf 'marker\n' > "$fw/.sekai-template"
+  printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  printf 'v1.0.0\n' > "$fw/FRAMEWORK-VERSION"
+  write_npm_manifests "$fw" "example-framework" versioned "1.0.0"
+  write_stale_package_helper "$fw/scripts/upgrade/package-state.mjs"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v1 (package-state without FRAMEWORK-VERSION)"
+  git -C "$fw" tag fw-v1
+
+  printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
+  printf 'v1.0.1\n' > "$fw/FRAMEWORK-VERSION"
+  write_npm_manifests "$fw" "example-framework" versioned "1.0.1"
+  cp "$PACKAGE_HELPER_SRC" "$fw/scripts/upgrade/package-state.mjs"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v2 (package-state captures FRAMEWORK-VERSION)"
+  git -C "$fw" tag fw-v2
+}
+
+# An instance adopted at fw-v1, so its tree carries the STALE helper.
+build_skew_instance() { # fw dir label
+  local inst="$2"
+  git clone -q "$1" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  printf 'v7.0.0\n' > "$inst/VERSION"
+  write_npm_manifests "$inst" "example-instance" versioned "7.0.0"
+  # FRAMEWORK-VERSION is deliberately NOT touched: `ours == base` is what makes
+  # merge=ours insufficient and the capture load-bearing (case 12).
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt Example framework at fw-v1"
+
+  git -C "$inst" diff --quiet fw-v1 HEAD -- FRAMEWORK-VERSION \
+    || fail "$3: fixture guard — the instance changed FRAMEWORK-VERSION since the merge base"
+  if grep -q 'FRAMEWORK_VERSION' "$inst/scripts/upgrade/package-state.mjs"; then
+    fail "$3: fixture guard — the instance's tree copy already handles FRAMEWORK-VERSION, so there is no skew to exercise"
+  fi
+  ok "$3: the instance's tree copy of package-state.mjs predates the FRAMEWORK-VERSION capture"
+}
+
+# The bootstrap the documents prescribe, run verbatim from the instance root (the
+# documents' own working directory) rather than paraphrased. Prints an absolute
+# path so the caller can drive it from anywhere.
+bootstrap_helper_from_tag() { # instance tag — prints the helper path
+  local helper
+  helper="$( cd "$1" && PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs" \
+    && git show "$2:scripts/upgrade/package-state.mjs" > "$PACKAGE_HELPER" \
+    && cd "$(dirname "$PACKAGE_HELPER")" && printf '%s/%s' "$(pwd)" "$(basename "$PACKAGE_HELPER")" )"
+  [ -n "$helper" ] || fail "bootstrap: the documented extraction produced no helper path"
+  printf '%s' "$helper"
+}
+
+case_helper_bootstrap_version_skew() { # workdir
+  local work="$1" fw inst helper state found
+
+  # --- 13a: the documented bootstrap form, derived from the documents ----------
+  local doc var file
+  for doc in $UPGRADE_DOCS; do
+    [ -f "$doc" ] || fail "case 13a: $doc is missing"
+    if grep -q 'test -f "\$[A-Z_]*HELPER"' "$doc"; then
+      fail "case 13a: $(basename "$doc") prefers the working tree's copy of an upgrade helper (retired \`test -f \$..._HELPER ||\` form); the helper must come from the target tag"
+    fi
+    # Per helper: the variable is assigned the .git path, and the tag's copy is
+    # extracted into it. Requiring both, per document, keeps a rename from making
+    # this vacuous.
+    while IFS= read -r var; do
+      file="$(printf '%s' "$var" | cut -d: -f1)"
+      var="$(printf '%s' "$var" | cut -d: -f2)"
+      grep -q "^$var=\"\$(git rev-parse --git-dir)/sekai-$file\.mjs\"" "$doc" \
+        || fail "case 13a: $(basename "$doc") does not bootstrap \$$var from the git directory"
+      grep -q "git show .*:scripts/upgrade/$file\.mjs > \"\$$var\"" "$doc" \
+        || fail "case 13a: $(basename "$doc") does not extract scripts/upgrade/$file.mjs from the target tag into \$$var"
+    done <<'EOF'
+dev-plugin-state:HELPER
+maintainer-docs-state:MDOCS_HELPER
+package-state:PACKAGE_HELPER
+EOF
+    ok "case 13a: $(basename "$doc") bootstraps all three helpers from the target tag"
+  done
+
+  # --- 13b: the skew itself, end to end ---------------------------------------
+  fw="$work/fw"
+  inst="$work/documented"
+  mkdir -p "$work"
+  build_skew_framework "$fw"
+  build_skew_instance "$fw" "$inst" "case 13b"
+
+  assert_framework_version "$inst" "v1.0.0" "case 13b" "before the merge"
+  helper="$(bootstrap_helper_from_tag "$inst" fw-v2)"
+  case "$helper" in
+    "$inst"/scripts/*) fail "case 13b: the bootstrap wrote the helper into the working tree" ;;
+  esac
+  grep -q 'FRAMEWORK_VERSION' "$helper" \
+    || fail "case 13b: the helper bootstrapped from fw-v2 has no FRAMEWORK-VERSION handling — the fixture's tags are the wrong way round"
+  ok "case 13b: the documented bootstrap took the target tag's helper, outside the working tree"
+
+  state="$( cd "$inst" && node "$helper" capture )" \
+    || fail "case 13b: capture failed with the tag's helper"
+  [ -n "$state" ] || fail "case 13b: capture printed no state path"
+
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  assert_framework_version "$inst" "v1.0.1" "case 13b" "after the merge (merge=ours did not protect it)"
+
+  if [ "${SKIP_RECONCILE:-0}" = "1" ]; then
+    echo "   (selftest: package-state reconcile DELIBERATELY SKIPPED)"
+  else
+    ( cd "$inst" && node "$helper" reconcile "$state" ) >/dev/null 2>"$TMP/stderr.txt" \
+      || fail "case 13b: reconcile failed with the tag's helper; stderr: $(cat "$TMP/stderr.txt")"
+  fi
+  assert_framework_version "$inst" "v1.0.0" "case 13b" "after reconcile with the tag's helper"
+
+  finalize_merge "$inst" "case 13b"
+  assert_is_merge_commit "$inst" "case 13b"
+  assert_framework_version_committed "$inst" "v1.0.0" "case 13b"
+
+  # The retired form, on an identical instance: the tree's helper wins and the
+  # marker silently adopts the incoming release. This is what 13a now forbids in
+  # prose, and it is why 13b is not a test of nothing.
+  local inst2 helper2 state2
+  inst2="$work/tree-first"
+  build_skew_instance "$fw" "$inst2" "case 13b (retired form)"
+  helper2=scripts/upgrade/package-state.mjs
+  [ -f "$inst2/$helper2" ] \
+    || fail "case 13b: fixture guard — the instance has no tree copy, so the retired form would have fallen through to the tag anyway"
+  state2="$( cd "$inst2" && node "$helper2" capture )" \
+    || fail "case 13b: capture failed with the instance's own stale helper"
+  git -C "$inst2" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  ( cd "$inst2" && node "$helper2" reconcile "$state2" ) >/dev/null 2>&1 || true
+  found="$(cat "$inst2/FRAMEWORK-VERSION")"
+  [ "$found" = "v1.0.1" ] \
+    || fail "case 13b: the retired tree-first bootstrap kept FRAMEWORK-VERSION at '$found'; the fixture no longer distinguishes the two forms, so 13a guards nothing"
+  ok "case 13b: the retired tree-first bootstrap loses FRAMEWORK-VERSION (v1.0.1) — the two forms are distinguishable"
+}
+
+# ---------------------------------------------------------------------------
 # Documented-bootstrap contract — the flags the adopter-facing docs tell a user to
 # run must be flags the helper actually accepts.
 #
@@ -1891,13 +2114,16 @@ run_all_cases() {
   echo "── case 12c: an instance that had NO FRAMEWORK-VERSION does not gain one ──"
   case_framework_version_absent_stays_absent "$TMP/case12c"
   echo ""
+  echo "── case 13: helper version skew — the bootstrap runs the target tag's helper ──"
+  case_helper_bootstrap_version_skew "$TMP/case13"
+  echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
   echo ""
   echo "── documented bootstrap: the docs' helper options are options the parser accepts ──"
   case_documented_flags_exist
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, unprotected stop, tag-derived first upgrade) and the FRAMEWORK-VERSION bump contract, present and absent, hold on all thirteen fixtures."
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, unprotected stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, and the tag-first helper bootstrap hold on all fourteen fixtures."
 }
 
 # Run one case with reconcile skipped, in a subshell whose EXIT trap is cleared
@@ -1928,7 +2154,8 @@ run_selftest() {
   expect_case_to_fail case_mdocs_first_upgrade_from_tag "$TMP/selftest-case11" "case 11 (maintainer docs, first upgrade from tag)"
   expect_case_to_fail case_framework_version_survives_merge "$TMP/selftest-case12" "case 12 (FRAMEWORK-VERSION survives the merge)"
   expect_case_to_fail case_framework_version_absent_stays_absent "$TMP/selftest-case12c" "case 12c (absent FRAMEWORK-VERSION stays absent)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12 and 12c all fail when reconcile is skipped."
+  expect_case_to_fail case_helper_bootstrap_version_skew "$TMP/selftest-case13" "case 13 (helper version skew)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c and 13 all fail when reconcile is skipped."
 }
 
 main() {

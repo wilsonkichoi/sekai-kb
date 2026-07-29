@@ -41,6 +41,32 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **The upgrade bootstraps every helper from the target tag, never from the instance's
+  working tree.** Steps 3, 3b, and 4 of `/sekai-upgrade` and both flows in
+  `docs/runbook/UPGRADE.md` used `test -f scripts/upgrade/<helper>.mjs || git show
+  "$TARGET":...`, so an in-tree copy always won. That is correct when a helper is merely
+  *absent* and wrong whenever a release *changes* one: the tree's copy shipped with the
+  release the instance is leaving, so the fix never applied on the upgrade that shipped
+  it. v1.0.15 is the concrete case — it added the `FRAMEWORK-VERSION` capture to
+  `package-state.mjs`, and an instance on v1.0.11 following the documented procedure
+  verbatim ran its own pre-capture copy, captured nothing, restored nothing, and left the
+  marker claiming a release no build had verified. The extraction is now unconditional
+  for all three helpers; a `$TARGET` that predates a helper fails loudly on `git show`
+  instead of silently running an older one. `docs/runbook/UPGRADE.md` gains a **Helper
+  version skew** section stating the rule, and `scripts/upgrade/check-upgrade-state.sh`
+  gains case 13: 13a derives the bootstrap form from both adopter-facing documents so
+  the retired shape cannot return in prose, and 13b drives the skew end to end against a
+  framework whose earlier tag ships a helper without `FRAMEWORK-VERSION` handling,
+  pinning that the retired tree-first form loses the marker where the documented form
+  keeps it.
+
+  **Upgrade note.** No instance action is required and no configuration changed. If you
+  have the previous bootstrap lines pasted into your own notes or scripts, replace the
+  `test -f` form with the unconditional `git show "$TARGET":scripts/upgrade/<helper>.mjs`
+  extraction shown in `docs/runbook/UPGRADE.md`.
+
 ## [1.0.15] — 2026-07-29
 
 This release hardens first-upgrade maintainer-doc classification, preserves FRAMEWORK-VERSION through merges, repairs adopter-facing upgrade references, and records cross-repository lifecycle routing.

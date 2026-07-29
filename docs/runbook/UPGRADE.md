@@ -58,32 +58,32 @@ TARGET=sekai-kb-v1.0.9
 TARGET_VERSION="${TARGET#sekai-kb-}"
 
 # 3. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
-#    Releases before v1.0.5 did not ship the helper, so on a first merge run it
-#    from a release that does — any tag >= v1.0.5, even when the base you are
-#    establishing is older. The extracted copy lives inside .git, never in your tree.
-HELPER=scripts/upgrade/dev-plugin-state.mjs
-test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+#    Every upgrade helper is run FROM THE TARGET TAG, never from the copy in your
+#    tree: your copy came from the release you are leaving, so a release that fixes
+#    a helper would otherwise never apply its own fix on the upgrade that ships it
+#    ("Helper version skew" below). The extracted copy lives inside .git, never in
+#    your tree. Releases before v1.0.5 did not ship this helper; `git show` fails
+#    loudly on such a target rather than silently running an older one.
+HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"
+git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 
 # 4. Classify maintainer-doc state BEFORE merging (see "Maintainer-doc state"
-#    below). Same extraction pattern for a target that predates the helper.
+#    below). Same tag-first extraction.
 #    --from-tag takes the path set from the release you are merging, while path
 #    presence is still read from your working tree. On the FIRST upgrade to a
 #    release that introduces that list, your tree's scripts/init/writer.mjs still
 #    predates it, so without the flag this exits 3 and cannot classify at all.
-MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
-test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"
+git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"
 node "$MDOCS_HELPER" classify --from-tag "$TARGET"
 
 # 4b. Capture adopter-owned package identity, and the pre-merge FRAMEWORK-VERSION,
-#     before the mixed-ownership manifests merge. For the first upgrade to a
-#     release carrying this helper, extract it from that target tag into .git, as
-#     shown for the dev-plugin helper above.
-PACKAGE_HELPER=scripts/upgrade/package-state.mjs
-test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+#     before the mixed-ownership manifests merge. Same tag-first extraction, and
+#     this helper is why the rule exists: the FRAMEWORK-VERSION capture arrived in
+#     v1.0.15, so an earlier tree copy does not capture the marker at all.
+PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"
+git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"
 PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 #    Exit 3 = inconsistent state (only one half of the dev workflow present), or a
 #    maintainer-doc path set that could not be derived: stop here and repair it
@@ -194,9 +194,10 @@ git show "$TARGET":CHANGELOG.md | awk -v h="## [${TARGET_VERSION#v}]" '$0==h{p=1
 
 # 4. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
 #    Exit 3 = inconsistent state: stop and repair it deliberately.
-HELPER=scripts/upgrade/dev-plugin-state.mjs
-test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+#    Every helper is run FROM THE TARGET TAG, never from the copy in your tree —
+#    see "Helper version skew" below for why the tree copy is never the right one.
+HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"
+git show "$TARGET":scripts/upgrade/dev-plugin-state.mjs > "$HELPER"
 STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 
 # 4b. Classify maintainer-doc state BEFORE merging (see "Maintainer-doc state"
@@ -204,19 +205,19 @@ STATE="$(node "$HELPER" classify)" && echo "dev-plugin state: $STATE"
 #     --from-tag takes the path set from the release being merged; presence still
 #     comes from your working tree. Exit 3 = the path set could not be derived:
 #     stop rather than merge blind.
-MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
-test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"
+git show "$TARGET":scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"
 node "$MDOCS_HELPER" classify --from-tag "$TARGET"
 
 # 4c. Capture adopter-owned package identity and version, and the pre-merge
 #     FRAMEWORK-VERSION, before merging. merge=ours cannot hold FRAMEWORK-VERSION
 #     on its own: a merge driver runs only on a three-way content merge, so if you
 #     have not edited the file since the merge base git fast-forwards the incoming
-#     value in and the file claims a release nothing has verified yet.
-PACKAGE_HELPER=scripts/upgrade/package-state.mjs
-test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
-  git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+#     value in and the file claims a release nothing has verified yet. This capture
+#     arrived in v1.0.15, which is exactly why the helper comes from the tag: an
+#     earlier tree copy has no FRAMEWORK-VERSION handling at all.
+PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"
+git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"
 PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
@@ -335,14 +336,41 @@ conflict, and on an unrelated-history first merge the framework's whole tree is
 added back as theirs-only content. That is exactly the `.agent-toolkit/` case, and
 it is why the flows above carry a classify step and a reconcile step.
 
+## Helper version skew — always run the target tag's helper
+
+Every `scripts/upgrade/*.mjs` helper the flows above bootstrap is extracted from
+`$TARGET` into `.git/`, never taken from `scripts/upgrade/` in your working tree.
+The tree's copy is not a cache of the same thing: it is the copy that shipped with
+the release you are **leaving**. Preferring it means a release that *changes* a
+helper never gets to apply that change on the upgrade that ships it — the one
+upgrade where it matters.
+
+This is not hypothetical. The `FRAMEWORK-VERSION` capture in `package-state.mjs`
+arrived in v1.0.15; an instance still on v1.0.11 has a tree copy with no
+`FRAMEWORK-VERSION` handling at all. Bootstrapping that copy to adopt v1.0.15
+would capture nothing, restore nothing, and leave the marker claiming a release
+that no build had verified — precisely the defect v1.0.15 exists to fix.
+
+Two consequences follow, both intended:
+
+- The extraction is unconditional. There is no `test -f` fallback to the tree copy,
+  because the tree copy is never the right one.
+- A `$TARGET` that predates a helper fails loudly on `git show` instead of silently
+  running an older helper. Adopt a release that carries the helper (the classify
+  steps name the minimum tag) rather than working around the error.
+
+`scripts/upgrade/check-upgrade-state.sh` case 13 is the regression gate: it derives
+the bootstrap form from these documents and drives the skew end to end against a
+fixture whose tree copy predates the capture.
+
 ## Dev-plugin state (`.agent-toolkit/`) — classified on every upgrade
 
 `AGENTS.md` and `.agent-toolkit/**` are the dev-plugin's own files, and whether the
 dev workflow is installed is **persistent instance state** the upgrade preserves in
 either direction (recorded in the framework's decision records upstream).
 `/sekai-upgrade` and the flows
-above classify it before merging with
-`node scripts/upgrade/dev-plugin-state.mjs classify`:
+above classify it before merging with `dev-plugin-state.mjs classify`, bootstrapped
+from the target tag as "Helper version skew" above requires:
 
 | State | Means | The upgrade does |
 | ----- | ----- | ---------------- |
@@ -369,8 +397,8 @@ docs and always stay.
 Their absence has the same problem as an absent `.agent-toolkit/`: `merge=ours`
 cannot protect a path you do not have, so without a reconcile step every release
 that touched those documents would put the framework's copies back in your tree.
-`node scripts/upgrade/maintainer-docs-state.mjs classify` records the split before
-the merge, **per path** — the paths are independent, and there is no inconsistent
+`maintainer-docs-state.mjs classify`, bootstrapped from the target tag as "Helper
+version skew" above requires, records the split before the merge, **per path** — the paths are independent, and there is no inconsistent
 state to stop on:
 
 | Per-path state | Means | The upgrade does |

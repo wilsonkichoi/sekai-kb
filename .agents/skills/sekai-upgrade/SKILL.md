@@ -97,12 +97,14 @@ the upgrade must classify **before** merging (recorded in the framework's decisi
 records upstream):
 
 ```bash
-HELPER=scripts/upgrade/dev-plugin-state.mjs
-# Releases before v1.0.5 did not ship the helper. On the first upgrade to v1.0.5+
-# run it from the tag; every later upgrade uses the copy in the instance. The
-# extracted copy lives inside .git, so it never touches the working tree.
-test -f "$HELPER" || { HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"; \
-  git show sekai-kb-vX.Y.Z:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"; }
+# Always run the TARGET RELEASE's helper, never the copy in the instance tree.
+# That copy is from the release the instance is LEAVING, so a release that fixes a
+# helper would otherwise never apply its own fix on the upgrade that ships it. The
+# extracted copy lives inside .git, so it never touches the working tree. Releases
+# before v1.0.5 did not ship this helper at all; `git show` fails loudly on such a
+# target instead of silently running an older helper.
+HELPER="$(git rev-parse --git-dir)/sekai-dev-plugin-state.mjs"
+git show sekai-kb-vX.Y.Z:scripts/upgrade/dev-plugin-state.mjs > "$HELPER"
 node "$HELPER" classify   # prints `stripped` or `installed`; exit 3 = inconsistent
 ```
 
@@ -131,13 +133,10 @@ activation signal and an instance may legitimately keep its own document at one 
 them while having none of the others:
 
 ```bash
-MDOCS_HELPER=scripts/upgrade/maintainer-docs-state.mjs
-# Releases that predate this helper did not ship it. On the first upgrade to a
-# release that has it, run it from the tag; every later upgrade uses the copy in
-# the instance. The extracted copy lives inside .git, so it never touches the
-# working tree.
-test -f "$MDOCS_HELPER" || { MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"; \
-  git show sekai-kb-vX.Y.Z:scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"; }
+# Same rule as above: the helper comes from the tag being merged, never from the
+# instance tree, so the release's own version of this pass is the one that runs.
+MDOCS_HELPER="$(git rev-parse --git-dir)/sekai-maintainer-docs-state.mjs"
+git show sekai-kb-vX.Y.Z:scripts/upgrade/maintainer-docs-state.mjs > "$MDOCS_HELPER"
 # --from-tag takes the path set from the release being merged; presence is still
 # read from this working tree. Always pass it: the tag is the authority on what
 # that release strips.
@@ -174,9 +173,12 @@ release before anything verified it. Step 5 puts the old value back; step 9 is t
 only thing that moves it:
 
 ```bash
-PACKAGE_HELPER=scripts/upgrade/package-state.mjs
-test -f "$PACKAGE_HELPER" || { PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"; \
-  git show sekai-kb-vX.Y.Z:scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"; }
+# Same rule again, and this helper is why the rule exists: the FRAMEWORK-VERSION
+# capture arrived in v1.0.15, so an instance still on an earlier release carries a
+# tree copy that does not capture the marker at all. Running that copy would lose
+# the very guarantee this step exists to provide, on the one upgrade that fixes it.
+PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"
+git show sekai-kb-vX.Y.Z:scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"
 PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 ```
 
