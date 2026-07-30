@@ -43,6 +43,23 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **`/sekai-triage-feedback` turns new D1 feedback into deduplicated GitHub
+  issues.** The framework-owned skill reads `status='new'` rows through Wrangler,
+  assigns exactly one of five documented classes, groups normalized duplicates,
+  and either creates a `feedback`-labeled issue or comments on the matching open
+  issue from `place.config.ts` `links.repo`. It records the resulting issue URL
+  through `workers/feedback/migrations/0002_triage.sql`; spam is recorded without
+  filing an issue. Dry-run and live execution share the same complete plan, and
+  no GitHub or D1 write runs until the human explicitly approves that plan.
+
+  **Upgrade note:** instances that already deployed the feedback Worker must apply
+  the new D1 migration before running the skill:
+
+  ```bash
+  cd workers/feedback
+  npx wrangler d1 migrations apply <database-name> --remote
+  ```
+
 - **Feedback widget on article pages (`src/components/FeedbackWidget.astro`).** An
   article-bottom button opens the form in an accessible modal, keeping the full form
   hidden until a reader asks for it. The message field displays and enforces the

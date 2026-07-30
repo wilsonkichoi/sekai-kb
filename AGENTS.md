@@ -99,8 +99,8 @@ live under Claude's default `.claude/skills/` path.
 
 The skills under `.agents/skills/` — `/sekai-write`, `/sekai-validate`,
 `/sekai-factcheck`, the `/sekai-kb` router, plus `/sekai-adopt`,
-`/sekai-seed-articles`, `/sekai-upgrade`, `/sekai-release`, and the
-template-only `/sekai-framework-release` — are
+`/sekai-seed-articles`, `/sekai-triage-feedback`, `/sekai-upgrade`,
+`/sekai-release`, and the template-only `/sekai-framework-release` — are
 **framework-owned**, the same class as `src/` and `scripts/`. The `sekai-`
 namespace prevents collisions with adopter and tool-provided skills. They are
 managed through framework upgrades; customize them the way you customize `src/`:
