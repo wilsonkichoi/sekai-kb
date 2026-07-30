@@ -149,6 +149,9 @@ const SUBMIT_SCRIPT = `
         </p>
 
         <noscript>
+          <style is:inline>
+            [data-feedback-form] { display: none !important; }
+          </style>
           <p class="font-['Inter',system-ui,sans-serif] text-[0.9rem] leading-[1.6] text-[#6a7d72]">
             {t('feedback.noscript')}{' '}
             <a

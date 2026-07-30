@@ -75,6 +75,10 @@ jobs:
           python-version: "3.12"
       - run: npm ci --force
       - run: npm run test:ci
+      - name: Install Chromium for feedback widget contract tests
+        run: npx playwright install --with-deps chromium
+      - name: Feedback widget browser contract
+        run: npm run test:feedback
       # Cloudflare Worker unit suites (node:test, no runtime dependency). The runner
       # walks workers/ for *.test.mjs, so a worker added in a later phase is gated
       # here the moment its first suite lands — no second edit to this workflow. It
