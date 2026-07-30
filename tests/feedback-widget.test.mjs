@@ -16,6 +16,22 @@ const submitScriptMatch = componentSource.match(
 assert.ok(submitScriptMatch, 'FeedbackWidget.astro must expose its inline submit script');
 const submitScript = submitScriptMatch[1];
 
+const messageFieldMatch = componentSource.match(
+  /<textarea[\s\S]*?name="message"[\s\S]*?<\/textarea>/,
+);
+assert.ok(messageFieldMatch, 'FeedbackWidget.astro must render the message textarea');
+assert.match(messageFieldMatch[0], /minlength="10"/);
+assert.match(messageFieldMatch[0], /maxlength="4000"/);
+assert.match(
+  messageFieldMatch[0],
+  /aria-describedby="feedback-message-requirement"/,
+);
+assert.match(
+  componentSource,
+  /id="feedback-message-requirement"[\s\S]*?t\('feedback\.message\.requirement'\)/,
+  'the component must render the message requirement as accessible help text',
+);
+
 const noscriptMatch = componentSource.match(/<noscript>([\s\S]*?)<\/noscript>/);
 assert.ok(noscriptMatch, 'FeedbackWidget.astro must carry a noscript fallback');
 assert.match(
@@ -61,9 +77,17 @@ function widgetHtml() {
           data-msg-invalid="Please check the {field} field and try again."
           data-msg-rate-limited="Too many submissions from this network. Please try again later."
           data-msg-error="Could not send your feedback. Please try again later."
+          data-msg-message-requirement="Enter 10 to 4,000 characters."
         >
           <select name="category"><option value="correction">Correction</option></select>
-          <textarea name="message"></textarea>
+          <textarea
+            name="message"
+            required
+            minlength="10"
+            maxlength="4000"
+            aria-describedby="feedback-message-requirement"
+          ></textarea>
+          <p id="feedback-message-requirement">Enter 10 to 4,000 characters.</p>
           <input name="contact" value="">
           <input name="website" value="">
           <button type="submit">Send feedback</button>
@@ -186,6 +210,46 @@ test('the article-bottom button opens an accessible modal and both close paths r
     assert.equal(
       await opener.evaluate((element) => document.activeElement === element),
       true,
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test('the message requirement is visible and invalid lengths are blocked before fetch', async () => {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    let requestCount = 0;
+    await page.route(ENDPOINT, async (route) => {
+      requestCount += 1;
+      await route.fulfill({ status: 200, body: '{}' });
+    });
+    await page.setContent(widgetHtml());
+    await page.locator('[data-feedback-open]').click();
+
+    const message = page.locator('textarea[name="message"]');
+    const requirement = page.locator('#feedback-message-requirement');
+    assert.equal(await requirement.isVisible(), true);
+    assert.equal(await requirement.textContent(), 'Enter 10 to 4,000 characters.');
+    assert.equal(await message.getAttribute('minlength'), '10');
+    assert.equal(await message.getAttribute('maxlength'), '4000');
+    assert.equal(
+      await message.getAttribute('aria-describedby'),
+      'feedback-message-requirement',
+    );
+
+    await message.fill('short');
+    await page.locator('[data-feedback-form] button[type="submit"]').click();
+    assert.equal(requestCount, 0);
+    assert.notEqual(await message.evaluate((element) => element.validationMessage), '');
+
+    await message.fill('          ');
+    await page.locator('[data-feedback-form] button[type="submit"]').click();
+    assert.equal(requestCount, 0);
+    assert.equal(
+      await message.evaluate((element) => element.validationMessage),
+      'Enter 10 to 4,000 characters.',
     );
   } finally {
     await context.close();

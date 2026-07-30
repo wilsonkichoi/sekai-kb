@@ -74,6 +74,8 @@ const SUBMIT_SCRIPT = `
   if (!opener || !dialog || !closer || !form) return;
   var status = form.querySelector('[data-feedback-status]');
   var button = form.querySelector('button[type="submit"]');
+  var message = form.querySelector('[name="message"]');
+  if (!status || !button || !message) return;
   var sending = false;
 
   function openDialog() {
@@ -101,6 +103,9 @@ const SUBMIT_SCRIPT = `
   dialog.addEventListener('click', function (event) {
     if (event.target === dialog) closeDialog();
   });
+  message.addEventListener('input', function () {
+    message.setCustomValidity('');
+  });
 
   function show(message, state) {
     status.textContent = message;
@@ -116,6 +121,14 @@ const SUBMIT_SCRIPT = `
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     if (sending) return;
+
+    var messageLength = message.value.trim().length;
+    if (messageLength < 10 || messageLength > 4000) {
+      message.setCustomValidity(form.getAttribute('data-msg-message-requirement'));
+      message.reportValidity();
+      return;
+    }
+
     sending = true;
     button.disabled = true;
     show(form.getAttribute('data-msg-sending'), 'pending');
@@ -246,6 +259,7 @@ const SUBMIT_SCRIPT = `
               data-msg-invalid={t('feedback.invalid')}
               data-msg-rate-limited={t('feedback.rateLimited')}
               data-msg-error={t('feedback.error')}
+              data-msg-message-requirement={t('feedback.message.requirement')}
             >
               <div>
                 <label class={labelClass} for="feedback-category">
@@ -286,8 +300,17 @@ const SUBMIT_SCRIPT = `
                   name="message"
                   rows="4"
                   required
+                  minlength="10"
+                  maxlength="4000"
+                  aria-describedby="feedback-message-requirement"
                   placeholder={t('feedback.message.placeholder')}
                 ></textarea>
+                <p
+                  class="mb-0 mt-1.5 font-['Inter',system-ui,sans-serif] text-[0.76rem] leading-[1.5] text-[#6a7d72]"
+                  id="feedback-message-requirement"
+                >
+                  {t('feedback.message.requirement')}
+                </p>
               </div>
 
               {/* Honeypot: off-screen rather than display:none, aria-hidden so assistive

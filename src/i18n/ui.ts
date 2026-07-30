@@ -60,6 +60,7 @@ export const ui = {
     'feedback.category.question': 'Question',
     'feedback.category.other': 'Something else',
     'feedback.message.label': 'Your feedback',
+    'feedback.message.requirement': 'Enter 10 to 4,000 characters.',
     'feedback.message.placeholder': 'What should change, and why?',
     'feedback.contact.label': 'Email (optional, only used to reply)',
     // Rendered inside the honeypot's hidden, aria-hidden wrapper: a person never
