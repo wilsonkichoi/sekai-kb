@@ -32,18 +32,20 @@ async function submitPayload(payload, options = {}) {
 
 // --- module surface --------------------------------------------------------------
 
-test('the module exports handleRequest, a default fetch handler, and two distinct SQL statements', () => {
+test('the module exports handleRequest, a default fetch handler, and four distinct SQL statements', () => {
   assert.equal(typeof handleRequest, 'function');
   assert.equal(typeof worker, 'object');
   assert.equal(typeof worker.fetch, 'function');
-  assert.equal(typeof SQL.RATE_LIMIT_UPSERT, 'string');
-  assert.equal(typeof SQL.INSERT_FEEDBACK, 'string');
-  assert.ok(SQL.RATE_LIMIT_UPSERT.length > 0, 'RATE_LIMIT_UPSERT must be a non-empty statement');
-  assert.ok(SQL.INSERT_FEEDBACK.length > 0, 'INSERT_FEEDBACK must be a non-empty statement');
-  assert.notEqual(
-    SQL.RATE_LIMIT_UPSERT,
-    SQL.INSERT_FEEDBACK,
-    'the two statements must be distinguishable by identity',
+
+  const names = ['RATE_LIMIT_PRUNE', 'RATE_LIMIT_RECORD', 'RATE_LIMIT_COUNT', 'INSERT_FEEDBACK'];
+  for (const name of names) {
+    assert.equal(typeof SQL[name], 'string', `SQL.${name} must be a string`);
+    assert.ok(SQL[name].length > 0, `SQL.${name} must be a non-empty statement`);
+  }
+  assert.equal(
+    new Set(names.map((name) => SQL[name])).size,
+    names.length,
+    'the statements must be distinguishable by identity',
   );
 });
 
@@ -97,15 +99,19 @@ test('each accepted submission gets a distinct id', async () => {
   assert.deepEqual(DB.rows.map((row) => row.id).sort(), [first.id, second.id].sort());
 });
 
-test('the rate-limit statement runs before the insert', async () => {
+test('the rate-limit statements run before the insert', async () => {
   const { DB } = await submitPayload(validPayload());
 
   assert.deepEqual(
     DB.calls.map((call) => call.kind),
-    ['rate_limit', 'insert'],
-    'the worker must check the rate limit before inserting',
+    ['prune', 'record', 'count', 'insert'],
+    'the worker must settle the rate limit before inserting',
   );
-  assert.equal(DB.rateLimitCalls[0].method, 'first', 'the rate-limit statement must be consumed with first()');
+  assert.equal(
+    DB.callsOf('count')[0].method,
+    'first',
+    'the count statement must be consumed with first()',
+  );
 });
 
 // --- stored row ------------------------------------------------------------------

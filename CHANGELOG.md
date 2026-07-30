@@ -47,9 +47,12 @@ tags, never framework `main`** (ADR 004, SPEC
   `workers/feedback/`.** A POST endpoint backed by D1 that stores reader feedback:
   CORS locked to a single deploy-time `ALLOWED_ORIGIN` (never `*`; an unset var or a
   mismatch is 403), a honeypot field that returns a real-looking success and writes
-  nothing, a per-address rate limit of `RATE_LIMIT_MAX` per rolling
-  `RATE_LIMIT_WINDOW_SECONDS` enforced by one atomic D1 upsert, and full payload
-  validation. Addresses are only ever stored as `sha256(address + IP_HASH_SALT)`;
+  nothing, a per-address rate limit of `RATE_LIMIT_MAX` per genuinely rolling
+  `RATE_LIMIT_WINDOW_SECONDS` (submissions are counted per second and the seconds
+  age out individually, so no counter reset lets a second allowance through at a
+  window boundary), and full payload validation enforced against the request
+  stream so an oversized chunked upload is a 400 rather than a buffered Worker
+  crash. Addresses are only ever stored as `sha256(address + IP_HASH_SALT)`;
   a missing salt fails the request closed rather than hashing unsalted. The schema
   ships as a D1 migration (`feedback` + `submission_window`), `wrangler.toml` carries
   placeholders only, and the `node:test` unit suite runs in CI as `npm run

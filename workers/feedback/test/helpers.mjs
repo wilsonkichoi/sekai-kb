@@ -82,14 +82,49 @@ export function makeRequest(options = {}) {
   if (contentType !== OMIT && contentType !== null) headers.set('Content-Type', contentType);
   if (ip !== OMIT && ip !== null) headers.set('CF-Connecting-IP', ip);
   if (userAgent !== OMIT && userAgent !== null) headers.set('User-Agent', userAgent);
-  for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
+  for (const [name, value] of Object.entries(extraHeaders)) {
+    if (value === OMIT) headers.delete(name);
+    else headers.set(name, value);
+  }
 
   const init = { method, headers };
   const methodAllowsBody = method !== 'GET' && method !== 'HEAD';
   if (body !== undefined && methodAllowsBody) {
-    init.body = typeof body === 'string' ? body : JSON.stringify(body);
+    if (body instanceof ReadableStream) {
+      // A streamed body carries no Content-Length, which is the case the worker must
+      // survive without buffering. `duplex: 'half'` is required for a stream body.
+      init.body = body;
+      init.duplex = 'half';
+    } else {
+      init.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
   }
   return new Request(url, init);
+}
+
+/**
+ * A chunked body with no Content-Length, for the streamed-upload case.
+ *
+ * `pulled` counts the chunks the consumer actually asked for, so a test can prove the
+ * worker stopped reading rather than draining the whole upload into memory.
+ *
+ * @param {number} chunkBytes size of each chunk
+ * @param {number} chunkCount how many chunks the client is willing to send
+ */
+export function streamingBody(chunkBytes, chunkCount) {
+  const state = { pulled: 0 };
+  const chunk = new TextEncoder().encode('x'.repeat(chunkBytes));
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (state.pulled >= chunkCount) {
+        controller.close();
+        return;
+      }
+      state.pulled += 1;
+      controller.enqueue(chunk.slice());
+    },
+  });
+  return { stream, state };
 }
 
 /** POST a payload object with everything else at its default. */

@@ -1,7 +1,7 @@
 /**
  * Self-test of the test harness (workers/feedback/test/d1-stub.mjs).
  *
- * The D1 stub encodes the rate-limit upsert semantics the contract documents, so a bug in
+ * The D1 stub encodes the rolling-window semantics the contract documents, so a bug in
  * the stub would produce false verdicts about the worker. These tests do not touch the
  * worker at all; they keep the harness honest.
  */
@@ -12,7 +12,9 @@ import assert from 'node:assert/strict';
 import { createD1Stub, INSERT_COLUMNS } from './d1-stub.mjs';
 
 const SQL = {
-  RATE_LIMIT_UPSERT: '<<rate limit upsert statement>>',
+  RATE_LIMIT_PRUNE: '<<rate limit prune statement>>',
+  RATE_LIMIT_RECORD: '<<rate limit record statement>>',
+  RATE_LIMIT_COUNT: '<<rate limit count statement>>',
   INSERT_FEEDBACK: '<<insert feedback statement>>',
 };
 
@@ -20,8 +22,11 @@ const NOW = 1_700_000_000;
 const WINDOW = 3600;
 const IP_HASH = 'a'.repeat(64);
 
-function rateLimit(stub, { ipHash = IP_HASH, now = NOW, window = WINDOW } = {}) {
-  return stub.prepare(SQL.RATE_LIMIT_UPSERT).bind(ipHash, now, now - window).first();
+/** The three statements a request issues, in the worker's order. */
+async function submit(stub, { ipHash = IP_HASH, now = NOW, window = WINDOW } = {}) {
+  await stub.prepare(SQL.RATE_LIMIT_PRUNE).bind(ipHash, now - window).run();
+  await stub.prepare(SQL.RATE_LIMIT_RECORD).bind(ipHash, now).run();
+  return stub.prepare(SQL.RATE_LIMIT_COUNT).bind(ipHash).first();
 }
 
 function insertRow(stub, overrides = {}) {
@@ -42,41 +47,67 @@ function insertRow(stub, overrides = {}) {
     .run();
 }
 
-test('harness: a first rate-limit call stores window_start = now and count = 1', async () => {
+test('harness: a first submission totals 1 and reports its own second as oldest', async () => {
   const stub = createD1Stub(SQL);
-  const row = await rateLimit(stub);
-  assert.deepEqual(row, { window_start: NOW, count: 1 });
+  assert.deepEqual(await submit(stub), { total: 1, oldest: NOW });
 });
 
-test('harness: repeat rate-limit calls inside the window increment the count and keep window_start', async () => {
+test('harness: submissions in the same second collapse into one row and raise the count', async () => {
   const stub = createD1Stub(SQL);
-  await rateLimit(stub);
-  await rateLimit(stub, { now: NOW + 5 });
-  const third = await rateLimit(stub, { now: NOW + 9 });
-  assert.deepEqual(third, { window_start: NOW, count: 3 });
+  await submit(stub);
+  const second = await submit(stub);
+  assert.deepEqual(second, { total: 2, oldest: NOW });
+  assert.equal(stub.buckets.get(IP_HASH).size, 1, 'one second is one row');
 });
 
-test('harness: a rate-limit row at or before the window floor is replaced with a fresh window', async () => {
+test('harness: submissions in different seconds accumulate and keep the earliest as oldest', async () => {
   const stub = createD1Stub(SQL);
-  stub.seedRateLimit(IP_HASH, { window_start: NOW - WINDOW, count: 99 });
-  const row = await rateLimit(stub);
-  assert.deepEqual(row, { window_start: NOW, count: 1 });
+  await submit(stub);
+  await submit(stub, { now: NOW + 5 });
+  const third = await submit(stub, { now: NOW + 9 });
+  assert.deepEqual(third, { total: 3, oldest: NOW });
+  assert.equal(stub.buckets.get(IP_HASH).size, 3);
+});
+
+test('harness: the window rolls -- a second at or before the floor is pruned, later ones survive', async () => {
+  const stub = createD1Stub(SQL);
+  stub.seedRateLimit(
+    IP_HASH,
+    { window_start: NOW, count: 1 },
+    { window_start: NOW + 10, count: 1 },
+  );
+
+  // At NOW + WINDOW the floor is exactly NOW, so only the NOW bucket is pruned.
+  const usage = await submit(stub, { now: NOW + WINDOW });
+  assert.deepEqual(usage, { total: 2, oldest: NOW + 10 }, 'the NOW + 10 second is still inside');
+});
+
+test('harness: a whole window of silence prunes everything and starts a fresh count', async () => {
+  const stub = createD1Stub(SQL);
+  stub.seedRateLimit(IP_HASH, { window_start: NOW, count: 99 });
+  const usage = await submit(stub, { now: NOW + WINDOW + 1 });
+  assert.deepEqual(usage, { total: 1, oldest: NOW + WINDOW + 1 });
+});
+
+test('harness: an empty table aggregates to SQL NULLs, not zeros', async () => {
+  const stub = createD1Stub(SQL);
+  const usage = await stub.prepare(SQL.RATE_LIMIT_COUNT).bind(IP_HASH).first();
+  assert.deepEqual(usage, { total: null, oldest: null });
 });
 
 test('harness: rate-limit rows are isolated per ip hash', async () => {
   const stub = createD1Stub(SQL);
-  await rateLimit(stub, { ipHash: 'a'.repeat(64) });
-  await rateLimit(stub, { ipHash: 'a'.repeat(64) });
-  const other = await rateLimit(stub, { ipHash: 'b'.repeat(64) });
-  assert.deepEqual(other, { window_start: NOW, count: 1 });
+  await submit(stub, { ipHash: 'a'.repeat(64) });
+  await submit(stub, { ipHash: 'a'.repeat(64) });
+  const other = await submit(stub, { ipHash: 'b'.repeat(64) });
+  assert.deepEqual(other, { total: 1, oldest: NOW });
 });
 
-test('harness: the returned rate-limit row is a copy the caller cannot mutate', async () => {
+test('harness: pruning one address does not touch another', async () => {
   const stub = createD1Stub(SQL);
-  const first = await rateLimit(stub);
-  first.count = 1000;
-  const second = await rateLimit(stub);
-  assert.equal(second.count, 2);
+  await submit(stub, { ipHash: 'b'.repeat(64) });
+  await submit(stub, { ipHash: 'a'.repeat(64), now: NOW + WINDOW + 1 });
+  assert.deepEqual(stub.usage('b'.repeat(64)), { total: 1, oldest: NOW });
 });
 
 test('harness: an insert records its bound columns and reports one changed row', async () => {
@@ -91,9 +122,10 @@ test('harness: an insert records its bound columns and reports one changed row',
 
 test('harness: all() is implemented and returns the documented result envelope', async () => {
   const stub = createD1Stub(SQL);
-  const result = await stub.prepare(SQL.RATE_LIMIT_UPSERT).bind(IP_HASH, NOW, NOW - WINDOW).all();
+  await stub.prepare(SQL.RATE_LIMIT_RECORD).bind(IP_HASH, NOW).run();
+  const result = await stub.prepare(SQL.RATE_LIMIT_COUNT).bind(IP_HASH).all();
   assert.equal(result.success, true);
-  assert.deepEqual(result.results, [{ window_start: NOW, count: 1 }]);
+  assert.deepEqual(result.results, [{ total: 1, oldest: NOW }]);
 });
 
 test('harness: statements are routed by identity, and an unknown statement throws', () => {
@@ -108,8 +140,12 @@ test('harness: a wrong bind-argument count throws instead of silently storing a 
     /expects 8 bind args/,
   );
   await assert.rejects(
-    () => stub.prepare(SQL.RATE_LIMIT_UPSERT).bind(IP_HASH).first(),
-    /expects 3 bind args/,
+    () => stub.prepare(SQL.RATE_LIMIT_RECORD).bind(IP_HASH).run(),
+    /expects 2 bind args/,
+  );
+  await assert.rejects(
+    () => stub.prepare(SQL.RATE_LIMIT_COUNT).bind(IP_HASH, NOW).first(),
+    /expects 1 bind args/,
   );
 });
 
@@ -123,9 +159,15 @@ test('harness: touched reports any D1 contact, prepare included', async () => {
 
 test('harness: createD1Stub rejects an SQL object it cannot route by identity', () => {
   assert.throws(() => createD1Stub(null), TypeError);
-  assert.throws(() => createD1Stub({ RATE_LIMIT_UPSERT: 'x' }), TypeError);
+  assert.throws(() => createD1Stub({ RATE_LIMIT_PRUNE: 'x' }), TypeError);
   assert.throws(
-    () => createD1Stub({ RATE_LIMIT_UPSERT: 'same', INSERT_FEEDBACK: 'same' }),
+    () =>
+      createD1Stub({
+        RATE_LIMIT_PRUNE: 'same',
+        RATE_LIMIT_RECORD: 'same',
+        RATE_LIMIT_COUNT: 'c',
+        INSERT_FEEDBACK: 'i',
+      }),
     TypeError,
   );
 });

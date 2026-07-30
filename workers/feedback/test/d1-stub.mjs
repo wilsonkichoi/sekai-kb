@@ -3,11 +3,20 @@
  *
  * Implements the `prepare(sql) -> { bind(...args) -> { run, first, all } }` subset the
  * worker uses. Statements are routed by *identity* against the worker's exported
- * `SQL.RATE_LIMIT_UPSERT` / `SQL.INSERT_FEEDBACK` strings, never by parsing SQL text, so
- * the stub stays valid however the statements are worded.
+ * `SQL.*` strings, never by parsing SQL text, so the stub stays valid however the
+ * statements are worded.
  *
- * Test-owned code: it emulates the D1 semantics the contract documents and records every
- * call so tests can assert call counts, bound arguments, and stored rows.
+ * The rate limiter is a rolling window: `submission_window` holds one row per
+ * (ip_hash, second-in-which-a-submission-arrived), and the limit is the sum over the
+ * rows still inside the window. This stub emulates exactly that, so a test that
+ * walks the clock forward sees the same arithmetic D1 would do:
+ *
+ *   RATE_LIMIT_PRUNE  (ip_hash, floor)  DELETE rows with window_start <= floor
+ *   RATE_LIMIT_RECORD (ip_hash, now)    upsert the (ip_hash, now) row, count += 1
+ *   RATE_LIMIT_COUNT  (ip_hash)         SUM(count), MIN(window_start) over survivors
+ *
+ * Test-owned code: it records every call so tests can assert call counts, bound
+ * arguments, and stored rows.
  */
 
 /** Column order of the INSERT_FEEDBACK bind arguments, per the contract. */
@@ -22,30 +31,45 @@ export const INSERT_COLUMNS = [
   'status',
 ];
 
-/** Bind-argument names of the RATE_LIMIT_UPSERT statement, per the contract. */
-export const RATE_LIMIT_ARGS = ['ip_hash', 'now', 'window_floor'];
+/** Bind-argument names of each rate-limit statement, per the contract. */
+export const RATE_LIMIT_ARGS = {
+  prune: ['ip_hash', 'window_floor'],
+  record: ['ip_hash', 'now'],
+  count: ['ip_hash'],
+};
 
-const RATE_LIMIT = 'rate_limit';
+const PRUNE = 'prune';
+const RECORD = 'record';
+const COUNT = 'count';
 const INSERT = 'insert';
 
+const RATE_LIMIT_KINDS = new Set([PRUNE, RECORD, COUNT]);
+
 /**
- * @param {{ RATE_LIMIT_UPSERT: string, INSERT_FEEDBACK: string }} SQL
+ * @param {{ RATE_LIMIT_PRUNE: string, RATE_LIMIT_RECORD: string,
+ *           RATE_LIMIT_COUNT: string, INSERT_FEEDBACK: string }} SQL
  *   the worker's exported SQL object; used for identity routing.
  */
 export function createD1Stub(SQL) {
-  if (
-    !SQL ||
-    typeof SQL.RATE_LIMIT_UPSERT !== 'string' ||
-    typeof SQL.INSERT_FEEDBACK !== 'string'
-  ) {
-    throw new TypeError('createD1Stub: SQL must expose RATE_LIMIT_UPSERT and INSERT_FEEDBACK strings');
+  const required = [
+    'RATE_LIMIT_PRUNE',
+    'RATE_LIMIT_RECORD',
+    'RATE_LIMIT_COUNT',
+    'INSERT_FEEDBACK',
+  ];
+  for (const key of required) {
+    if (!SQL || typeof SQL[key] !== 'string' || SQL[key].length === 0) {
+      throw new TypeError(`createD1Stub: SQL.${key} must be a non-empty string`);
+    }
   }
-  if (SQL.RATE_LIMIT_UPSERT === SQL.INSERT_FEEDBACK) {
-    throw new TypeError('createD1Stub: the two SQL statements must be distinguishable by identity');
+  const statements = required.map((key) => SQL[key]);
+  if (new Set(statements).size !== statements.length) {
+    throw new TypeError('createD1Stub: every SQL statement must be distinguishable by identity');
   }
 
-  /** @type {Map<string, { window_start: number, count: number }>} */
-  const rateLimitRows = new Map();
+  /** ip_hash -> (window_start -> count). One entry per second that saw a submission. */
+  /** @type {Map<string, Map<number, number>>} */
+  const buckets = new Map();
   /** @type {string[]} every sql string handed to prepare() */
   const prepared = [];
   /** @type {{ kind: string, method: string, args: unknown[] }[]} every executed statement */
@@ -54,29 +78,63 @@ export function createD1Stub(SQL) {
   const rows = [];
 
   function classify(sql) {
-    if (sql === SQL.RATE_LIMIT_UPSERT) return RATE_LIMIT;
+    if (sql === SQL.RATE_LIMIT_PRUNE) return PRUNE;
+    if (sql === SQL.RATE_LIMIT_RECORD) return RECORD;
+    if (sql === SQL.RATE_LIMIT_COUNT) return COUNT;
     if (sql === SQL.INSERT_FEEDBACK) return INSERT;
     throw new Error(`d1 stub: unknown prepared statement (${String(sql).slice(0, 60)})`);
   }
 
-  function applyRateLimit(args) {
-    if (args.length !== 3) {
-      throw new Error(`d1 stub: RATE_LIMIT_UPSERT expects 3 bind args, got ${args.length}`);
+  function requireArgs(kind, args, expected) {
+    if (args.length !== expected) {
+      throw new Error(`d1 stub: ${kind} expects ${expected} bind args, got ${args.length}`);
     }
-    const [ipHash, now, windowFloor] = args;
+    const [ipHash] = args;
     if (typeof ipHash !== 'string' || ipHash.length === 0) {
-      throw new Error('d1 stub: RATE_LIMIT_UPSERT ip_hash must be a non-empty string');
+      throw new Error(`d1 stub: ${kind} ip_hash must be a non-empty string`);
     }
-    if (!Number.isFinite(now) || !Number.isFinite(windowFloor)) {
-      throw new Error('d1 stub: RATE_LIMIT_UPSERT now/window_floor must be finite numbers');
+    for (const value of args.slice(1)) {
+      if (!Number.isFinite(value)) {
+        throw new Error(`d1 stub: ${kind} numeric bind args must be finite numbers`);
+      }
     }
-    const stored = rateLimitRows.get(ipHash);
-    const next =
-      !stored || stored.window_start <= windowFloor
-        ? { window_start: now, count: 1 }
-        : { window_start: stored.window_start, count: stored.count + 1 };
-    rateLimitRows.set(ipHash, next);
-    return { ...next };
+  }
+
+  function applyPrune(args) {
+    requireArgs(PRUNE, args, 2);
+    const [ipHash, floor] = args;
+    const perIp = buckets.get(ipHash);
+    if (!perIp) return null;
+    for (const start of [...perIp.keys()]) {
+      if (start <= floor) perIp.delete(start);
+    }
+    if (perIp.size === 0) buckets.delete(ipHash);
+    return null;
+  }
+
+  function applyRecord(args) {
+    requireArgs(RECORD, args, 2);
+    const [ipHash, now] = args;
+    const perIp = buckets.get(ipHash) ?? new Map();
+    perIp.set(now, (perIp.get(now) ?? 0) + 1);
+    buckets.set(ipHash, perIp);
+    return null;
+  }
+
+  // SQL aggregates over an empty set yield NULL, not 0; the worker must cope with
+  // that, so the stub reproduces it rather than helpfully returning zero.
+  function applyCount(args) {
+    requireArgs(COUNT, args, 1);
+    const [ipHash] = args;
+    const perIp = buckets.get(ipHash);
+    if (!perIp || perIp.size === 0) return { total: null, oldest: null };
+    let total = 0;
+    let oldest = Infinity;
+    for (const [start, count] of perIp) {
+      total += count;
+      if (start < oldest) oldest = start;
+    }
+    return { total, oldest };
   }
 
   function applyInsert(args) {
@@ -93,6 +151,13 @@ export function createD1Stub(SQL) {
     return null;
   }
 
+  const APPLY = {
+    [PRUNE]: applyPrune,
+    [RECORD]: applyRecord,
+    [COUNT]: applyCount,
+    [INSERT]: applyInsert,
+  };
+
   function makeStatement(kind, args) {
     let executed = false;
     let result;
@@ -100,7 +165,7 @@ export function createD1Stub(SQL) {
       calls.push({ kind, method, args: [...args] });
       if (!executed) {
         executed = true;
-        result = kind === RATE_LIMIT ? applyRateLimit(args) : applyInsert(args);
+        result = APPLY[kind](args);
       }
       return result;
     };
@@ -126,8 +191,8 @@ export function createD1Stub(SQL) {
     calls,
     /** rows bound to INSERT_FEEDBACK, keyed by column name */
     rows,
-    /** live rate-limit table, keyed by ip hash */
-    rateLimitRows,
+    /** live rate-limit table: ip_hash -> (window_start -> count) */
+    buckets,
 
     prepare(sql) {
       prepared.push(sql);
@@ -139,21 +204,42 @@ export function createD1Stub(SQL) {
       };
     },
 
-    /** every executed RATE_LIMIT_UPSERT call */
+    /** every executed rate-limit call, of any of the three statements */
     get rateLimitCalls() {
-      return calls.filter((call) => call.kind === RATE_LIMIT);
+      return calls.filter((call) => RATE_LIMIT_KINDS.has(call.kind));
     },
     /** every executed INSERT_FEEDBACK call */
     get insertCalls() {
       return calls.filter((call) => call.kind === INSERT);
     },
-    /** pre-load a rate-limit row so a test can drive the counter deterministically */
-    seedRateLimit(ipHash, row) {
-      rateLimitRows.set(ipHash, { window_start: row.window_start, count: row.count });
+    /** executed calls of one rate-limit statement */
+    callsOf(kind) {
+      return calls.filter((call) => call.kind === kind);
     },
+
+    /**
+     * Pre-load submissions so a test can drive the counter deterministically.
+     * `{ window_start, count }` puts `count` submissions in that one second, which is
+     * how a burst at a single instant is represented.
+     */
+    seedRateLimit(ipHash, ...seeds) {
+      const perIp = buckets.get(ipHash) ?? new Map();
+      for (const { window_start: start, count } of seeds) {
+        perIp.set(start, (perIp.get(start) ?? 0) + count);
+      }
+      buckets.set(ipHash, perIp);
+    },
+
+    /** what RATE_LIMIT_COUNT would return right now, for assertions */
+    usage(ipHash) {
+      return applyCount([ipHash]);
+    },
+
     /** true when the worker touched D1 in any way (prepare included) */
     get touched() {
       return prepared.length > 0 || calls.length > 0;
     },
   };
 }
+
+export { PRUNE, RECORD, COUNT, INSERT };

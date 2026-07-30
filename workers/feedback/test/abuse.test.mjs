@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { handleRequest, SQL } from '../src/index.mjs';
-import { createD1Stub } from './d1-stub.mjs';
+import { PRUNE, RECORD, createD1Stub } from './d1-stub.mjs';
 import {
   CLIENT_IP,
   DEFAULT_RATE_LIMIT_MAX,
@@ -39,18 +39,33 @@ function submit(env, options = {}) {
   return handleRequest(postJson(validPayload(), options), env);
 }
 
-/** Seed the stub so the next submission from `ip` sees `count + 1`. */
-async function seededEnv({ count, envOverrides = {}, ip = CLIENT_IP, salt = SALT, windowStart } = {}) {
+/**
+ * Seed the stub so the next submission from `ip` sees `count + 1`.
+ *
+ * `count` seeds one second's bucket (a burst at a single instant); `seeds` seeds
+ * several, which is how a test spreads prior submissions across the window.
+ */
+async function seededEnv({
+  count,
+  seeds,
+  envOverrides = {},
+  ip = CLIENT_IP,
+  salt = SALT,
+  windowStart,
+} = {}) {
   const DB = createD1Stub(SQL);
   const env = makeEnv({ DB, IP_HASH_SALT: salt, ...envOverrides });
-  if (count !== undefined) {
-    DB.seedRateLimit(await expectedIpHash(ip, salt), {
-      window_start: windowStart ?? nowSeconds(),
-      count,
-    });
+  const buckets = seeds ?? (count === undefined ? [] : [{ window_start: windowStart ?? nowSeconds(), count }]);
+  if (buckets.length > 0) {
+    DB.seedRateLimit(await expectedIpHash(ip, salt), ...buckets);
   }
   return { DB, env };
 }
+
+/** The bind args of the last PRUNE / RECORD call, which carry floor and now. */
+const lastPrune = (DB) => DB.callsOf(PRUNE).at(-1).args;
+const lastRecord = (DB) => DB.callsOf(RECORD).at(-1).args;
+const boundWindowSeconds = (DB) => lastRecord(DB)[1] - lastPrune(DB)[1];
 
 // --- honeypot --------------------------------------------------------------------
 
@@ -129,27 +144,90 @@ test('a configured RATE_LIMIT_MAX replaces the default at its exact boundary', a
   await assertErrorBody(limited, 'rate_limited');
 });
 
-test('a 429 carries a Retry-After of max(1, window_start + windowSeconds - now) as an integer string', async () => {
-  const windowSeconds = 600;
+// The regression this suite exists to hold. A first-hit-anchored fixed window accepts
+// max at the very end of one window and a further max immediately after it resets, so
+// 2 x max land within a second of each other while every rolling window of the
+// configured length is supposed to hold at most max. The window must roll: the seconds
+// that have actually aged out are the only ones that stop counting.
+test('a burst across the window boundary cannot exceed the limit (no fixed-window reset)', async () => {
+  const windowSeconds = DEFAULT_WINDOW_SECONDS;
+  const now = nowSeconds();
+
+  // One submission a full window ago, then max - 1 in the second just gone: exactly
+  // max inside the rolling window, with the oldest sitting on the boundary.
   const { DB, env } = await seededEnv({
+    seeds: [
+      { window_start: now - windowSeconds + 1, count: 1 },
+      { window_start: now - 1, count: DEFAULT_RATE_LIMIT_MAX - 1 },
+    ],
+  });
+
+  const rejected = await submit(env);
+  assert.equal(
+    rejected.status,
+    429,
+    'the window must roll, not reset: max submissions are still inside it',
+  );
+  assert.equal(DB.rows.length, 0, 'a rate-limited request must insert no row');
+});
+
+test('only the seconds that have aged out stop counting', async () => {
+  const windowSeconds = 600;
+  const now = nowSeconds();
+
+  // The oldest second is exactly at the floor (now - windowSeconds) and is pruned; the
+  // rest remain, leaving max - 1 inside the window, so one more submission fits.
+  const { DB, env } = await seededEnv({
+    envOverrides: { RATE_LIMIT_WINDOW_SECONDS: String(windowSeconds) },
+    seeds: [
+      { window_start: now - windowSeconds, count: 1 },
+      { window_start: now - 30, count: DEFAULT_RATE_LIMIT_MAX - 1 },
+    ],
+  });
+
+  const response = await submit(env);
+  assert.equal(response.status, 200, 'the aged-out second must free exactly one slot');
+  assert.equal(DB.rows.length, 1);
+
+  const limited = await submit(env);
+  assert.equal(limited.status, 429, 'and the next one must be refused again');
+});
+
+test('a 429 carries a Retry-After of oldest + windowSeconds - now as an integer string', async () => {
+  const windowSeconds = 600;
+  const elapsed = 120;
+  const { env } = await seededEnv({
     count: DEFAULT_RATE_LIMIT_MAX,
     envOverrides: { RATE_LIMIT_WINDOW_SECONDS: String(windowSeconds) },
-    windowStart: nowSeconds() - 120,
+    windowStart: nowSeconds() - elapsed,
   });
 
   const response = await submit(env);
   assert.equal(response.status, 429);
 
-  const call = DB.rateLimitCalls.at(-1);
-  assert.ok(call, 'the 429 must come from a RATE_LIMIT_UPSERT result');
-  const [, now] = call.args;
-  const windowStart = DB.rateLimitRows.get(call.args[0]).window_start;
-  const expected = String(Math.max(1, windowStart + windowSeconds - now));
-
   const retryAfter = response.headers.get('retry-after');
-  assert.equal(retryAfter, expected);
   assert.match(retryAfter, /^\d+$/, 'Retry-After must be an integer string');
+  assert.equal(
+    Number(retryAfter),
+    windowSeconds - elapsed,
+    'the wait is until the oldest second inside the window falls out of it',
+  );
   assert.ok(Number(retryAfter) >= 1, 'Retry-After must never be below 1');
+});
+
+test('Retry-After never exceeds the window and never drops below 1', async () => {
+  const windowSeconds = 300;
+  // Every prior submission is in the current second, so the wait is the whole window.
+  const { env } = await seededEnv({
+    count: DEFAULT_RATE_LIMIT_MAX,
+    envOverrides: { RATE_LIMIT_WINDOW_SECONDS: String(windowSeconds) },
+    windowStart: nowSeconds(),
+  });
+
+  const response = await submit(env);
+  assert.equal(response.status, 429);
+  const retryAfter = Number(response.headers.get('retry-after'));
+  assert.ok(retryAfter >= 1 && retryAfter <= windowSeconds, `Retry-After ${retryAfter} out of range`);
 });
 
 test('the rate-limit counter still increments for a request that is rejected with 429', async () => {
@@ -160,20 +238,38 @@ test('the rate-limit counter still increments for a request that is rejected wit
   assert.equal(response.status, 429);
 
   const ipHash = await expectedIpHash(CLIENT_IP);
-  assert.equal(DB.rateLimitRows.get(ipHash).count, seedCount + 1);
+  assert.equal(DB.usage(ipHash).total, seedCount + 1);
 });
 
-test('an expired window resets the counter and the submission is accepted again', async () => {
+test('a whole window of silence prunes the history and the submission is accepted again', async () => {
   const { DB, env } = await seededEnv({
     count: 99,
     windowStart: nowSeconds() - DEFAULT_WINDOW_SECONDS - 60,
   });
 
   const response = await submit(env);
-  assert.equal(response.status, 200, 'a window older than RATE_LIMIT_WINDOW_SECONDS must reset the counter');
+  assert.equal(response.status, 200, 'seconds older than the window must no longer count');
   await assertSuccessBody(response);
   assert.equal(DB.rows.length, 1);
-  assert.equal(DB.rateLimitRows.get(await expectedIpHash(CLIENT_IP)).count, 1);
+
+  const ipHash = await expectedIpHash(CLIENT_IP);
+  assert.equal(DB.usage(ipHash).total, 1, 'the stale rows must be gone, not merely ignored');
+});
+
+test('expired rows are deleted, so a hammering address does not grow the table without bound', async () => {
+  const windowSeconds = 5;
+  const { DB, env } = await seededEnv({
+    envOverrides: { RATE_LIMIT_WINDOW_SECONDS: String(windowSeconds) },
+    seeds: Array.from({ length: 50 }, (_, i) => ({
+      window_start: nowSeconds() - windowSeconds - i - 1,
+      count: 3,
+    })),
+  });
+
+  await submit(env);
+
+  const ipHash = await expectedIpHash(CLIENT_IP);
+  assert.equal(DB.buckets.get(ipHash).size, 1, 'every aged-out second must be deleted, not kept');
 });
 
 test('the rate limit is keyed per client IP: a second IP starts with a fresh counter', async () => {
@@ -191,8 +287,7 @@ test('RATE_LIMIT_WINDOW_SECONDS controls the bound window floor', async () => {
   const { DB, env } = await seededEnv({ envOverrides: { RATE_LIMIT_WINDOW_SECONDS: '120' } });
   await submit(env);
 
-  const [, now, floor] = DB.rateLimitCalls.at(-1).args;
-  assert.equal(now - floor, 120, 'windowFloor must equal now - windowSeconds');
+  assert.equal(boundWindowSeconds(DB), 120, 'windowFloor must equal now - windowSeconds');
 });
 
 test('absent, empty, non-numeric, or non-positive RATE_LIMIT_WINDOW_SECONDS falls back to 3600', async () => {
@@ -200,9 +295,8 @@ test('absent, empty, non-numeric, or non-positive RATE_LIMIT_WINDOW_SECONDS fall
     const { DB, env } = await seededEnv({ envOverrides: { RATE_LIMIT_WINDOW_SECONDS: value } });
     await submit(env);
 
-    const [, now, floor] = DB.rateLimitCalls.at(-1).args;
     assert.equal(
-      now - floor,
+      boundWindowSeconds(DB),
       DEFAULT_WINDOW_SECONDS,
       `RATE_LIMIT_WINDOW_SECONDS=${JSON.stringify(String(value))} must fall back to 3600`,
     );
@@ -243,21 +337,35 @@ test('a numeric RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_SECONDS are honoured as wel
   const response = await submit(env);
 
   assert.equal(response.status, 429);
-  const [, now, floor] = DB.rateLimitCalls.at(-1).args;
-  assert.equal(now - floor, 300);
+  assert.equal(boundWindowSeconds(DB), 300);
 });
 
-test('the rate-limit statement is bound with the ip hash, a unix-second now, and now - windowSeconds', async () => {
+test('the rate-limit statements are bound with the ip hash, a unix-second now, and now - windowSeconds', async () => {
   const before = nowSeconds();
   const { DB, env } = await seededEnv();
   await submit(env);
   const after = nowSeconds();
 
-  const [ipHash, now, floor] = DB.rateLimitCalls.at(-1).args;
-  assert.match(ipHash, HEX_SHA256);
+  const [pruneHash, floor] = lastPrune(DB);
+  const [recordHash, now] = lastRecord(DB);
+
+  assert.match(recordHash, HEX_SHA256);
+  assert.equal(pruneHash, recordHash, 'every statement must address the same hashed client');
   assert.equal(Number.isInteger(now), true, 'now must be an integer count of seconds');
   assert.ok(now >= before && now <= after, 'now must be the current unix time in seconds');
   assert.equal(floor, now - DEFAULT_WINDOW_SECONDS);
+});
+
+test('the three rate-limit statements run in order: prune, record, then count', async () => {
+  const { DB, env } = await seededEnv();
+  await submit(env);
+
+  const kinds = DB.rateLimitCalls.map((call) => call.kind);
+  assert.deepEqual(
+    kinds,
+    ['prune', 'record', 'count'],
+    'counting before recording would let two concurrent requests both slip under the limit',
+  );
 });
 
 // --- salt ------------------------------------------------------------------------

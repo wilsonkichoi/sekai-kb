@@ -33,19 +33,34 @@ const HONEYPOT_FIELD = 'website';
  * identity rather than parsing SQL.
  */
 export const SQL = {
-  // One atomic upsert does the whole rolling-window decision: a row older than the
-  // window is reset to a fresh window, anything else increments in place. RETURNING
-  // hands back the post-increment state, so there is no read-then-write race between
-  // two concurrent requests from the same address.
-  RATE_LIMIT_UPSERT: `
+  // The window is genuinely rolling, not a fixed window anchored at the first hit.
+  // submission_window holds one row per (address, second) in which a submission
+  // arrived: `window_start` is that second and `count` is how many arrived in it.
+  // The limit is then the sum over the rows still inside the window, which is exact
+  // at the one-second resolution of the timestamps -- there is no boundary at which
+  // a counter resets and lets a second full allowance through.
+  //
+  // Three statements, run in this order. They need no transaction: PRUNE is
+  // idempotent, RECORD is a single atomic upsert, and COUNT runs after this
+  // request's own RECORD, so a concurrent request can only make the observed total
+  // higher than the true one, never lower. Over-counting rejects; under-counting
+  // would over-admit, and that is the direction that must be impossible.
+  RATE_LIMIT_PRUNE: `
+    DELETE FROM submission_window
+    WHERE ip_hash = ?1 AND window_start <= ?2
+  `,
+  RATE_LIMIT_RECORD: `
     INSERT INTO submission_window (ip_hash, window_start, count)
     VALUES (?1, ?2, 1)
-    ON CONFLICT(ip_hash) DO UPDATE SET
-      window_start = CASE WHEN submission_window.window_start <= ?3
-                          THEN ?2 ELSE submission_window.window_start END,
-      count        = CASE WHEN submission_window.window_start <= ?3
-                          THEN 1 ELSE submission_window.count + 1 END
-    RETURNING window_start, count
+    ON CONFLICT(ip_hash, window_start) DO UPDATE SET count = count + 1
+  `,
+  // Every surviving row is inside the window, because PRUNE just removed the rest.
+  // `oldest` is what Retry-After is derived from: the window frees a slot when the
+  // oldest surviving second falls out of it.
+  RATE_LIMIT_COUNT: `
+    SELECT SUM(count) AS total, MIN(window_start) AS oldest
+    FROM submission_window
+    WHERE ip_hash = ?1
   `,
   INSERT_FEEDBACK: `
     INSERT INTO feedback
@@ -93,6 +108,52 @@ function positiveIntVar(value, fallback) {
 }
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.length > 0;
+
+/* -- Request body ----------------------------------------------------------- */
+
+// Parse a Content-Type down to its bare media type. `application/json` and
+// `application/json; charset=utf-8` are the same type; `application/jsonp` is a
+// different one and must not pass a prefix test.
+function mediaTypeOf(header) {
+  return (header || '').split(';')[0].trim().toLowerCase();
+}
+
+// Read the body with a hard ceiling instead of buffering it whole.
+//
+// `request.text()` buffers everything before the size check can run, so a client
+// that omits Content-Length and streams a large body gets the Worker killed by the
+// platform's memory limit (a 1102 resource error) rather than the 400 the contract
+// requires. Cloudflare's Workers best-practices guidance is explicit that the
+// maximum must be enforced before the body is read. Reading chunk by chunk and
+// bailing the moment the ceiling is crossed keeps the failure a normal 400 no
+// matter how much the client sends.
+async function readBoundedText(request, maxBytes) {
+  if (!request.body) return { text: '' };
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      // Stop pulling: the rest of the body is never read into memory.
+      await reader.cancel();
+      return { tooLarge: true };
+    }
+    chunks.push(value);
+  }
+
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(joined) };
+}
 
 /* -- IP hashing ------------------------------------------------------------- */
 
@@ -182,22 +243,24 @@ export async function handleRequest(request, env) {
     return json({ error: 'server_misconfigured' }, 500, allowedOrigin);
   }
 
-  // 4. Content type.
-  const contentType = request.headers.get('Content-Type') || '';
-  if (!contentType.toLowerCase().startsWith('application/json')) {
+  // 4. Content type. Compared as a bare media type, so `application/jsonp` and
+  // friends are rejected while `application/json; charset=utf-8` is accepted.
+  if (mediaTypeOf(request.headers.get('Content-Type')) !== 'application/json') {
     return badRequest('invalid_content_type', 'content-type', allowedOrigin);
   }
 
-  // 5. Body size. The declared length is rejected without reading the body; the
-  // actual byte length is re-checked because Content-Length is client-supplied.
+  // 5. Body size. A declared length over the ceiling is rejected without reading
+  // anything; the streamed read then enforces the same ceiling for a client that
+  // omits or understates Content-Length.
   const declaredLength = Number(request.headers.get('Content-Length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
     return badRequest('payload_too_large', 'body', allowedOrigin);
   }
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
+  const body = await readBoundedText(request, MAX_BODY_BYTES);
+  if (body.tooLarge) {
     return badRequest('payload_too_large', 'body', allowedOrigin);
   }
+  const raw = body.text;
 
   // 6. JSON. A JSON array or scalar parses fine but is not a submission.
   let payload;
@@ -232,13 +295,22 @@ export async function handleRequest(request, env) {
     DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
   );
   const now = Math.floor(Date.now() / 1000);
+  const windowFloor = now - windowSeconds;
 
-  const window = await env.DB.prepare(SQL.RATE_LIMIT_UPSERT)
-    .bind(ipHash, now, now - windowSeconds)
-    .first();
+  // Drop the seconds that have rolled out of the window, record this request in its
+  // own second, then total what remains. Recording before counting is deliberate:
+  // it makes the count this request sees include itself, so concurrent requests can
+  // never both slip under the limit.
+  await env.DB.prepare(SQL.RATE_LIMIT_PRUNE).bind(ipHash, windowFloor).run();
+  await env.DB.prepare(SQL.RATE_LIMIT_RECORD).bind(ipHash, now).run();
+  const usage = await env.DB.prepare(SQL.RATE_LIMIT_COUNT).bind(ipHash).first();
 
-  if (window.count > max) {
-    const retryAfter = Math.max(1, window.window_start + windowSeconds - now);
+  const used = Number(usage?.total ?? 0);
+  if (used > max) {
+    // A slot frees up when the oldest second still inside the window falls out of
+    // it. `oldest` is never null here: this request's own row is always present.
+    const oldest = Number(usage?.oldest ?? now);
+    const retryAfter = Math.max(1, oldest + windowSeconds - now);
     return json({ error: 'rate_limited' }, 429, allowedOrigin, {
       'Retry-After': String(retryAfter),
     });

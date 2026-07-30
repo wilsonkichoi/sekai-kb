@@ -362,8 +362,11 @@ npx wrangler d1 execute sekai-feedback --remote \
   --command "UPDATE feedback SET status = 'triaged' WHERE id = 'PASTE_AN_ID'"
 ```
 
-`submission_window` holds only rate-limit counters keyed by salted hash; it is safe
-to delete rows from it, which resets those addresses' limits.
+`submission_window` holds only rate-limit counters keyed by salted hash — one row per
+address per second in which it submitted, which is what makes the window roll rather
+than reset on a boundary. The worker deletes rows once they age out of the window, so
+the table stays small on its own. Deleting rows by hand is safe; it resets those
+addresses' limits.
 
 ### Tests
 

@@ -25,6 +25,7 @@ import {
   makeEnv,
   makeRequest,
   postJson,
+  streamingBody,
   validPayload,
 } from './helpers.mjs';
 
@@ -195,6 +196,29 @@ test('application/json with a charset parameter is accepted', async () => {
   await expectAccepted(validPayload(), { contentType: 'application/json; charset=utf-8' });
 });
 
+// A prefix test on the header lets every one of these through: they all begin with
+// "application/json" and none of them IS application/json. The media type has to be
+// compared whole, with only its parameters stripped.
+test('400 invalid_content_type/content-type for a media type that merely starts with application/json', async () => {
+  for (const contentType of [
+    'application/jsonp',
+    'application/json-seq',
+    'application/jsonrequest',
+    'application/json5',
+  ]) {
+    await expectRejected(
+      { body: validPayload(), contentType },
+      { error: 'invalid_content_type', field: 'content-type' },
+    );
+  }
+});
+
+test('the media type is matched case-insensitively and around surrounding space', async () => {
+  for (const contentType of ['APPLICATION/JSON', 'Application/Json; charset=UTF-8', ' application/json ']) {
+    await expectAccepted(validPayload(), { contentType });
+  }
+});
+
 test('400 payload_too_large/body when the body exceeds 8192 bytes', async () => {
   await expectRejected(
     { body: jsonBodyOfBytes(MAX_BODY_BYTES + 1) },
@@ -216,6 +240,63 @@ test('400 payload_too_large/body when Content-Length alone declares more than 81
     { body: validPayload(), headers: { 'Content-Length': String(MAX_BODY_BYTES + 1) } },
     { error: 'payload_too_large', field: 'body' },
   );
+});
+
+// The case a Content-Length check alone cannot cover. A chunked upload declares no
+// length, so a worker that calls request.text() first buffers the whole thing before
+// it can measure it -- on the real platform that is a memory-limit kill (error 1102),
+// not the 400 the contract requires. The ceiling has to be enforced while reading.
+test('400 payload_too_large/body for a streamed body with no Content-Length', async () => {
+  const DB = createD1Stub(SQL);
+  const { stream } = streamingBody(1024, 64); // 64 KiB, eight times the ceiling
+  const request = makeRequest({ body: stream, headers: { 'Content-Length': OMIT } });
+
+  const response = await handleRequest(request, makeEnv({ DB }));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'payload_too_large', field: 'body' });
+  assert.equal(DB.touched, false, 'an oversized body must never reach D1');
+});
+
+test('an oversized streamed body is abandoned rather than buffered to the end', async () => {
+  const DB = createD1Stub(SQL);
+  const chunkBytes = 1024;
+  const chunkCount = 4096; // 4 MiB if it were ever fully read
+  const { stream, state } = streamingBody(chunkBytes, chunkCount);
+
+  const response = await handleRequest(
+    makeRequest({ body: stream, headers: { 'Content-Length': OMIT } }),
+    makeEnv({ DB }),
+  );
+
+  assert.equal(response.status, 400);
+  const ceilingChunks = Math.ceil(MAX_BODY_BYTES / chunkBytes);
+  assert.ok(
+    state.pulled <= ceilingChunks + 1,
+    `the worker pulled ${state.pulled} chunks; it must stop within ${ceilingChunks + 1} of the ceiling`,
+  );
+  assert.ok(state.pulled < chunkCount, 'the worker must not drain the whole upload');
+});
+
+test('a body with no Content-Length that fits under the ceiling is still accepted', async () => {
+  const DB = createD1Stub(SQL);
+  const payload = new TextEncoder().encode(JSON.stringify(validPayload()));
+  const stream = new ReadableStream({
+    start(controller) {
+      // Two chunks, to exercise the reassembly path rather than a single read.
+      controller.enqueue(payload.slice(0, 10));
+      controller.enqueue(payload.slice(10));
+      controller.close();
+    },
+  });
+
+  const response = await handleRequest(
+    makeRequest({ body: stream, headers: { 'Content-Length': OMIT } }),
+    makeEnv({ DB }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(DB.rows.length, 1, 'a streamed body under the ceiling must still be stored');
 });
 
 test('400 invalid_json/body for a body that is not parseable JSON', async () => {

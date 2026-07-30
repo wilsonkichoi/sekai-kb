@@ -238,6 +238,7 @@ test('the seeded 429 fixture proves the rate-limit window is the documented defa
   const response = await handleRequest(postJson(validPayload()), makeEnv({ DB }));
 
   assert.equal(response.status, 429);
-  const [, now, floor] = DB.rateLimitCalls.at(-1).args;
-  assert.equal(now - floor, DEFAULT_WINDOW_SECONDS, 'windowFloor must be now - 3600 by default');
+  const [, floor] = DB.callsOf('prune').at(-1).args;
+  const [, boundNow] = DB.callsOf('record').at(-1).args;
+  assert.equal(boundNow - floor, DEFAULT_WINDOW_SECONDS, 'windowFloor must be now - 3600 by default');
 });
