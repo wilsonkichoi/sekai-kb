@@ -26,35 +26,52 @@ assert.match(
 const noscriptCssMatch = noscriptMatch[1].match(
   /<style is:inline>([\s\S]*?)<\/style>/,
 );
-assert.ok(noscriptCssMatch, 'the noscript fallback must hide the JavaScript form');
+assert.ok(noscriptCssMatch, 'the noscript fallback must hide the JavaScript controls');
 const noscriptCss = noscriptCssMatch[1];
 
 function widgetHtml() {
   return `<!doctype html>
 <html>
   <body>
-    <noscript>
-      <style>${noscriptCss}</style>
-      <a data-feedback-email href="mailto:feedback@example.invalid">Email feedback</a>
-    </noscript>
-    <form
-      data-feedback-form
-      data-endpoint="${ENDPOINT}"
-      data-page="/history/example"
-      data-msg-sending="Sending..."
-      data-msg-success="Thank you. Your feedback was received."
-      data-msg-invalid="Please check the {field} field and try again."
-      data-msg-rate-limited="Too many submissions from this network. Please try again later."
-      data-msg-error="Could not send your feedback. Please try again later."
-    >
-      <select name="category"><option value="correction">Correction</option></select>
-      <textarea name="message"></textarea>
-      <input name="contact" value="">
-      <input name="website" value="">
-      <button type="submit">Send feedback</button>
-      <p data-feedback-status hidden></p>
-    </form>
-    <script>${submitScript}</script>
+    <section data-feedback-widget>
+      <button type="button" data-feedback-open>Give feedback</button>
+      <noscript>
+        <style>${noscriptCss}</style>
+        <a data-feedback-email href="mailto:feedback@example.invalid">Email feedback</a>
+      </noscript>
+      <dialog
+        data-feedback-dialog
+        aria-labelledby="feedback-heading"
+        aria-describedby="feedback-intro"
+      >
+        <h2 id="feedback-heading">Something wrong on this page?</h2>
+        <p id="feedback-intro">Feedback introduction</p>
+        <button
+          type="button"
+          data-feedback-close
+          aria-label="Close feedback form"
+          autofocus
+        >Close</button>
+        <form
+          data-feedback-form
+          data-endpoint="${ENDPOINT}"
+          data-page="/history/example"
+          data-msg-sending="Sending..."
+          data-msg-success="Thank you. Your feedback was received."
+          data-msg-invalid="Please check the {field} field and try again."
+          data-msg-rate-limited="Too many submissions from this network. Please try again later."
+          data-msg-error="Could not send your feedback. Please try again later."
+        >
+          <select name="category"><option value="correction">Correction</option></select>
+          <textarea name="message"></textarea>
+          <input name="contact" value="">
+          <input name="website" value="">
+          <button type="submit">Send feedback</button>
+          <p data-feedback-status hidden></p>
+        </form>
+      </dialog>
+      <script>${submitScript}</script>
+    </section>
   </body>
 </html>`;
 }
@@ -103,9 +120,10 @@ async function submitWith(response) {
   });
 
   await page.setContent(widgetHtml());
+  await page.locator('[data-feedback-open]').click();
   await page.locator('textarea[name="message"]').fill('This date needs a correction.');
   await page.locator('input[name="contact"]').fill('reader@example.invalid');
-  await page.locator('button[type="submit"]').click();
+  await page.locator('[data-feedback-form] button[type="submit"]').click();
   const status = page.locator('[data-feedback-status]');
   await status.waitFor({ state: 'visible' });
   await page.waitForFunction(() => {
@@ -121,6 +139,58 @@ async function submitWith(response) {
     text: await status.textContent(),
   };
 }
+
+test('the article-bottom button opens an accessible modal and both close paths restore focus', async () => {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.setContent(widgetHtml());
+
+    const opener = page.locator('[data-feedback-open]');
+    const dialog = page.locator('[data-feedback-dialog]');
+    const closer = page.locator('[data-feedback-close]');
+
+    assert.equal(await opener.isVisible(), true);
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(await page.locator('[data-feedback-form]').isVisible(), false);
+    assert.equal(
+      await dialog.getAttribute('aria-labelledby'),
+      'feedback-heading',
+    );
+    assert.equal(
+      await dialog.getAttribute('aria-describedby'),
+      'feedback-intro',
+    );
+    assert.equal(
+      await closer.getAttribute('aria-label'),
+      'Close feedback form',
+    );
+
+    await opener.click();
+    assert.equal(await dialog.isVisible(), true);
+    assert.equal(
+      await closer.evaluate((element) => document.activeElement === element),
+      true,
+    );
+
+    await closer.click();
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(
+      await opener.evaluate((element) => document.activeElement === element),
+      true,
+    );
+
+    await opener.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(
+      await opener.evaluate((element) => document.activeElement === element),
+      true,
+    );
+  } finally {
+    await context.close();
+  }
+});
 
 test('success posts the worker payload, reports success, and clears the form', async () => {
   const result = await submitWith({ status: 200, body: { ok: true, id: 'feedback-id' } });
@@ -180,19 +250,31 @@ test('a network failure reports the catch-all failure state', async () => {
   }
 });
 
-test('JavaScript disabled hides the form and leaves only the email fallback', async () => {
+test('JavaScript disabled hides the trigger and dialog and leaves only the email fallback', async () => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {
     const page = await context.newPage();
     await page.setContent(widgetHtml());
 
     assert.equal(
-      await page.locator('[data-feedback-form]').evaluate(
-        (form) => getComputedStyle(form).display,
-      ),
+      await page
+        .locator('[data-feedback-open]')
+        .evaluate((opener) => getComputedStyle(opener).display),
       'none',
     );
-    assert.equal(await page.locator('button[type="submit"]').isVisible(), false);
+    assert.equal(
+      await page
+        .locator('[data-feedback-dialog]')
+        .evaluate((dialog) => getComputedStyle(dialog).display),
+      'none',
+    );
+    assert.equal(await page.locator('[data-feedback-form]').isVisible(), false);
+    assert.equal(
+      await page
+        .locator('[data-feedback-form] button[type="submit"]')
+        .isVisible(),
+      false,
+    );
     assert.equal(await page.locator('[data-feedback-email]').isVisible(), true);
     assert.equal(
       await page.locator('[data-feedback-email]').getAttribute('href'),

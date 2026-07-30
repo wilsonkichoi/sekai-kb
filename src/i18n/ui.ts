@@ -49,6 +49,8 @@ export const ui = {
     'article.home': 'Home',
     'article.backToHome': 'Back to Home',
     // feedback widget (features.feedback + workers.feedback)
+    'feedback.open': 'Give feedback',
+    'feedback.close': 'Close feedback form',
     'feedback.heading': 'Something wrong on this page?',
     'feedback.intro':
       'Corrections, missing context, and questions all help. Every submission is read by a person.',

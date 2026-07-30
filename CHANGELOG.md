@@ -43,7 +43,9 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
-- **Feedback widget on article pages (`src/components/FeedbackWidget.astro`).**
+- **Feedback widget on article pages (`src/components/FeedbackWidget.astro`).** An
+  article-bottom button opens the form in an accessible modal, keeping the full form
+  hidden until a reader asks for it.
   Vanilla JS, no client framework: it posts `{page, category, message, contact}`
   plus a hidden honeypot to the `workers/feedback/` endpoint and renders one of
   four end states — success, a validation error naming the field the endpoint
