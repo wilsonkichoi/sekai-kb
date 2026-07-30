@@ -201,6 +201,7 @@ INPUT="$TMP/interactive-input.txt"
   printf 'kb@example.org\n'                                        # links.email
   printf '@example\n'                                              # twitter
   printf '\n\n'                                                    # threads/instagram -> none
+  printf '\n'                                                      # workers.feedback -> blank
 } > "$INPUT"
 snapshot "$TMP/run3"
 node "$TMP/run3/scripts/init/index.mjs" < "$INPUT" >/dev/null
