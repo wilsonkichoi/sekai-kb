@@ -8,7 +8,8 @@ codepoints.
 
 `npm run init` (the adoption wizard) deletes this file when you adopt the template.
 The gates then revert to INSTANCE MODE, where knowledge/ and place.config.ts
-legitimately carry your place's identity. The two gates' instance root sets are
-not the same list: check-genericity.sh scans src/, scripts/, tests/,
+legitimately carry your place's identity. Each gate states its own instance root
+set: check-genericity.sh scans src/, scripts/, tests/, workers/,
 .agents/skills/; check-english-only.mjs scans src/, scripts/, tests/, workers/,
-.agents/skills/; see both scripts under scripts/ci/.
+.agents/skills/; the two lists agree today but are never merged into one claim, so
+either gate can gain a root without the other. See both scripts under scripts/ci/.

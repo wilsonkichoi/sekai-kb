@@ -94,7 +94,9 @@ assert_guard_catches() {
 
 assert_guard_passes "baseline"
 
-# 1. DOC drift: drop workers/ from the runbook's English-only root list.
+# 1. DOC drift: drop workers/ from a documented root list in the runbook. Both
+# gates enumerate workers/ today, so this plants the drift in whichever list the
+# substitution reaches first; the guard must name the file either way.
 substitute_once "$RUNBOOK" '`tests/`, `workers/`,' '`tests/`,'
 assert_guard_catches "a root dropped from a documented list" "docs/runbook/DEPLOY.md"
 restore_partial_runbook() { cp "$BAK_DIR/DEPLOY.md" "$RUNBOOK"; }

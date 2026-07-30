@@ -3,17 +3,19 @@
 # check-genericity.sh — the genericity gate.
 #
 # Fails if any place-specific string leaks into framework-owned code (src/,
-# scripts/, tests/, or .agents/skills/). Place identity must flow ONLY through
+# scripts/, tests/, workers/, or .agents/skills/). Place identity must flow ONLY through
 # place.config.ts, knowledge/, and public/media/ — never hardcoded in code trees
 # (ADR 002, SPEC §Negative requirements, §G risk 2). This is the structural
 # mitigation for the trap that motivated the whole rebuild.
 #
-# Scan scope, instance mode: src/, scripts/, tests/, .agents/skills/; test
-# fixtures are code, and framework skills are agent-executed prose that is code
-# for doctrine purposes — the whole-project doctrine, STRATEGIC-DIRECTION
-# 2026-07-11 (b), task 5.6. The English-only gate (check-english-only.mjs) has a
-# different instance root list; the two are never merged into one claim
-# (scripts/ci/check-scan-root-docs.mjs gates both statements).
+# Scan scope, instance mode: src/, scripts/, tests/, workers/, .agents/skills/;
+# test fixtures are code, Worker source is code, and framework skills are
+# agent-executed prose that is code for doctrine purposes — the whole-project
+# doctrine, STRATEGIC-DIRECTION 2026-07-11 (b), task 5.6. The English-only gate
+# (check-english-only.mjs) currently enumerates the same five roots, but each gate
+# derives and states its own list: they are never merged into one claim, so either
+# can gain a root without the other (scripts/ci/check-scan-root-docs.mjs gates both
+# statements against their own script).
 # place.config.ts (repo root), knowledge/, public/media/, and docs/
 # hold place identity legitimately and are outside the scan roots by
 # construction; the denylist file itself is inside scripts/ and is excluded
@@ -65,10 +67,11 @@ else
   [ -d "$ROOT/src" ] && SCAN_ROOTS+=("$ROOT/src")
   [ -d "$ROOT/scripts" ] && SCAN_ROOTS+=("$ROOT/scripts")
   [ -d "$ROOT/tests" ] && SCAN_ROOTS+=("$ROOT/tests")
+  [ -d "$ROOT/workers" ] && SCAN_ROOTS+=("$ROOT/workers")
   [ -d "$ROOT/.agents/skills" ] && SCAN_ROOTS+=("$ROOT/.agents/skills")
-  MODE="instance (src/, scripts/, tests/, .agents/skills/)"
+  MODE="instance (src/, scripts/, tests/, workers/, .agents/skills/)"
   if [ "${#SCAN_ROOTS[@]}" -eq 0 ]; then
-    echo "✓ genericity gate passed — no src/, scripts/, tests/, or .agents/skills/ to scan"
+    echo "✓ genericity gate passed — no src/, scripts/, tests/, workers/, or .agents/skills/ to scan"
     exit 0
   fi
 fi

@@ -24,6 +24,9 @@ the semiont probe, and the content working set.
   Everything the site renders is derived from this at build time. Article ideas
   queue in `knowledge/INBOX.md`.
 - **Media:** `public/media/` and other `public/` assets.
+- **Cloudflare Workers:** `workers/*/` — one directory per worker, each with its own
+  `wrangler.toml` (placeholders only), `migrations/`, and `node:test` suite. Deployed
+  by hand, never by CI; see [DEPLOY.md §Cloudflare Workers](docs/runbook/DEPLOY.md).
 - **Editorial canon:** `docs/playbook/` — [ARTICLE-PLAYBOOK.md](docs/playbook/ARTICLE-PLAYBOOK.md)
   (voice, structure, quality bar), [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md)
   (the write/rewrite process), [FACTCHECK-PIPELINE.md](docs/playbook/FACTCHECK-PIPELINE.md)
@@ -70,11 +73,13 @@ content).
 2. **Genericity + English-only:** zero place-specific strings and zero CJK/multi-language
    code paths in any code tree; test fixtures are code, and so are the framework
    skills. Place identity flows only from `place.config.ts` + `knowledge/` +
-   `public/media/`. Machine-gated by `npm run genericity`, whose two gates carry
-   **different** instance-mode roots: `scripts/ci/check-genericity.sh` (place-name
-   denylist) scans `src/`, `scripts/`, `tests/`, `.agents/skills/`;
+   `public/media/`. Machine-gated by `npm run genericity`, whose two gates each carry
+   their **own** instance-mode roots: `scripts/ci/check-genericity.sh` (place-name
+   denylist) scans `src/`, `scripts/`, `tests/`, `workers/`, `.agents/skills/`;
    `scripts/ci/check-english-only.mjs` (CJK codepoints) scans `src/`, `scripts/`,
-   `tests/`, `workers/`, `.agents/skills/`; in template mode (the `.sekai-template`
+   `tests/`, `workers/`, `.agents/skills/`; the two lists agree today but are never
+   merged into one claim, so either gate can gain a root without the other. In
+   template mode (the `.sekai-template`
    marker) both scan the whole repository. `scripts/ci/check-scan-root-docs.mjs`
    keeps every such statement in this repository true.
 3. **Framework vs instance:** `src/` and `scripts/` are framework-owned — customize

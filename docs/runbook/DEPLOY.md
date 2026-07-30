@@ -121,11 +121,12 @@ zero place-specific strings, and the English-only gate
 (`scripts/ci/check-english-only.mjs`), which rejects CJK codepoints. In the
 pristine template (the `.sekai-template` marker is present at the repo root)
 both scan the whole tree. In an adopted instance (`npm run init` removes the
-marker) they scan the code trees, and their root sets differ: the place-name
-denylist gate scans `src/`, `scripts/`, `tests/`, `.agents/skills/`; the
-English-only gate scans `src/`, `scripts/`, `tests/`, `workers/`,
-`.agents/skills/`; your `knowledge/` and `place.config.ts` are outside both, so
-they legitimately carry your place's name.
+marker) they scan the code trees, each gate stating its own root set: the
+place-name denylist gate scans `src/`, `scripts/`, `tests/`, `workers/`,
+`.agents/skills/`; the English-only gate scans `src/`, `scripts/`, `tests/`,
+`workers/`, `.agents/skills/`; your `knowledge/` and `place.config.ts` are
+outside both, so they legitimately carry your place's name. A gate skips any of
+its roots this checkout does not have.
 Your place name is added to `scripts/ci/genericity-denylist.local.txt` by the
 init wizard, which keeps it out of framework code from day one.
 
@@ -255,6 +256,123 @@ Verify end-to-end:
 
 ```bash
 curl -sI https://your-domain.example | head -5
+```
+
+---
+
+## Cloudflare Workers
+
+Dynamic capability runs on Cloudflare Workers, separate from the static site on
+GitHub Pages. Each worker lives in its own directory under `workers/` with its own
+`wrangler.toml`, and is deployed by hand — CI never deploys a worker, so nothing
+here runs on a push. The first one is `workers/feedback/`, the endpoint the
+feedback widget posts to.
+
+Everything below stays inside the **free tier**: one Worker and one D1 database.
+
+### Prerequisites
+
+- A Cloudflare account (free plan is enough).
+- `wrangler` is deliberately **not** a project dependency — it pulls a
+  platform-specific binary into the lockfile that CI would then have to resolve for
+  a tool CI never runs. Invoke it with `npx` instead, which downloads it on demand.
+- Log in once per machine:
+
+```bash
+npx wrangler login
+```
+
+### Deploying the feedback worker
+
+Run every command from the worker's own directory, so `wrangler` picks up its
+`wrangler.toml`:
+
+```bash
+cd workers/feedback
+```
+
+**1. Create the D1 database.** The command prints a `database_id`; paste it into
+`wrangler.toml` under `[[d1_databases]]`, replacing the
+`REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder. The checked-in file ships with
+placeholders only — your instance owns it after adoption, so your real id is a
+normal commit in your repository.
+
+```bash
+npx wrangler d1 create sekai-feedback
+```
+
+**2. Apply the schema.** This creates the `feedback` and `submission_window`
+tables. Re-running it is safe; only unapplied migrations run.
+
+```bash
+npx wrangler d1 migrations apply sekai-feedback --remote
+```
+
+**3. Set the IP-hash salt.** The worker rate-limits per address, and it stores only
+`sha256(address + salt)` — never the address itself. Without the salt a hash of an
+IPv4 address is reversible by brute force in seconds, so the worker refuses to run
+(HTTP 500) rather than hash unsalted. Use a long random value and keep it out of
+`wrangler.toml`: a secret is not a var.
+
+```bash
+openssl rand -hex 32 | npx wrangler secret put IP_HASH_SALT
+```
+
+**4. Set your site's origin and deploy.** `ALLOWED_ORIGIN` is the only origin the
+worker accepts; edit it in `wrangler.toml` before deploying.
+
+```bash
+npx wrangler deploy
+```
+
+`wrangler` prints the deployed URL (`https://sekai-feedback.<subdomain>.workers.dev`).
+That URL is what `place.config.ts` points the widget at.
+
+### Configuration
+
+Set in `wrangler.toml` under `[vars]`, except `IP_HASH_SALT`, which is a secret:
+
+| Name | Required | Default | Meaning |
+|---|---|---|---|
+| `ALLOWED_ORIGIN` | yes | — | The single origin allowed to post, e.g. `https://kb.example.invalid`. Never `*`. Unset or mismatched → every request is 403. |
+| `IP_HASH_SALT` | yes (secret) | — | Salt for the per-address hash. Missing → every POST is 500. |
+| `RATE_LIMIT_MAX` | no | `5` | Submissions allowed per address per window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | `3600` | Length of the rolling window, in seconds. |
+
+The `[[d1_databases]]` block binds the database as `DB`; leave `binding = "DB"`
+alone, and change `database_name` only if you created the database under a
+different name.
+
+### Reading rows back
+
+The triage skill reads D1 directly, but any query works from the CLI. `--remote`
+targets the deployed database; without it you get the local dev copy.
+
+```bash
+# The newest submissions
+npx wrangler d1 execute sekai-feedback --remote \
+  --command "SELECT id, created_at, page, category, status FROM feedback ORDER BY created_at DESC LIMIT 20"
+
+# One submission in full
+npx wrangler d1 execute sekai-feedback --remote \
+  --command "SELECT * FROM feedback WHERE id = 'PASTE_AN_ID'"
+
+# Mark one triaged
+npx wrangler d1 execute sekai-feedback --remote \
+  --command "UPDATE feedback SET status = 'triaged' WHERE id = 'PASTE_AN_ID'"
+```
+
+`submission_window` holds only rate-limit counters keyed by salted hash; it is safe
+to delete rows from it, which resets those addresses' limits.
+
+### Tests
+
+The worker's unit suite runs under `node:test` with no Cloudflare dependency and no
+network, driving the handler against an in-memory D1 stub. CI runs it on every pull
+request; run it locally with:
+
+```bash
+npm run test:workers
 ```
 
 ---

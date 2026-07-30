@@ -70,6 +70,8 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
 - **`scripts/tools/`** — the Python `article-health` editorial linter (runs via
   [uv](https://docs.astral.sh/uv/); Python ≥ 3.12).
 - **`docs/diagrams/`** — architecture diagrams (draw.io), the engineering source of truth.
+- **`workers/`** — Cloudflare Workers, one directory per worker (`workers/feedback/`
+  backs the feedback endpoint). Deployed by hand with `wrangler`, never by CI.
 - **`scripts/visual/`** — visual regression tooling (`npm run visual:baseline` to
   capture, `npm run visual:check` to diff). Run `visual:baseline` once first.
 - **`.agent-toolkit/rules/`** — framework engineering rules that keep the build green.
@@ -78,12 +80,12 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
 
 The code trees carry **zero place-specific strings** — all place identity flows
 through `place.config.ts`, `knowledge/`, and `public/media/`. This is
-machine-enforced by `npm run genericity`, two gates whose instance-mode roots
-differ: the place-name denylist gate scans `src/`, `scripts/`, `tests/`,
-`.agents/skills/`; the English-only CJK gate scans `src/`, `scripts/`, `tests/`,
-`workers/`, `.agents/skills/`; in the pristine template (the `.sekai-template`
-marker) both scan the whole repository. It is the structural guarantee that one
-config file re-places the whole site.
+machine-enforced by `npm run genericity`, two gates that each state their own
+instance-mode roots: the place-name denylist gate scans `src/`, `scripts/`,
+`tests/`, `workers/`, `.agents/skills/`; the English-only CJK gate scans `src/`,
+`scripts/`, `tests/`, `workers/`, `.agents/skills/`; in the pristine template (the
+`.sekai-template` marker) both scan the whole repository. It is the structural
+guarantee that one config file re-places the whole site.
 
 ## Language support
 

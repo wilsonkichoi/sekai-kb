@@ -9,12 +9,13 @@ denylist) and `scripts/ci/check-english-only.mjs` (CJK codepoints).
 
 - **Template mode** — when `.sekai-template` is present at the repo root, both
   gates scan the whole repository.
-- **Instance mode, `check-genericity.sh`** — four roots: `src/`, `scripts/`,
-  `tests/`, `.agents/skills/`.
+- **Instance mode, `check-genericity.sh`** — five roots: `src/`, `scripts/`,
+  `tests/`, `workers/`, `.agents/skills/`.
 - **Instance mode, `check-english-only.mjs`** — five roots: `src/`, `scripts/`,
-  `tests/`, `workers/`, `.agents/skills/`. The two root sets are not the same
-  list: `workers/` is in the CJK gate's roots for when that tree arrives, so in
-  instance mode a denylisted place string under `workers/` is unguarded.
+  `tests/`, `workers/`, `.agents/skills/`. The two root sets agree today, but each
+  gate derives and states its own list and they are never merged into one claim —
+  either can gain a root without the other, and `check-scan-root-docs.mjs` checks
+  every statement against the script it describes.
 - Either gate skips a scan root absent from the checkout, so a tree that does not
   exist yet is out of scope rather than an error.
 - Denylist data lives in `scripts/ci/genericity-denylist.txt`. The genericity gate

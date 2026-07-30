@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Check for place-specific strings in src/, scripts/, tests/, .agents/skills/
+      - name: Check for place-specific strings in src/, scripts/, tests/, workers/, .agents/skills/
         run: bash scripts/ci/check-genericity.sh
       - name: Check for CJK codepoints (English-only) in src/, scripts/, tests/, workers/, .agents/skills/
         run: node scripts/ci/check-english-only.mjs
@@ -45,7 +45,7 @@ jobs:
         run: node scripts/ci/check-scan-root-docs.mjs
       - name: Version ownership contract
         run: npm run version:check
-      - name: Self-test — both gates scan .agents/skills/ in instance mode
+      - name: Self-test — both gates scan .agents/skills/ and workers/ in instance mode
         run: bash scripts/ci/check-skills-gated.sh
       - name: Self-test — the scan-root docs guard fails on doc, script, and anchor drift
         run: bash scripts/ci/check-scan-root-docs-selftest.sh
@@ -75,6 +75,13 @@ jobs:
           python-version: "3.12"
       - run: npm ci --force
       - run: npm run test:ci
+      # Cloudflare Worker unit suites (node:test, no runtime dependency). The runner
+      # walks workers/ for *.test.mjs, so a worker added in a later phase is gated
+      # here the moment its first suite lands — no second edit to this workflow. It
+      # also fails closed on a workers/ tree that has lost its suites, which the
+      # native `node --test <glob>` form does not (a zero-match glob exits 0).
+      - name: Worker unit suites
+        run: npm run test:workers
       - run: npm run framework-release:selftest
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy

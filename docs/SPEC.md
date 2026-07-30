@@ -333,11 +333,14 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
 
 - **Genericity + English-only (CI-gated):** zero place-specific strings in any code tree;
   `scripts/ci/check-genericity.sh` fails the build on denylist hits, and
-  `scripts/ci/check-english-only.mjs` fails on any CJK codepoint. The two gates carry
-  **different** instance-mode scan roots: the place-name denylist gate scans `src/`,
-  `scripts/`, `tests/`, `.agents/skills/`; the English-only gate scans `src/`, `scripts/`,
-  `tests/`, `workers/`, `.agents/skills/`; in template mode (the `.sekai-template`
-  marker) both scan the whole repository. Test fixtures are code, and so is
+  `scripts/ci/check-english-only.mjs` fails on any CJK codepoint. Each gate carries its
+  **own** instance-mode scan roots: the place-name denylist gate scans `src/`,
+  `scripts/`, `tests/`, `workers/`, `.agents/skills/`; the English-only gate scans `src/`,
+  `scripts/`, `tests/`, `workers/`, `.agents/skills/`; the two lists agree today but are
+  never merged into one claim, so either gate can gain a root without the other. In
+  template mode (the `.sekai-template`
+  marker) both scan the whole repository. Test fixtures are code, Worker source is code,
+  and so is
   agent-executed skill prose. `scripts/ci/check-scan-root-docs.mjs` keeps every statement
   of those root sets, including this one, synchronized with the gates.
 - **No build-time OG generation ever**; static default until the Phase 7 worker.

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // check-scan-root-docs.mjs -- the scan-root documentation gate.
 //
-// The two machine gates carry DIFFERENT instance-mode scan roots
-// (check-genericity.sh and check-english-only.mjs), and a dozen places in this
+// The two machine gates (check-genericity.sh and check-english-only.mjs) each carry
+// their OWN instance-mode scan roots -- the two lists agree today, but they are
+// derived and stated separately, so either gate can gain a root without the other.
+// A dozen places in this
 // repository restate those root sets in prose: script headers, CI step names,
 // the runbook, AGENTS.md, README.md, the template marker, the wizard-emitted
 // instance AGENTS.md. Nothing used to check them, so they drifted -- and wrong
@@ -253,7 +255,7 @@ const REGISTRY = [
     label: 'doctrine rule, denylist gate roots',
     gate: 'genericity',
     scope: 'instance',
-    anchor: /check-genericity\.sh[\s\S]{0,20}?four\s+roots:\s+([\s\S]*?`)\.\n/,
+    anchor: /check-genericity\.sh[\s\S]{0,20}?five\s+roots:\s+([\s\S]*?`)\.\n/,
   },
   {
     file: '.agent-toolkit/rules/genericity-gate-scope.md',

@@ -1,0 +1,33 @@
+# wrangler.toml — the feedback Worker's deploy config.
+#
+# PLACEHOLDERS ONLY. This file is framework-owned and ships in the template, so it
+# carries no site domain, no account id, and no database id (AGENTS.md iron rule 2;
+# both machine gates scan workers/). Every real value is supplied at deploy time and
+# documented in docs/runbook/DEPLOY.md §Cloudflare Workers:
+#
+#   - database_id      <- `npx wrangler d1 create <name>` prints it; paste it here in
+#                         YOUR instance, which owns this file after adoption.
+#   - ALLOWED_ORIGIN   <- your site's origin, e.g. https://kb.example.invalid
+#   - IP_HASH_SALT     <- `npx wrangler secret put IP_HASH_SALT` (a secret, never a var)
+#
+# Free tier only: this framework adds no paid hosting or infra services.
+
+name = "sekai-feedback"
+main = "src/index.mjs"
+compatibility_date = "2026-07-01"
+
+# Non-secret configuration. ALLOWED_ORIGIN is the single origin the worker accepts;
+# it is never `*`, and an unset value makes every request 403 rather than opening the
+# endpoint up.
+[vars]
+ALLOWED_ORIGIN = "https://example.invalid"
+RATE_LIMIT_MAX = "5"
+RATE_LIMIT_WINDOW_SECONDS = "3600"
+
+# `database_id` is a placeholder: replace it with the id `wrangler d1 create` printed
+# for your own database. `database_name` must match the database you created.
+[[d1_databases]]
+binding = "DB"
+database_name = "sekai-feedback"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
