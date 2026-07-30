@@ -326,7 +326,20 @@ npx wrangler deploy
 ```
 
 `wrangler` prints the deployed URL (`https://sekai-feedback.<subdomain>.workers.dev`).
-That URL is what `place.config.ts` points the widget at.
+
+**5. Point the site at it.** In `place.config.ts`, set the endpoint and turn the
+feature on. The widget needs both: with either half missing it renders nothing, so
+a flag switched on before the worker exists cannot produce a form that posts
+nowhere.
+
+```ts
+features: { feedback: true, /* ... */ },
+workers: { feedback: 'https://sekai-feedback.<subdomain>.workers.dev' },
+```
+
+Rebuild and redeploy the site afterwards — the endpoint is read at build time, so
+the browser never fetches config. `ALLOWED_ORIGIN` must be the origin the site is
+served from, or every submission comes back 403.
 
 ### Configuration
 

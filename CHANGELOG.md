@@ -43,6 +43,29 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **Feedback widget on article pages (`src/components/FeedbackWidget.astro`).**
+  Vanilla JS, no client framework: it posts `{page, category, message, contact}`
+  plus a hidden honeypot to the `workers/feedback/` endpoint and renders one of
+  four end states — success, a validation error naming the field the endpoint
+  rejected, rate-limited, and a catch-all for an unreachable endpoint, a rejected
+  origin, or a server fault. The trap field is off-screen, `aria-hidden`, and out
+  of the tab order; a `<noscript>` block falls back to `links.email`. Every string
+  lives in `src/i18n/ui.ts`. The widget renders only when `features.feedback` is
+  true **and** `workers.feedback` is a non-empty string, so a flag switched on
+  before the worker is deployed produces no markup rather than a form that posts
+  nowhere. Operator steps: [DEPLOY.md §Cloudflare
+  Workers](docs/runbook/DEPLOY.md).
+- **`place.config.ts` gains `workers?: {feedback?: string}`,** the deployed
+  endpoint URL. It is place identity (it names this instance's deployment), so
+  under iron rule 2 it may live only in config; the init wizard prompts for it with
+  a blank default, since the worker is deployed after adoption. The `place.config`
+  top-level section list and the `features` flag list are now derived from
+  `place.config.ts` and gated by `scripts/ci/check-framework-docs.mjs`, so the next
+  key that is added without updating the SPEC enumeration fails CI.
+
+  **Upgrade note:** one new optional config key. Nothing to do — a config without
+  a `workers` block keeps the feedback widget off, exactly as before. To turn it
+  on, deploy the worker and follow step 5 of DEPLOY.md §Cloudflare Workers.
 - **`workers/` — the framework's first Cloudflare Worker tree, starting with
   `workers/feedback/`.** A POST endpoint backed by D1 that stores reader feedback:
   CORS locked to a single deploy-time `ALLOWED_ORIGIN` (never `*`; an unset var or a

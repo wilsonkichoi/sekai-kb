@@ -415,4 +415,16 @@ export const PROMPTS = [
   { id: 'links.social.twitter', question: 'Twitter/X handle (blank for none)', kind: 'handle', default: '' },
   { id: 'links.social.threads', question: 'Threads handle (blank for none)', kind: 'handle', default: '' },
   { id: 'links.social.instagram', question: 'Instagram handle (blank for none)', kind: 'handle', default: '' },
+  {
+    // Blank by default because the worker is deployed AFTER init (DEPLOY.md
+    // §Cloudflare Workers): an adopter has no URL to give yet. Blank is also the
+    // absent-safe off state — the widget needs both features.feedback and a
+    // non-empty endpoint — so the emitted config is valid either way.
+    id: 'workers.feedback',
+    question: 'Feedback worker URL (blank until you deploy workers/feedback)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^https?:\/\/\S+$/.test(v) ? null : `"${v}" is not a URL`,
+  },
 ];

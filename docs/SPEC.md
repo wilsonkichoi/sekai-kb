@@ -158,14 +158,27 @@ Schema: `place {name, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`seo {defaultOgImage, twitterHandle?}`. Init-time: written only by the `npm run init`
+`workers? {feedback?}`,
+`seo {defaultOgImage, twitterHandle?}`,
+`home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
+Init-time: written only by the `npm run init`
 wizard (or `--answers <json>` from `/sekai-adopt` — single writer, no drift).
 Runtime-toggleable: `features`, languages, semiont organs.
+Both the top-level section list and the `features` flag list are derived from
+`place.config.ts` and gated by `scripts/ci/check-framework-docs.mjs`.
 
 > **`links`:** the shell's Footer/SEO/Header need a repository URL, contact
 > email, and social handles, which the original schema did not define. The schema was
 > extended rather than dropping the links. `links.social.*` render only when
 > `features.social` is true; the init wizard includes `links` prompts.
+
+> **`workers?`:** deployed Cloudflare Worker endpoint URLs, one optional key per
+> worker (`workers.feedback` for `workers/feedback/`). A worker is deployed by hand
+> after adoption, so the wizard prompts for the URL with a blank default and an
+> instance fills it in later. The endpoint is place identity — it names this
+> instance's deployment — so under iron rule 2 it may live only here, never in
+> `src/`. Absent-safe by construction: a consumer requires both its `features` flag
+> and a non-empty endpoint, so a missing `workers` block leaves the capability off.
 
 > **`categories[].color?` / `colorLight?`:** optional hex color strings
 > for category display (hero tints, tag badges, sidebar accents). Absent-safe: when

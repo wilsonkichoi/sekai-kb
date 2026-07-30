@@ -148,6 +148,16 @@ export interface PlaceConfig {
       instagram?: string;
     };
   };
+  /**
+   * Deployed Cloudflare Worker endpoints (\`docs/runbook/DEPLOY.md\` §Cloudflare
+   * Workers). Absent-safe: a missing key — or an empty string — keeps the
+   * capability that needs it off even when its \`features\` flag is true, so an
+   * instance upgrading across a framework release never has to edit config.
+   */
+  workers?: {
+    /** URL of this instance's deployed \`workers/feedback/\` worker. */
+    feedback?: string;
+  };
   seo: {
     defaultOgImage: string;
     twitterHandle?: string;

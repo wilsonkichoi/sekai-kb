@@ -48,6 +48,30 @@ export const ui = {
     // article page
     'article.home': 'Home',
     'article.backToHome': 'Back to Home',
+    // feedback widget (features.feedback + workers.feedback)
+    'feedback.heading': 'Something wrong on this page?',
+    'feedback.intro':
+      'Corrections, missing context, and questions all help. Every submission is read by a person.',
+    'feedback.category.label': 'Kind of feedback',
+    'feedback.category.correction': 'Correction',
+    'feedback.category.addition': 'Missing information',
+    'feedback.category.question': 'Question',
+    'feedback.category.other': 'Something else',
+    'feedback.message.label': 'Your feedback',
+    'feedback.message.placeholder': 'What should change, and why?',
+    'feedback.contact.label': 'Email (optional, only used to reply)',
+    // Rendered inside the honeypot's hidden, aria-hidden wrapper: a person never
+    // sees or hears it, and a form-filling bot reads it as an ordinary label.
+    'feedback.trap.label': 'Leave this field empty',
+    'feedback.submit': 'Send feedback',
+    'feedback.sending': 'Sending...',
+    'feedback.success': 'Thank you. Your feedback was received.',
+    // {field} is replaced with the field the endpoint rejected.
+    'feedback.invalid': 'Please check the {field} field and try again.',
+    'feedback.rateLimited':
+      'Too many submissions from this network. Please try again later.',
+    'feedback.error': 'Could not send your feedback. Please try again later.',
+    'feedback.noscript': 'This form needs JavaScript. Email your feedback instead:',
     // category hub
     'category.articleCount': '{n} articles',
     'category.readGuide': 'Read the full guide →',
