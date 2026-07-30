@@ -15,6 +15,7 @@ const SQL = {
   RATE_LIMIT_PRUNE: '<<rate limit prune statement>>',
   RATE_LIMIT_RECORD: '<<rate limit record statement>>',
   RATE_LIMIT_COUNT: '<<rate limit count statement>>',
+  RATE_LIMIT_RELEASE: '<<rate limit release statement>>',
   INSERT_FEEDBACK: '<<insert feedback statement>>',
 };
 
@@ -22,11 +23,16 @@ const NOW = 1_700_000_000;
 const WINDOW = 3600;
 const IP_HASH = 'a'.repeat(64);
 
-/** The three statements a request issues, in the worker's order. */
+/** The three statements every request issues, in the worker's order. */
 async function submit(stub, { ipHash = IP_HASH, now = NOW, window = WINDOW } = {}) {
   await stub.prepare(SQL.RATE_LIMIT_PRUNE).bind(ipHash, now - window).run();
   await stub.prepare(SQL.RATE_LIMIT_RECORD).bind(ipHash, now).run();
   return stub.prepare(SQL.RATE_LIMIT_COUNT).bind(ipHash).first();
+}
+
+/** The fourth, issued only by a request that is being refused. */
+function release(stub, { ipHash = IP_HASH, now = NOW } = {}) {
+  return stub.prepare(SQL.RATE_LIMIT_RELEASE).bind(ipHash, now).run();
 }
 
 function insertRow(stub, overrides = {}) {
@@ -87,6 +93,43 @@ test('harness: a whole window of silence prunes everything and starts a fresh co
   stub.seedRateLimit(IP_HASH, { window_start: NOW, count: 99 });
   const usage = await submit(stub, { now: NOW + WINDOW + 1 });
   assert.deepEqual(usage, { total: 1, oldest: NOW + WINDOW + 1 });
+});
+
+test('harness: a release gives back exactly the slot its own second took', async () => {
+  const stub = createD1Stub(SQL);
+  await submit(stub, { now: NOW - 100 });
+  assert.deepEqual(await submit(stub), { total: 2, oldest: NOW - 100 });
+
+  await release(stub);
+  assert.deepEqual(await stub.prepare(SQL.RATE_LIMIT_COUNT).bind(IP_HASH).first(), {
+    total: 1,
+    oldest: NOW - 100,
+  });
+});
+
+test('harness: a release never drives a count below zero and tolerates a missing row', async () => {
+  const stub = createD1Stub(SQL);
+  await submit(stub);
+  await release(stub);
+  await release(stub);
+  assert.equal(stub.buckets.get(IP_HASH).get(NOW), 0, 'count must floor at zero');
+
+  await release(stub, { now: NOW + 5000 });
+  assert.equal(stub.buckets.get(IP_HASH).has(NOW + 5000), false, 'no row must be created');
+});
+
+test('harness: the next prune deletes a second a release emptied, inside the window or not', async () => {
+  const stub = createD1Stub(SQL);
+  await submit(stub);
+  await release(stub);
+
+  // NOW is nowhere near the floor, so only the count <= 0 half of the DELETE can
+  // remove it. A surviving empty row would still answer MIN(window_start).
+  await stub.prepare(SQL.RATE_LIMIT_PRUNE).bind(IP_HASH, NOW - WINDOW).run();
+  assert.deepEqual(await stub.prepare(SQL.RATE_LIMIT_COUNT).bind(IP_HASH).first(), {
+    total: null,
+    oldest: null,
+  });
 });
 
 test('harness: an empty table aggregates to SQL NULLs, not zeros', async () => {

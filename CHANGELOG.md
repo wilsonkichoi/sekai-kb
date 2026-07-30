@@ -50,7 +50,9 @@ tags, never framework `main`** (ADR 004, SPEC
   nothing, a per-address rate limit of `RATE_LIMIT_MAX` per genuinely rolling
   `RATE_LIMIT_WINDOW_SECONDS` (submissions are counted per second and the seconds
   age out individually, so no counter reset lets a second allowance through at a
-  window boundary), and full payload validation enforced against the request
+  window boundary, and a refused attempt gives its slot back so a client that waits
+  out `Retry-After` is let in rather than locked out for good), and full payload
+  validation enforced against the request
   stream so an oversized chunked upload is a 400 rather than a buffered Worker
   crash. Addresses are only ever stored as `sha256(address + IP_HASH_SALT)`;
   a missing salt fails the request closed rather than hashing unsalted. The schema

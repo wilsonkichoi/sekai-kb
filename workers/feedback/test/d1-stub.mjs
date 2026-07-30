@@ -11,9 +11,11 @@
  * rows still inside the window. This stub emulates exactly that, so a test that
  * walks the clock forward sees the same arithmetic D1 would do:
  *
- *   RATE_LIMIT_PRUNE  (ip_hash, floor)  DELETE rows with window_start <= floor
- *   RATE_LIMIT_RECORD (ip_hash, now)    upsert the (ip_hash, now) row, count += 1
- *   RATE_LIMIT_COUNT  (ip_hash)         SUM(count), MIN(window_start) over survivors
+ *   RATE_LIMIT_PRUNE   (ip_hash, floor)  DELETE rows with window_start <= floor,
+ *                                        and any row already exhausted (count <= 0)
+ *   RATE_LIMIT_RECORD  (ip_hash, now)    upsert the (ip_hash, now) row, count += 1
+ *   RATE_LIMIT_COUNT   (ip_hash)         SUM(count), MIN(window_start) over survivors
+ *   RATE_LIMIT_RELEASE (ip_hash, now)    count -= 1 on the (ip_hash, now) row
  *
  * Test-owned code: it records every call so tests can assert call counts, bound
  * arguments, and stored rows.
@@ -36,18 +38,21 @@ export const RATE_LIMIT_ARGS = {
   prune: ['ip_hash', 'window_floor'],
   record: ['ip_hash', 'now'],
   count: ['ip_hash'],
+  release: ['ip_hash', 'now'],
 };
 
 const PRUNE = 'prune';
 const RECORD = 'record';
 const COUNT = 'count';
+const RELEASE = 'release';
 const INSERT = 'insert';
 
-const RATE_LIMIT_KINDS = new Set([PRUNE, RECORD, COUNT]);
+const RATE_LIMIT_KINDS = new Set([PRUNE, RECORD, COUNT, RELEASE]);
 
 /**
  * @param {{ RATE_LIMIT_PRUNE: string, RATE_LIMIT_RECORD: string,
- *           RATE_LIMIT_COUNT: string, INSERT_FEEDBACK: string }} SQL
+ *           RATE_LIMIT_COUNT: string, RATE_LIMIT_RELEASE: string,
+ *           INSERT_FEEDBACK: string }} SQL
  *   the worker's exported SQL object; used for identity routing.
  */
 export function createD1Stub(SQL) {
@@ -55,6 +60,7 @@ export function createD1Stub(SQL) {
     'RATE_LIMIT_PRUNE',
     'RATE_LIMIT_RECORD',
     'RATE_LIMIT_COUNT',
+    'RATE_LIMIT_RELEASE',
     'INSERT_FEEDBACK',
   ];
   for (const key of required) {
@@ -81,6 +87,7 @@ export function createD1Stub(SQL) {
     if (sql === SQL.RATE_LIMIT_PRUNE) return PRUNE;
     if (sql === SQL.RATE_LIMIT_RECORD) return RECORD;
     if (sql === SQL.RATE_LIMIT_COUNT) return COUNT;
+    if (sql === SQL.RATE_LIMIT_RELEASE) return RELEASE;
     if (sql === SQL.INSERT_FEEDBACK) return INSERT;
     throw new Error(`d1 stub: unknown prepared statement (${String(sql).slice(0, 60)})`);
   }
@@ -100,13 +107,15 @@ export function createD1Stub(SQL) {
     }
   }
 
+  // `count <= 0` is the second half of the DELETE: a row RELEASE emptied is gone at
+  // the next prune, so it can never answer MIN(window_start) for a later request.
   function applyPrune(args) {
     requireArgs(PRUNE, args, 2);
     const [ipHash, floor] = args;
     const perIp = buckets.get(ipHash);
     if (!perIp) return null;
-    for (const start of [...perIp.keys()]) {
-      if (start <= floor) perIp.delete(start);
+    for (const [start, count] of [...perIp]) {
+      if (start <= floor || count <= 0) perIp.delete(start);
     }
     if (perIp.size === 0) buckets.delete(ipHash);
     return null;
@@ -137,6 +146,18 @@ export function createD1Stub(SQL) {
     return { total, oldest };
   }
 
+  // The `count > 0` guard is the statement's, not a convenience: a decrement can never
+  // drive a row negative, and a missing row is simply no rows changed.
+  function applyRelease(args) {
+    requireArgs(RELEASE, args, 2);
+    const [ipHash, start] = args;
+    const perIp = buckets.get(ipHash);
+    const count = perIp?.get(start);
+    if (count === undefined || count <= 0) return null;
+    perIp.set(start, count - 1);
+    return null;
+  }
+
   function applyInsert(args) {
     if (args.length !== INSERT_COLUMNS.length) {
       throw new Error(
@@ -155,6 +176,7 @@ export function createD1Stub(SQL) {
     [PRUNE]: applyPrune,
     [RECORD]: applyRecord,
     [COUNT]: applyCount,
+    [RELEASE]: applyRelease,
     [INSERT]: applyInsert,
   };
 
@@ -242,4 +264,4 @@ export function createD1Stub(SQL) {
   };
 }
 
-export { PRUNE, RECORD, COUNT, INSERT };
+export { PRUNE, RECORD, COUNT, RELEASE, INSERT };

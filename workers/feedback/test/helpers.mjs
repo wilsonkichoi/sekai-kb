@@ -220,6 +220,31 @@ export function spyOnDigest() {
   };
 }
 
+/**
+ * Freeze `Date.now()` and drive it by hand, whole seconds at a time.
+ *
+ * A rolling window is only observable by moving time, so asserting that a client
+ * which waits out `Retry-After` is let back in requires controlling the clock rather
+ * than seeding around the real one.
+ */
+export function installClock(startSeconds = Math.floor(Date.now() / 1000)) {
+  const original = Date.now;
+  let seconds = startSeconds;
+  Date.now = () => seconds * 1000;
+  return {
+    get seconds() {
+      return seconds;
+    },
+    advance(bySeconds) {
+      seconds += bySeconds;
+      return seconds;
+    },
+    restore() {
+      Date.now = original;
+    },
+  };
+}
+
 /** Repeat an ASCII character; used for boundary-length fixtures. */
 export function chars(count, char = 'a') {
   return char.repeat(count);

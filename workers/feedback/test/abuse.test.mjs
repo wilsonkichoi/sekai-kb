@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { handleRequest, SQL } from '../src/index.mjs';
-import { PRUNE, RECORD, createD1Stub } from './d1-stub.mjs';
+import { PRUNE, RECORD, RELEASE, createD1Stub } from './d1-stub.mjs';
 import {
   CLIENT_IP,
   DEFAULT_RATE_LIMIT_MAX,
@@ -25,6 +25,7 @@ import {
   assertErrorBody,
   assertSuccessBody,
   expectedIpHash,
+  installClock,
   makeEnv,
   makeRequest,
   postJson,
@@ -230,15 +231,134 @@ test('Retry-After never exceeds the window and never drops below 1', async () =>
   assert.ok(retryAfter >= 1 && retryAfter <= windowSeconds, `Retry-After ${retryAfter} out of range`);
 });
 
-test('the rate-limit counter still increments for a request that is rejected with 429', async () => {
-  const seedCount = DEFAULT_RATE_LIMIT_MAX + 2;
-  const { DB, env } = await seededEnv({ count: seedCount });
+// A refused attempt is not a submission, so it must not spend budget. If it did, an
+// address at the limit would re-record itself on every retry and never get back in.
+test('a request rejected with 429 gives back the slot it took: the count is unchanged', async () => {
+  const { DB, env } = await seededEnv({ count: DEFAULT_RATE_LIMIT_MAX });
+  const ipHash = await expectedIpHash(CLIENT_IP);
 
   const response = await submit(env);
   assert.equal(response.status, 429);
+  assert.equal(
+    DB.usage(ipHash).total,
+    DEFAULT_RATE_LIMIT_MAX,
+    'a refused attempt must not be counted as a submission',
+  );
 
-  const ipHash = await expectedIpHash(CLIENT_IP);
-  assert.equal(DB.usage(ipHash).total, seedCount + 1);
+  const released = DB.callsOf(RELEASE).at(-1);
+  assert.ok(released, 'a rejected request must issue RATE_LIMIT_RELEASE');
+  assert.deepEqual(
+    released.args,
+    [ipHash, lastRecord(DB)[1]],
+    'the release must target exactly the second this request recorded',
+  );
+});
+
+test('an accepted request never releases its slot', async () => {
+  const { DB, env } = await seededEnv({ count: DEFAULT_RATE_LIMIT_MAX - 1 });
+
+  const response = await submit(env);
+  assert.equal(response.status, 200);
+  assert.equal(DB.callsOf(RELEASE).length, 0, 'only a refusal gives its slot back');
+  assert.equal(
+    DB.usage(await expectedIpHash(CLIENT_IP)).total,
+    DEFAULT_RATE_LIMIT_MAX,
+    'an accepted submission stays counted',
+  );
+});
+
+// The exact staggered-bucket scenario from review: submissions spread across the
+// window rather than bunched, so the oldest second falling out frees exactly one slot.
+// A client that sleeps for Retry-After and retries must be accepted on that retry.
+test('waiting exactly Retry-After after a 429 gets the next submission accepted', async () => {
+  const windowSeconds = DEFAULT_WINDOW_SECONDS;
+  const spacing = 600;
+  const clock = installClock();
+  try {
+    const start = clock.seconds;
+    const { DB, env } = await seededEnv({
+      seeds: Array.from({ length: DEFAULT_RATE_LIMIT_MAX }, (_, i) => ({
+        window_start: start - windowSeconds + spacing * (i + 1),
+        count: 1,
+      })),
+    });
+
+    const rejected = await submit(env);
+    assert.equal(rejected.status, 429);
+    const retryAfter = Number(rejected.headers.get('retry-after'));
+    assert.equal(retryAfter, spacing, 'the oldest second falls out of the window in 600s');
+
+    clock.advance(retryAfter);
+    const retried = await submit(env);
+    assert.equal(
+      retried.status,
+      200,
+      'a client that obeys Retry-After must be let in, not refused again',
+    );
+    assert.equal(DB.rows.length, 1, 'and the accepted retry must store its row');
+  } finally {
+    clock.restore();
+  }
+});
+
+// The general property behind the test above: obeying Retry-After always terminates.
+// Seeded far above the limit -- as concurrent requests can transiently leave it --
+// each retry must shed counted seconds and add none, so acceptance is reached.
+test('obeying Retry-After always converges on acceptance, never an endless 429 loop', async () => {
+  const windowSeconds = DEFAULT_WINDOW_SECONDS;
+  const clock = installClock();
+  try {
+    const start = clock.seconds;
+    const { env } = await seededEnv({
+      seeds: Array.from({ length: DEFAULT_RATE_LIMIT_MAX * 3 }, (_, i) => ({
+        window_start: start - windowSeconds + 120 * (i + 1),
+        count: 1,
+      })),
+    });
+
+    let accepted = false;
+    for (let attempt = 0; attempt < DEFAULT_RATE_LIMIT_MAX * 4; attempt += 1) {
+      const response = await submit(env);
+      if (response.status === 200) {
+        accepted = true;
+        break;
+      }
+      assert.equal(response.status, 429);
+      const retryAfter = Number(response.headers.get('retry-after'));
+      assert.ok(retryAfter >= 1, 'every 429 must name a wait that actually advances the clock');
+      clock.advance(retryAfter);
+    }
+    assert.ok(accepted, 'a client obeying Retry-After must eventually be accepted');
+  } finally {
+    clock.restore();
+  }
+});
+
+// A released second sits at count 0. It contributes nothing to the total but would
+// still answer MIN(window_start), which is what Retry-After is derived from -- so the
+// prune has to drop it on the next request rather than wait for it to age out.
+test('a released second is deleted by the next prune, not left to skew Retry-After', async () => {
+  const clock = installClock();
+  try {
+    const { DB, env } = await seededEnv({
+      seeds: [{ window_start: clock.seconds - 30, count: DEFAULT_RATE_LIMIT_MAX }],
+    });
+    const ipHash = await expectedIpHash(CLIENT_IP);
+
+    const rejected = await submit(env);
+    assert.equal(rejected.status, 429);
+    assert.equal(DB.buckets.get(ipHash).get(clock.seconds), 0, 'the released second sits at zero');
+
+    clock.advance(10);
+    await submit(env);
+    assert.equal(
+      DB.buckets.get(ipHash).has(clock.seconds - 10),
+      false,
+      'the emptied second must be deleted, not carried as a zero row',
+    );
+  } finally {
+    clock.restore();
+  }
 });
 
 test('a whole window of silence prunes the history and the submission is accepted again', async () => {

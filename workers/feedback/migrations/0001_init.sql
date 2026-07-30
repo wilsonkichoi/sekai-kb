@@ -28,6 +28,11 @@ CREATE INDEX IF NOT EXISTS idx_feedback_status_created ON feedback (status, crea
 -- window: there is no single counter that resets on a boundary and lets a second
 -- full allowance through.
 --
+-- Only ACCEPTED submissions stay counted. A refused request decrements the row it
+-- took, so an address that hits the limit and then waits out Retry-After is let
+-- back in rather than re-recording itself on every retry and staying locked out.
+-- That is why `count` can momentarily reach 0: the next prune deletes such a row.
+--
 -- The composite PRIMARY KEY is load-bearing twice over: it makes the worker's
 -- `ON CONFLICT(ip_hash, window_start)` upsert atomic, and its leftmost column
 -- indexes the per-address prune and sum. Rows are pruned on every request once

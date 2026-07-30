@@ -29,7 +29,7 @@ const MAX_CONTACT_CHARS = 200;
 const HONEYPOT_FIELD = 'website';
 
 /**
- * The two statements this worker issues, exported so the test D1 stub can route on
+ * The statements this worker issues, exported so the test D1 stub can route on
  * identity rather than parsing SQL.
  */
 export const SQL = {
@@ -40,14 +40,20 @@ export const SQL = {
   // at the one-second resolution of the timestamps -- there is no boundary at which
   // a counter resets and lets a second full allowance through.
   //
-  // Three statements, run in this order. They need no transaction: PRUNE is
-  // idempotent, RECORD is a single atomic upsert, and COUNT runs after this
-  // request's own RECORD, so a concurrent request can only make the observed total
-  // higher than the true one, never lower. Over-counting rejects; under-counting
-  // would over-admit, and that is the direction that must be impossible.
+  // PRUNE, RECORD, COUNT run in that order on every request; a rejected request then
+  // runs RELEASE. They need no transaction: PRUNE is idempotent, RECORD is a single
+  // atomic upsert, and COUNT runs after this request's own RECORD, so a concurrent
+  // request can only make the observed total higher than the true one, never lower.
+  // Over-counting rejects; under-counting would over-admit, and that is the direction
+  // that must be impossible. RELEASE runs only after this request has already decided
+  // to reject, so it can never turn another request's rejection into an acceptance.
+
+  // Also drops exhausted rows (RELEASE can leave a row at zero). A zero row counts
+  // nothing but would still answer MIN(window_start), which is what Retry-After is
+  // derived from -- so it has to go before COUNT runs, not merely at window expiry.
   RATE_LIMIT_PRUNE: `
     DELETE FROM submission_window
-    WHERE ip_hash = ?1 AND window_start <= ?2
+    WHERE ip_hash = ?1 AND (window_start <= ?2 OR count <= 0)
   `,
   RATE_LIMIT_RECORD: `
     INSERT INTO submission_window (ip_hash, window_start, count)
@@ -61,6 +67,15 @@ export const SQL = {
     SELECT SUM(count) AS total, MIN(window_start) AS oldest
     FROM submission_window
     WHERE ip_hash = ?1
+  `,
+  // Give back the slot a rejected request took in RECORD. A refused attempt is not a
+  // submission, so it must not consume budget: if it did, an address that hit the
+  // limit and then obeyed Retry-After would re-record itself on every retry and stay
+  // pinned above the limit forever.
+  RATE_LIMIT_RELEASE: `
+    UPDATE submission_window
+    SET count = count - 1
+    WHERE ip_hash = ?1 AND window_start = ?2 AND count > 0
   `,
   INSERT_FEEDBACK: `
     INSERT INTO feedback
@@ -307,6 +322,12 @@ export async function handleRequest(request, env) {
 
   const used = Number(usage?.total ?? 0);
   if (used > max) {
+    // Hand back this request's own slot: it is being refused, so it is not a
+    // submission and must not count against the window. That is also what makes the
+    // Retry-After below exact -- the surviving count is now at most `max`, so the
+    // oldest second falling out of the window frees room for exactly this retry.
+    await env.DB.prepare(SQL.RATE_LIMIT_RELEASE).bind(ipHash, now).run();
+
     // A slot frees up when the oldest second still inside the window falls out of
     // it. `oldest` is never null here: this request's own row is always present.
     const oldest = Number(usage?.oldest ?? now);
