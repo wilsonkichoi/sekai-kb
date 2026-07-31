@@ -1,0 +1,197 @@
+---
+/**
+ * /soundscape — the audio axis: one native HTML5 player per manifest entry.
+ *
+ * No player library and no client framework. `<audio controls preload="none">`
+ * is the whole player: the browser's own transport, and nothing on the wire
+ * until a reader presses play. Entries come from `knowledge/sounds/_manifest.md`
+ * through `src/lib/sounds.ts`, which is absent-safe — an instance with no
+ * manifest, an empty list, or a missing asset renders the empty state or drops
+ * the offending entry, and the build stays green either way.
+ *
+ * The page always builds. `features.soundscape` gates only the Header and
+ * Footer entry points, exactly as /map, /graph, and /dashboard do.
+ *
+ * All copy comes from src/i18n/ui.ts; place identity comes from the manifest
+ * and place.config.ts. Nothing place-specific is written here.
+ */
+import Layout from '../layouts/Layout.astro';
+import { getLangFromUrl, useTranslations } from '../i18n/utils';
+import { readSoundscape } from '../lib/sounds';
+
+const lang = getLangFromUrl(Astro.url);
+const t = useTranslations(lang);
+
+// Build-time read. Warnings (a missing asset, a malformed entry) are emitted to
+// the build log by the reader itself, so they show up in the astro build output.
+const { entries } = readSoundscape();
+
+const countLabel =
+  entries.length === 1
+    ? t('soundscape.count.one')
+    : t('soundscape.count').replace('{n}', String(entries.length));
+
+/** Date shown per entry: the manifest date is already ISO-8601, so slicing is safe. */
+const day = (iso: string) => iso.slice(0, 10);
+---
+
+<Layout
+  title={t('soundscape.meta.title')}
+  description={t('soundscape.meta.description')}
+  lang={lang}
+>
+  <main class="soundscape">
+    <section class="hero">
+      <h1>{t('soundscape.hero.title')}</h1>
+      <p class="hero-subtitle">{t('soundscape.hero.subtitle')}</p>
+      {entries.length > 0 && <p class="count">{countLabel}</p>}
+    </section>
+
+    {
+      entries.length === 0 ? (
+        <section class="empty">
+          <h2>{t('soundscape.empty.title')}</h2>
+          <p>{t('soundscape.empty.description')}</p>
+        </section>
+      ) : (
+        <ul class="clip-list">
+          {entries.map((entry) => (
+            <li class="clip">
+              <div class="clip-head">
+                <h2 class="clip-title">{entry.title}</h2>
+                <p class="clip-location">{entry.location}</p>
+              </div>
+              <audio controls preload="none" src={entry.file}>
+                {t('soundscape.unsupported')}
+              </audio>
+              <p class="clip-credit">
+                {entry.credit}
+                {entry.date && (
+                  <>
+                    {' '}
+                    <time datetime={entry.date}>{day(entry.date)}</time>
+                  </>
+                )}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </main>
+</Layout>
+
+<style>
+  .soundscape {
+    max-width: var(--container-narrow, 760px);
+    margin: 0 auto;
+    padding: 5.5rem 1.5rem 5rem;
+  }
+
+  .hero {
+    margin-bottom: 2.5rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #0e3a5c;
+    margin: 0;
+  }
+
+  .hero-subtitle {
+    margin: 0.6rem 0 0;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: #64748b;
+  }
+
+  .count {
+    margin: 0.9rem 0 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+  }
+
+  .clip-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .clip {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 1.1rem 1.25rem 1.25rem;
+  }
+
+  .clip-head {
+    margin-bottom: 0.85rem;
+  }
+
+  .clip-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .clip-location {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: #64748b;
+  }
+
+  /* The browser's own transport is the player. Only the box model is ours, so
+     every platform keeps the controls its users already know. */
+  .clip audio {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .clip-credit {
+    margin: 0.85rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: #94a3b8;
+  }
+
+  .empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+  }
+
+  .empty h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .empty p {
+    margin: 0.6rem auto 0;
+    max-width: 46ch;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: #64748b;
+  }
+
+  @media (max-width: 768px) {
+    .soundscape {
+      padding: 4.5rem 1rem 4rem;
+    }
+    .clip {
+      padding: 1rem;
+    }
+  }
+</style>

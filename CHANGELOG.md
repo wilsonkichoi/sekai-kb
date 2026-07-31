@@ -43,6 +43,57 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **`/soundscape`: a native HTML5 audio page over a `knowledge/sounds/`
+  manifest.** `src/pages/soundscape.astro` +
+  `src/templates/soundscape.template.astro` render one
+  `<audio controls preload="none">` per manifest entry. No player library and no
+  client framework ship with it: the browser's own transport is the player, and
+  nothing crosses the wire until a reader presses play.
+
+  The manifest is `knowledge/sounds/_manifest.md` — gray-matter frontmatter
+  carrying a `sounds` list of `{title, location, credit, file}` plus an optional
+  `date`, with the body free for human notes. The leading `_` is mandatory: it is
+  what makes the file invisible to the three scanners that walk `knowledge/`
+  looking for articles (`scripts/core/test-frontmatter.mjs`,
+  `scripts/tools/article-health.py`, `scripts/core/build-content-dates.mjs`).
+  `src/lib/sounds.ts` reads it with `readFileSync` + `try/catch` and normalizes
+  any `date` to an ISO-8601 string at the boundary.
+
+  Every degradation keeps the build green. No `knowledge/sounds/` at all and an
+  empty list both render the documented empty state; an entry whose `file` is
+  missing under `public/` is dropped with a build-time warning naming it while
+  every other entry still renders. `npm run test:soundscape` gates all of that in
+  CI. `features.soundscape` gates only the Header and Footer entry points — the
+  page itself always builds, exactly as `/map`, `/graph`, and `/dashboard` do.
+
+  The template ships three short synthesized demo clips under
+  `public/media/sounds/`, each credited as synthesized rather than as a field
+  recording of anywhere, so the player and the page's visual bar are provable in
+  the repository that ships them. `npm run init` removes them, and
+  `npm run init:check` asserts the removal against a tree the wizard really
+  stripped.
+
+  **Upgrade note:** this release adds files under two instance-owned paths,
+  `knowledge/sounds/_manifest.md` and `public/media/sounds/*.mp3`. `merge=ours`
+  protects an instance's *content on a path that exists on both sides*; it does
+  not stop a clean add, so merging this tag lands the framework's demo manifest
+  and demo clips in your tree. They are the demo place's content, not yours —
+  delete both after the merge:
+
+  ```sh
+  rm -rf knowledge/sounds public/media/sounds
+  ```
+
+  Nothing else is required: `features.soundscape` stays absent-safe and defaults
+  to `false`, and with no manifest the page renders its empty state. To turn the
+  page on, set `features.soundscape: true` in `place.config.ts`, write your own
+  `knowledge/sounds/_manifest.md`, and put your audio under `public/media/sounds/`.
+
+  `docs/SPEC.md` §Pages now enumerates the route list under a derivation gated by
+  `scripts/ci/check-framework-docs.mjs`: adding a page under `src/pages/` without
+  amending that sentence now fails CI, which is the drift this entry would
+  otherwise have introduced.
+
 - **`/sekai-snippet`: short-form drafts, a human-gated queue, and a manual-sink
   runner.** The framework-owned skill reads exactly one `knowledge/` article,
   writes a platform-neutral draft carrying no claim that article does not make,

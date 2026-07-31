@@ -212,7 +212,7 @@ const config: PlaceConfig = {
     graph: true,
     map: true,
     dashboard: true,
-    soundscape: false,
+    soundscape: true,
     feedback: false,
     chat: false,
     social: false,

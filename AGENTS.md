@@ -23,7 +23,12 @@ the semiont probe, and the content working set.
 - **Content (single source of truth):** `knowledge/{Category}/*.md` — plain Markdown.
   Everything the site renders is derived from this at build time. Article ideas
   queue in `knowledge/INBOX.md`.
-- **Media:** `public/media/` and other `public/` assets.
+- **Soundscape manifest:** `knowledge/sounds/_manifest.md` — the `/soundscape`
+  entries. Not an article: the leading `_` is what makes the three scanners that
+  walk `knowledge/` skip it, so never rename it without one.
+- **Media:** `public/media/` and other `public/` assets. Soundscape audio lives
+  under `public/media/sounds/`; the template's three clips are synthesized demo
+  content and the init wizard removes them.
 - **Cloudflare Workers:** `workers/*/` — one directory per worker, each with its own
   `wrangler.toml` (placeholders only), `migrations/`, and `node:test` suite. Deployed
   by hand, never by CI; see [DEPLOY.md §Cloudflare Workers](docs/runbook/DEPLOY.md).

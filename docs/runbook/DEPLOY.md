@@ -60,6 +60,11 @@ Content lives in `knowledge/{Category}/*.md` — the single source of truth.
 `src/content/` and `src/data/` are derived, gitignored projections; never edit
 them directly.
 
+Two files under `knowledge/` are not articles: `INBOX.md` and `SNIPPET-INBOX.md`
+are workflow queues, and `knowledge/sounds/_manifest.md` lists the `/soundscape`
+recordings. The manifest's leading underscore is what keeps the article pipeline
+from validating it as an article, so keep the name exactly as it is.
+
 ```bash
 # Project knowledge/ into the build (run after editing content)
 npm run sync

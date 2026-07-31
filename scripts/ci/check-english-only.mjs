@@ -41,9 +41,14 @@ const SKIP_DIRS = new Set([
 const SKIP_PATHS = new Set([
   'src/content', 'src/data', 'public/kb',
 ]);
+// Audio extensions are listed for the same reason the image ones are: template
+// mode walks the whole tree, so public/media/ is in scope, and the NUL-byte
+// fallback below is a heuristic no format guarantees. Naming the extension makes
+// the skip deterministic rather than dependent on a clip's byte content.
 const BINARY_EXT = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.svg',
   '.woff', '.woff2', '.ttf', '.otf', '.eot', '.pdf', '.zip', '.gz', '.pyc',
+  '.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.flac',
 ]);
 // Built via new RegExp from an escaped string so this file's own source stays
 // pure ASCII (it lives under scripts/, which this gate scans).

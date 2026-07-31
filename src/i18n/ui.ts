@@ -22,6 +22,7 @@ export const ui = {
     'nav.contribute': 'Contribute',
     'nav.changelog': 'Changelog',
     'nav.dashboard': 'Dashboard',
+    'nav.soundscape': 'Soundscape',
     // header aria + search
     'nav.aria-home': 'Home',
     'nav.aria-main-navigation': 'Main navigation',
@@ -37,6 +38,7 @@ export const ui = {
     'footer.about': 'About',
     'footer.graph': 'Knowledge Graph',
     'footer.dashboard': 'Dashboard',
+    'footer.soundscape': 'Soundscape',
     'footer.contribute': 'Contribute',
     'footer.changelog': 'Changelog',
     'footer.report': 'Report an issue',
@@ -75,6 +77,22 @@ export const ui = {
       'Too many submissions from this network. Please try again later.',
     'feedback.error': 'Could not send your feedback. Please try again later.',
     'feedback.noscript': 'This form needs JavaScript. Email your feedback instead:',
+    // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
+    'soundscape.meta.title': 'Soundscape',
+    'soundscape.meta.description':
+      'Field recordings of this place, played straight in the browser.',
+    'soundscape.hero.title': 'Soundscape',
+    'soundscape.hero.subtitle':
+      'What this place sounds like. Each clip plays in the browser; nothing loads until you press play.',
+    'soundscape.count': '{n} recordings',
+    'soundscape.count.one': '1 recording',
+    'soundscape.unsupported': 'Your browser cannot play this audio file.',
+    // Shown when no manifest exists, or it lists nothing playable. Documented
+    // empty state: an adopted instance starts here until it adds its own audio.
+    'soundscape.empty.title': 'No recordings yet',
+    'soundscape.empty.description':
+      'This knowledge base has not published any audio. Add entries to knowledge/sounds/_manifest.md and drop the files under public/media/sounds/ to fill this page.',
+
     // category hub
     'category.articleCount': '{n} articles',
     'category.readGuide': 'Read the full guide →',

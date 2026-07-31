@@ -19,6 +19,10 @@
 #      docs/ROADMAP.md, and docs/adr/ are absent while docs/playbook/ and
 #      docs/runbook/ survive — then plants each inverse against the same predicate
 #      and requires it to fail, so the four absent paths cannot pass vacuously.
+#   3c. Asserts the demo-media strip: public/media/sounds/ and the soundscape
+#      manifest are absent, and no audio file survives anywhere under public/,
+#      while public/ itself survives — then plants each inverse and requires the
+#      same predicate to fail, for the same non-vacuity reason as 3b.
 #   4. Plants the test place name in src/ and asserts check-genericity.sh FAILS
 #      (the local denylist is live); removes it and asserts the gate passes.
 #
@@ -132,6 +136,45 @@ plant_maintainer_doc() {
   esac
 }
 
+# ── Demo media: the synthesized soundscape clips are stripped at adoption ──
+#
+# Same predicate shape, and the same reason, as docs_correctly_stripped above: an
+# assertion over absent paths passes on any tree at all, so the planted inverses
+# below are what make it evidence. An adopted instance must start with no audio and
+# no manifest — which is exactly the absent-manifest case /soundscape renders its
+# empty state for.
+DEMO_MEDIA="public/media/sounds"
+SOUND_MANIFEST="knowledge/sounds/_manifest.md"
+AUDIO_EXTS="mp3 m4a aac ogg opus wav flac"
+
+# Any audio file anywhere under public/, so a demo clip that merely MOVED is still
+# caught. Prints matches; callers use the exit status.
+find_audio_under_public() {
+  local tree="$1" ext args=()
+  [ -d "$tree/public" ] || return 0
+  for ext in $AUDIO_EXTS; do
+    args+=(-o -iname "*.$ext")
+  done
+  # Drop the leading -o so the expression starts with a real predicate.
+  find "$tree/public" -type f \( "${args[@]:1}" \) -print
+}
+
+demo_media_correctly_stripped() {
+  local tree="$1"
+  [ ! -e "$tree/$DEMO_MEDIA" ] || return 1
+  [ ! -e "$tree/$SOUND_MANIFEST" ] || return 1
+  [ -d "$tree/public" ] || return 1
+  [ -z "$(find_audio_under_public "$tree")" ] || return 1
+  return 0
+}
+
+# Plant one demo-media inverse: a real (empty) file at the given path, parents made.
+plant_file() {
+  local tree="$1" rel="$2"
+  mkdir -p "$(dirname "$tree/$rel")"
+  printf 'planted\n' > "$tree/$rel"
+}
+
 snapshot() {
   mkdir -p "$1"
   git -C "$ROOT" archive HEAD | tar -x -C "$1"
@@ -150,6 +193,13 @@ snapshot "$TMP/run2"
 PRE_INIT_HAS_MAINTAINER_DOCS=false
 if [ -f "$TMP/run1/docs/SPEC.md" ]; then
   PRE_INIT_HAS_MAINTAINER_DOCS=true
+fi
+# Same record for the demo media (see the demo-media block below): the framework
+# template's HEAD ships the synthesized clips, so the strip assertion has something
+# real to prove there. An adopted instance's HEAD carries none.
+PRE_INIT_HAS_DEMO_AUDIO=false
+if [ -n "$(find_audio_under_public "$TMP/run1")" ]; then
+  PRE_INIT_HAS_DEMO_AUDIO=true
 fi
 node "$TMP/run1/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 node "$TMP/run2/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
@@ -350,6 +400,53 @@ if [ "$PRE_INIT_HAS_MAINTAINER_DOCS" = true ]; then
   echo "✓ maintainer docs stripped, adopter doc trees kept (non-vacuous: HEAD carried them; the planted inverses fail the same predicate)"
 else
   echo "✓ maintainer docs stripped, adopter doc trees kept (HEAD carried none — this checkout is an adopted instance; the planted inverses are the non-vacuity proof)"
+fi
+
+# Demo media: no audio and no soundscape manifest survive adoption, while public/
+# itself does. The manifest goes with the knowledge/ reseed; the clips are removed
+# by the wizard's DEMO_MEDIA pass.
+demo_media_correctly_stripped "$R" \
+  || fail "demo audio or the soundscape manifest survived init, or public/ was removed (expected absent: $DEMO_MEDIA, $SOUND_MANIFEST, and any $AUDIO_EXTS file under public/; expected present: public/)"
+
+# Planted inverse: the predicate must REJECT every way this strip can go wrong —
+# the demo directory left in place, a clip moved elsewhere under public/, the
+# manifest left in knowledge/, and public/ itself removed.
+MEDIA_FIXTURE="$TMP/demo-media-fixture"
+mkdir -p "$MEDIA_FIXTURE"
+cp -R "$R/public" "$MEDIA_FIXTURE/public"
+mkdir -p "$MEDIA_FIXTURE/knowledge"
+demo_media_correctly_stripped "$MEDIA_FIXTURE" \
+  || fail "the public/ fixture copied from the stripped instance is not itself correctly stripped"
+
+# Each case is "<path to plant>|<path to remove to restore the baseline>": planting
+# a file also creates its parent directories, and the predicate rejects the demo
+# directory itself, so restoring means removing what the plant created, not just
+# the file. Space-free paths, so word-splitting the pair list is safe on bash 3.2.
+for pair in \
+  "$DEMO_MEDIA/planted.mp3|$DEMO_MEDIA" \
+  "public/planted-elsewhere.wav|public/planted-elsewhere.wav" \
+  "$SOUND_MANIFEST|knowledge/sounds"; do
+  rel="${pair%%|*}"
+  undo="${pair#*|}"
+  plant_file "$MEDIA_FIXTURE" "$rel"
+  if demo_media_correctly_stripped "$MEDIA_FIXTURE"; then
+    fail "demo-media strip assertion accepted a tree still carrying $rel"
+  fi
+  rm -rf "${MEDIA_FIXTURE:?}/$undo"
+  demo_media_correctly_stripped "$MEDIA_FIXTURE" \
+    || fail "removing the planted $rel did not restore the demo-media fixture baseline"
+done
+
+mv "$MEDIA_FIXTURE/public" "$MEDIA_FIXTURE/public.withheld"
+if demo_media_correctly_stripped "$MEDIA_FIXTURE"; then
+  fail "demo-media strip assertion accepted a tree with no public/ at all"
+fi
+mv "$MEDIA_FIXTURE/public.withheld" "$MEDIA_FIXTURE/public"
+
+if [ "$PRE_INIT_HAS_DEMO_AUDIO" = true ]; then
+  echo "✓ demo audio + soundscape manifest stripped, public/ kept (non-vacuous: HEAD carried the clips; the planted inverses fail the same predicate)"
+else
+  echo "✓ demo audio + soundscape manifest stripped, public/ kept (HEAD carried none — this checkout is an adopted instance; the planted inverses are the non-vacuity proof)"
 fi
 
 echo "✓ seeded artifacts present (VERSION, FRAMEWORK-VERSION, adopter package identity, instance CHANGELOG.md, complete instance AGENTS.md, byte-exact CLAUDE.md shim, README.md header, category dirs, INBOX.md, CNAME, local denylist, marker removed, .agent-toolkit/ removed + template/dev-plugin AGENTS.md content absent)"

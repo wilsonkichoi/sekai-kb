@@ -235,10 +235,17 @@ vendor-agnostic lazy-loading knowledge protocol: any browsing-capable AI reads `
 
 ## Pages
 
-`index`, `[category]/index`, `[category]/[slug]`, `explore`, `graph`, `map` (Leaflet),
-`latest`, `about`, `contribute`, `changelog`, `dashboard`, `system`, `404`,
-`feed.xml`/`rss.xml`, `llms.txt`, `/kb/*`. Phase 6 adds `soundscape` + the feedback
-widget; Phase 7 adds `/chat`.
+Routes under `src/pages/`: `index`, `[category]/index`, `[category]/[slug]`, `404`,
+`about`, `changelog`, `contribute`, `dashboard`, `explore`, `feed.xml`, `graph`,
+`latest`, `map`, `rss.xml`, `soundscape`, `system`.
+Non-route build outputs: `llms.txt` and `/kb/*`, emitted by `build-kb-index.mjs`
+rather than by an Astro page. `/map` is Leaflet; `/soundscape` is native HTML5
+audio with no player library. Phase 6 also adds the feedback widget (a component,
+not a route); Phase 7 adds `/chat`.
+
+The route list is derived from `src/pages/` and gated by
+`scripts/ci/check-framework-docs.mjs`, so adding a page without amending this
+sentence fails CI.
 
 ## New builds
 
@@ -257,7 +264,17 @@ widget; Phase 7 adds `/chat`.
    records the URL they return, so `posted` is reachable before any instance has a platform
    account. A platform adapter is added only once a real instance has that account.
 4. **Soundscape.** A native HTML5 audio page reads a `knowledge/sounds/` manifest. No
-   player library is introduced.
+   player library is introduced. The manifest is `knowledge/sounds/_manifest.md`:
+   gray-matter frontmatter carrying a `sounds` list of `{title, location, credit, file}`
+   plus optional `date`, body free for human notes. The leading `_` is mandatory — it is
+   what makes the file invisible to the three scanners that walk `knowledge/` looking for
+   articles. `src/lib/sounds.ts` reads it with `readFileSync` + `try/catch`, so an absent
+   manifest, an empty list, and an entry whose `file` is missing under `public/` all leave
+   the build green: the page renders its empty state, or drops the offending entry with a
+   build-time warning and renders the rest. `features.soundscape` gates only the Header
+   and Footer entry points; the page itself always builds, as `/map`, `/graph`, and
+   `/dashboard` do. The template ships three synthesized demo clips under
+   `public/media/sounds/` that adoption removes.
 5. **On-demand OG images.** `workers/og/` renders slug-keyed cards with Satori and
    `resvg-wasm`, cached at the Cloudflare edge. Static `og-default.png` remains fallback.
 6. **RAG chat and QR flow.** `build-embeddings.mjs` chunks articles at 300-500 tokens on

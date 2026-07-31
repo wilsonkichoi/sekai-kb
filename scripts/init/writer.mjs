@@ -468,6 +468,25 @@ export const MAINTAINER_DOCS = [
   'docs/adr',
 ];
 
+/**
+ * Demo media removed at adoption, the same class as the demo articles below.
+ *
+ * The template ships three short synthesized clips under `public/media/sounds/`
+ * so the /soundscape player and its visual bar are provable in the repository
+ * that ships them. They are the demo place's content, not the adopter's: an
+ * instance starts with no audio, and `knowledge/sounds/_manifest.md` goes with
+ * them for free (the `knowledge/` reseed below removes the whole tree). That
+ * leaves the page in the absent-manifest empty state until the adopter adds
+ * their own recordings.
+ *
+ * Only the demo subtree is listed. `public/media/` itself is where the adopter's
+ * own assets live, so it is never removed.
+ *
+ * `scripts/init/check-init.sh` asserts this removal against a tree the wizard
+ * really stripped, with planted inverses so the assertion cannot pass vacuously.
+ */
+export const DEMO_MEDIA = ['public/media/sounds'];
+
 /** Denylist terms for a place name: the full name plus its no-space form. */
 export function denylistTerms(name) {
   const full = name.toLowerCase().trim();
@@ -502,6 +521,21 @@ export function writeInstance(root, cfg) {
     `seeded  knowledge/{${cfg.categories.map((c) => c.title).join(',')}}/`,
   );
   write('knowledge/INBOX.md', INBOX_MD);
+
+  // Demo media: the synthesized soundscape clips are demo content, removed the
+  // same way the demo articles are. Their manifest went with the knowledge/
+  // reseed above, so an adopted instance starts with neither, and /soundscape
+  // renders its documented empty state until the adopter ships their own audio.
+  const removedMedia = [];
+  for (const rel of DEMO_MEDIA) {
+    const path = join(root, rel);
+    if (!existsSync(path)) continue;
+    rmSync(path, { recursive: true, force: true });
+    removedMedia.push(rel);
+  }
+  if (removedMedia.length > 0) {
+    actions.push(`removed ${removedMedia.join(', ')} (demo media)`);
+  }
 
   // CNAME: custom domain only. GitHub Pages default domains must not have one.
   const cname = join(root, 'CNAME');

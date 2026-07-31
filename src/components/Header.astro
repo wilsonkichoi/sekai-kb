@@ -20,6 +20,7 @@ const isHome = normalizedPath === '/';
 const navConfig = [
   { path: '/explore', label: t('nav.explore') },
   ...(features.map ? [{ path: '/map', label: t('nav.map') }] : []),
+  ...(features.soundscape ? [{ path: '/soundscape', label: t('nav.soundscape') }] : []),
   ...(features.dashboard ? [{ path: '/dashboard', label: t('nav.dashboard') }] : []),
   { path: '/about', label: t('nav.about') },
   { path: '/contribute', label: t('nav.contribute') },
