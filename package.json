@@ -52,6 +52,8 @@
     "test": "node scripts/core/test-frontmatter.mjs",
     "test:ci": "node scripts/core/test-frontmatter.mjs --ci",
     "test:feedback": "node --test tests/feedback-widget.test.mjs",
+    "test:snippet": "node --test tests/snippet-queue.test.mjs",
+    "snippet:publish": "node scripts/tools/snippet/publish.mjs",
     "test:workers": "node scripts/ci/run-worker-tests.mjs",
     "visual:baseline": "node scripts/visual/capture-baseline.mjs --baseline",
     "visual:capture": "node scripts/visual/capture-baseline.mjs",

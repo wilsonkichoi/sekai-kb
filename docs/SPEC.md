@@ -249,9 +249,13 @@ widget; Phase 7 adds `/chat`.
 2. **Feedback capability.** `FeedbackWidget.astro` posts to `workers/feedback/`, a
    Cloudflare Worker backed by D1. A triage skill reads D1 and files GitHub issues. This
    replaces the inherited fork's Supabase harvest orchestrator; none of that code survives.
-3. **Social publishing pipeline.** `/snippet` selects an article, generates a short-form
+3. **Social publishing pipeline.** `/sekai-snippet` selects an article, generates a short-form
    draft, queues it in `knowledge/SNIPPET-INBOX.md`, and requires human approval before a
-   platform adapter publishes it. It reuses the concept, not the fork's code.
+   platform adapter publishes it. It reuses the concept, not the fork's code. The adapter
+   interface is `scripts/tools/snippet/adapter.d.ts`; `npm run snippet:publish` is the runner,
+   and the only shipped sink is a manual one that prints the post for the operator to paste and
+   records the URL they return, so `posted` is reachable before any instance has a platform
+   account. A platform adapter is added only once a real instance has that account.
 4. **Soundscape.** A native HTML5 audio page reads a `knowledge/sounds/` manifest. No
    player library is introduced.
 5. **On-demand OG images.** `workers/og/` renders slug-keyed cards with Satori and

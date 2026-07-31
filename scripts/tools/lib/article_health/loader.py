@@ -24,16 +24,32 @@ from .types import FileTarget
 def is_article_path(path: Path | str) -> bool:
     """True iff `path` is an article this tool checks.
 
-    The contract is exactly: a `.md` file under a `knowledge/` tree whose
-    basename does not start with `_` (leading-underscore files are section
-    hubs, not standalone articles). Substring match on the normalized path so
-    both absolute and repo-relative paths are handled consistently. Eligibility
-    is enforced once at the CLI boundary; checks assume eligible input.
+    The contract is exactly: a `.md` file inside a category directory of a
+    `knowledge/` tree, whose basename does not start with `_`
+    (leading-underscore files are section hubs, not standalone articles).
+
+    A `.md` file sitting DIRECTLY at `knowledge/` is a workflow queue a human
+    edits -- `INBOX.md`, `SNIPPET-INBOX.md` -- never an article. It has no
+    frontmatter and no category by design, so running the article checks over it
+    reports a hard violation for a file that is behaving correctly, and the
+    pre-commit hook then refuses the edit. `scripts/core/sync.sh` skips the same
+    files for the same reason: the projection layer and this linter agree on what
+    a root-level `knowledge/` file is.
+
+    Matching is on path SEGMENTS, so both absolute and repo-relative paths are
+    handled consistently, and `knowledge/{lang}/{Category}/*.md` qualifies too.
+    Eligibility is enforced once at the CLI boundary; checks assume eligible
+    input.
     """
     p = str(path).replace("\\", "/")
     if not p.endswith(".md"):
         return False
-    if "knowledge/" not in p:
+    parts = Path(p).parts
+    if "knowledge" not in parts:
+        return False
+    # At least `knowledge/<dir>/<file>.md`: one directory between the tree root
+    # and the file.
+    if len(parts) - parts.index("knowledge") < 3:
         return False
     return not Path(p).name.startswith("_")
 

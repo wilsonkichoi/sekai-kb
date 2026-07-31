@@ -4,7 +4,7 @@ dev_plugin_release: dev-v0.0.72
 tracker: linear
 linear_team: LB
 linear_project: "LB Rebuild"
-test_command: "npm run version:check && npm run genericity && npm run framework-docs && npm run framework-docs:selftest && npm run dev-plugin:check && npm run test:ci && npm run test:workers && npm run article-health:test && npm run article-health -- --all --profile=ci-deploy && npm run build"
+test_command: "npm run version:check && npm run genericity && npm run framework-docs && npm run framework-docs:selftest && npm run dev-plugin:check && npm run test:ci && npm run test:snippet && npm run test:workers && npm run article-health:test && npm run article-health -- --all --profile=ci-deploy && npm run build"
 ci_workflow: deploy.yml        # GH Actions: genericity + test + build + init-check on every PR; deploy on push to main
 merge_policy: squash
 review_action_installed: false # auto PR-review GitHub Action (claude-review.yml) not installed

@@ -68,7 +68,10 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
 - **`src/` + `scripts/`** — the framework: templates, build pipeline, prebuild/postbuild
   contract checks. Framework-owned; customize through config and content, not by editing.
 - **`scripts/tools/`** — the Python `article-health` editorial linter (runs via
-  [uv](https://docs.astral.sh/uv/); Python ≥ 3.12).
+  [uv](https://docs.astral.sh/uv/); Python ≥ 3.12), and the snippet pipeline
+  (`scripts/tools/snippet/`): `/sekai-snippet` drafts a short-form post from an
+  article into `knowledge/SNIPPET-INBOX.md`, you approve it by hand, and
+  `npm run snippet:publish` posts it through an adapter.
 - **`docs/diagrams/`** — architecture diagrams (draw.io), the engineering source of truth.
 - **`workers/`** — Cloudflare Workers, one directory per worker (`workers/feedback/`
   backs the feedback endpoint). Deployed by hand with `wrangler`, never by CI.

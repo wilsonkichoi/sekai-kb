@@ -60,7 +60,13 @@ def _eligible_files(paths: list[Path]) -> list[Path]:
 
 
 def _get_staged_md() -> list[Path]:
-    """staged knowledge/{Category}/*.md files."""
+    """staged knowledge/{Category}/*.md files.
+
+    Eligibility is `loader.is_article_path`, never a second copy of the rule:
+    a staged root-level workflow queue (`knowledge/INBOX.md`,
+    `knowledge/SNIPPET-INBOX.md`) is not an article, and a divergence here would
+    fail the pre-commit hook on files `--all` never checks.
+    """
     try:
         out = subprocess.check_output(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
@@ -68,16 +74,7 @@ def _get_staged_md() -> list[Path]:
         )
     except subprocess.CalledProcessError:
         return []
-    files = []
-    for line in out.splitlines():
-        if not line.startswith("knowledge/"):
-            continue
-        if not line.endswith(".md"):
-            continue
-        if Path(line).name.startswith("_"):
-            continue
-        files.append(Path(line))
-    return files
+    return [Path(line) for line in out.splitlines() if is_article_path(line)]
 
 
 def _get_all_source() -> list[Path]:

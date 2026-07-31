@@ -75,6 +75,12 @@ jobs:
           python-version: "3.12"
       - run: npm ci --force
       - run: npm run test:ci
+      # Snippet queue format contract: only `approved` publishes, an over-length
+      # draft is refused rather than truncated, and a malformed queue stops the
+      # run. The human gate in that pipeline is these assertions, so they are a
+      # CI gate rather than a suite someone may remember to run.
+      - name: Snippet queue contract
+        run: npm run test:snippet
       - name: Install Chromium for feedback widget contract tests
         run: npx playwright install --with-deps chromium
       - name: Feedback widget browser contract

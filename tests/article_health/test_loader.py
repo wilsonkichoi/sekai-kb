@@ -171,3 +171,22 @@ def test_is_article_path_contract():
     assert not is_article_path("docs/playbook/ARTICLE-PLAYBOOK.md")
     # not markdown
     assert not is_article_path("knowledge/Nature/photo.jpg")
+    # a multi-language tree still resolves to a category directory
+    assert is_article_path("knowledge/ja/Nature/tawny-fish-owl.md")
+
+
+def test_is_article_path_excludes_root_level_workflow_queues():
+    """A .md directly at knowledge/ is a human-edited queue, not an article.
+
+    These files carry no frontmatter and no category by design, so checking them
+    reports a hard violation for a file that is behaving correctly -- and the
+    pre-commit hook, which runs `--staged`, then refuses the edit. The
+    projection layer, `scripts/core/sync.sh`, skips the same names for the
+    same reason.
+    """
+    assert not is_article_path("knowledge/INBOX.md")
+    assert not is_article_path("knowledge/SNIPPET-INBOX.md")
+    assert not is_article_path("/abs/path/knowledge/SNIPPET-INBOX.md")
+    # The exclusion is structural (depth), not a name list: any future
+    # root-level workflow doc is covered without another edit here.
+    assert not is_article_path("knowledge/SOME-FUTURE-QUEUE.md")

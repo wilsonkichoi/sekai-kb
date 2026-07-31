@@ -43,6 +43,33 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **`/sekai-snippet`: short-form drafts, a human-gated queue, and a manual-sink
+  runner.** The framework-owned skill reads exactly one `knowledge/` article,
+  writes a platform-neutral draft carrying no claim that article does not make,
+  and appends it to `knowledge/SNIPPET-INBOX.md` as `status: pending`. Approval is
+  a human edit of that file to `approved` and nothing else — the runner reads
+  `approved` entries only, so a draft nobody has read is unreachable from the
+  publish path. `npm run snippet:publish` then publishes through an adapter and
+  writes back `posted` plus the returned URL; `pending`, `posted`, and `rejected`
+  entries are left untouched.
+
+  The platform-adapter interface is one file,
+  `scripts/tools/snippet/adapter.d.ts`: `{ id, maxChars, publish(draft) }`, with
+  no registry, no loader, and no credential handling. **No platform adapter
+  ships**, by rule — the first one arrives when a real instance has an account on
+  that platform. The only shipped sink is a manual one that prints the approved
+  text for the operator to paste and records the URL they paste back, which is
+  what makes `posted` reachable in the meantime. An entry over the adapter's
+  `maxChars` is refused with a message naming the entry and the overage, never
+  truncated, and stays `approved` for a shortened rerun. The format contract is
+  gated by `npm run test:snippet` in CI; `scripts/tools/snippet/README.md`
+  documents the interface.
+
+  No **Upgrade note**: the skill, the runner, and the npm scripts are additive,
+  and no `place.config.ts` key changed. A freshly adopted instance has no queue
+  file at all — `npm run init` reseeds `knowledge/` with category folders and
+  `INBOX.md` only, and the skill creates `SNIPPET-INBOX.md` on first use.
+
 - **`/sekai-triage-feedback` turns new D1 feedback into deduplicated GitHub
   issues.** The framework-owned skill reads `status='new'` rows through Wrangler,
   assigns exactly one of five documented classes, groups normalized duplicates,
@@ -119,6 +146,16 @@ tags, never framework `main`** (ADR 004, SPEC
   reached by the scan rather than merely listed in `SCAN_ROOTS`.
 
 ### Fixed
+
+- **`article-health` no longer treats a root-level `knowledge/*.md` workflow queue
+  as an article.** `is_article_path` documented its contract as
+  `knowledge/{Category}/*.md` but accepted any `.md` anywhere under `knowledge/`,
+  so a staged `knowledge/INBOX.md` — and now `knowledge/SNIPPET-INBOX.md` — was
+  linted as an article, reported a hard violation for having no frontmatter, and
+  the pre-commit hook refused the edit. Eligibility is now structural (the file
+  must sit in a category directory), covering any future root-level workflow doc,
+  and `--staged` routes through the same predicate instead of duplicating it.
+  `--all` was already correct, which is why this only ever surfaced at commit time.
 
 - **The visual-baseline page list no longer hardcodes place-specific URLs.**
   `scripts/visual/capture-baseline.mjs` sampled `/trails/top-of-the-world/` for its
