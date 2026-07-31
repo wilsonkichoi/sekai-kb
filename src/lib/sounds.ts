@@ -75,10 +75,18 @@ function normalizeDate(value: unknown): string | null {
   return String(value);
 }
 
-/** A `file` must stay inside `public/`: site-root-absolute, no `..` segment. */
+/**
+ * A `file` must stay inside `public/`: site-root-absolute, no `..` segment.
+ *
+ * Segments are split on both separators because the value is checked here and
+ * joined with `path.join` below. On Windows `path.join` treats `\` as a separator,
+ * so `/media\..\..\secret.mp3` is a single segment to a `/`-only split and three
+ * segments to the join that follows it -- the containment claim has to hold on the
+ * platform that reads the manifest, not just on POSIX.
+ */
 function isSafePublicPath(file: string): boolean {
   if (!file.startsWith('/')) return false;
-  return !file.split('/').includes('..');
+  return !file.split(/[\\/]/).includes('..');
 }
 
 /**

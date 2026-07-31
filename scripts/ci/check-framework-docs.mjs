@@ -142,12 +142,29 @@ function derivePipelineJobs(pkgJson, script, runner, prefix) {
     .filter(Boolean);
 }
 
-// Astro file-based routing: every file under src/pages/ IS a route, named by its
-// path with the implementation extension removed. `feed.xml.ts` therefore yields
+// Astro file-based routing: a file under src/pages/ IS a route, named by its path
+// with the implementation extension removed. `feed.xml.ts` therefore yields
 // `feed.xml` and `[category]/[slug].astro` yields `[category]/[slug]`, which is how
 // SPEC writes them. Returns null when the directory is unreadable -- an underivable
 // source must fail the gate, never silently weaken it.
-const PAGE_EXT = /\.(astro|ts|js|mjs|md|mdx)$/;
+//
+// The three rules below mirror `createFileBasedRoutes` in the installed Astro
+// (node_modules/astro/dist/core/routing/create-manifest.js): page extensions
+// (`.astro`, `.html`, and every SUPPORTED_MARKDOWN_FILE_EXTENSIONS form, plus
+// `.mdx` once the MDX integration registers it), endpoint extensions (`.js`,
+// `.ts`), and the exclusions -- any path part whose name starts with `_`, and any
+// dot-file. `.mjs` is deliberately absent: Astro's endpoint set is `.js`/`.ts`
+// only. Astro exports none of these constants publicly (`astro`'s package exports
+// expose no routing internals), so this is a cited mirror rather than a
+// derivation; the two selftest cases below pin it in both directions.
+const PAGE_EXT = /\.(astro|html|md|markdown|mdown|mkdn|mkd|mdwn|mdx|js|ts)$/;
+
+/** Astro skips a path with an `_`-prefixed part, and any dot-file except `.well-known`. */
+function isRoutablePart(name, isDirectory) {
+  const base = isDirectory ? name : name.replace(/\.[^.]*$/, '');
+  if (base.startsWith('_')) return false;
+  return !name.startsWith('.') || name === '.well-known';
+}
 
 function derivePageRoutes(root) {
   const dir = join(root, PAGES_DIR);
@@ -155,6 +172,7 @@ function derivePageRoutes(root) {
   const routes = [];
   const visit = (abs) => {
     for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      if (!isRoutablePart(entry.name, entry.isDirectory())) continue;
       const child = join(abs, entry.name);
       if (entry.isDirectory()) visit(child);
       else if (entry.isFile() && PAGE_EXT.test(entry.name)) {
@@ -856,6 +874,14 @@ function selftest() {
       expect: /Pages, routes under src\/pages\//,
     },
     {
+      // Same defect through Astro's other page extension. `.html` is in the default
+      // `pageExtensions`, so a page can be added without a single `.astro` file; a
+      // derivation that only knew `.astro` would stay green while SPEC went stale.
+      what: 'a new .html page missing from the SPEC route list',
+      plant: () => write(`${PAGES_DIR}/legal.html`, '<p>legal</p>\n'),
+      expect: /Pages, routes under src\/pages\//,
+    },
+    {
       // Drift in the other direction: prose claiming a route that no page produces.
       what: 'a SPEC route the pages directory does not produce',
       plant: () => rmSync(join(fixture, PAGES_DIR, 'about.astro')),
@@ -987,6 +1013,17 @@ function selftest() {
             '| `CLAUDE.md` | the shim |\n| `knowledge/**` | the content |\n' +
             '| `docs/PRD.md` | your own product doc, if you keep one |\n',
         );
+      },
+    },
+    {
+      // The other direction of the same mirror: Astro's routing skips an
+      // `_`-prefixed file or directory and every dot-file, so demanding a SPEC
+      // entry for one would fail a tree that has no drift in it.
+      what: 'a non-route partial and dot-file under src/pages/',
+      plant: () => {
+        write(`${PAGES_DIR}/_partial.astro`, '<p>partial</p>\n');
+        write(`${PAGES_DIR}/_shared/helper.astro`, '<p>helper</p>\n');
+        write(`${PAGES_DIR}/.keep`, '\n');
       },
     },
     {

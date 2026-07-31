@@ -79,8 +79,11 @@ export const ui = {
     'feedback.noscript': 'This form needs JavaScript. Email your feedback instead:',
     // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
     'soundscape.meta.title': 'Soundscape',
+    // Says how the audio plays, never where it came from: provenance is per clip,
+    // in each manifest entry's own `credit`. A shared string cannot claim a field
+    // recording on behalf of every instance -- the demo clips are synthesized.
     'soundscape.meta.description':
-      'Field recordings of this place, played straight in the browser.',
+      'Audio from this knowledge base, played straight in the browser.',
     'soundscape.hero.title': 'Soundscape',
     'soundscape.hero.subtitle':
       'What this place sounds like. Each clip plays in the browser; nothing loads until you press play.',

@@ -444,6 +444,31 @@ describe('the file value must be a safe site-root-absolute path (clause 6)', () 
     });
   }
 
+  // `path.join` treats `\` as a separator on Windows, so `/media\..\..\x.mp3`
+  // resolves outside public/ there, while a `/`-only split sees one harmless
+  // segment and lets it through. The fixture writes the file at the literal name
+  // a POSIX run resolves, so a value that is merely *missing* would not produce
+  // this warning -- the assertion only passes if the shape itself was rejected.
+  for (const [what, file] of [
+    ['a backslash parent-directory escape', '/media\\..\\..\\secrets.mp3'],
+    ['a backslash parent segment in the middle', '/media\\..\\sounds\\one.mp3'],
+  ]) {
+    test(`${what} is rejected on its shape, on every platform`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(sounds(validItem({ file }))));
+      writeAudio(root, file);
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.entries, []);
+      const warning = onlyWarning(call_);
+      assert.ok(
+        warning.includes('site-root-absolute'),
+        `expected rejection on shape, not on absence, got: ${warning}`,
+      );
+      assert.ok(warning.includes(file), `expected the warning to name "${file}", got: ${warning}`);
+    });
+  }
+
   test('a filename that merely contains two dots is not a parent segment', () => {
     // `..` is rejected as a path *segment*. A dotted filename is legal, and a
     // substring test for '..' would wrongly drop this entry.
