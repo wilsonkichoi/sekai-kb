@@ -15,6 +15,7 @@ so a draft that no human touched is unreachable from the publish path.
 | Path | What it is |
 | ---- | ---------- |
 | `knowledge/SNIPPET-INBOX.md` | The queue. Human-edited Markdown; the file's own header documents the entry format. |
+| `queue-template.md` | The empty queue `/sekai-snippet` copies when the instance has none. |
 | `queue.mjs` | Parse, validate, and write back the queue. Line-level edits only, so hand-written formatting survives. |
 | `adapter.d.ts` | The adapter interface. The whole seam, in one file. |
 | `manual-adapter.mjs` | The only sink this framework ships. Not a platform client. |
@@ -44,6 +45,31 @@ Three rules the runner enforces so an adapter does not have to:
   `chars` stale fails the whole run, rather than being silently recomputed around.
 - **Throwing is safe.** A `publish` that rejects leaves the entry `approved`, so a
   later run retries it. Only a resolved http(s) URL moves an entry to `posted`.
+
+## The queue file may change under a run
+
+A sink that waits on a human holds the file open for as long as the human takes.
+The runner therefore never writes the snapshot it parsed: it re-reads the queue
+after the last entry and re-applies only the `status` and `url` lines of what it
+published. An entry appended by a `/sekai-snippet` run in another window, or a
+hand edit made while the operator was posting, survives.
+
+When the concurrent change touches an entry this run published -- its text was
+edited, its status moved, it was deleted, or the file no longer parses -- there is
+no safe merge, because recording a live URL against text nobody posted is worse
+than recording nothing. The runner writes nothing, prints each published entry
+with its URL, and exits 1. The posts are already live; the operator sets those two
+lines by hand.
+
+## Where the queue file comes from
+
+`npm run init` wipes `knowledge/` and reseeds category folders plus `INBOX.md`, so
+an adopted instance has no queue until its first snippet. `queue-template.md` is
+the empty queue the skill copies into `knowledge/SNIPPET-INBOX.md` at that moment.
+It lives here, under `scripts/`, precisely because adoption does not touch this
+tree: a template inside `knowledge/` would be deleted by the wizard that makes it
+necessary. `npm run test:snippet` parses it, and holds this repository's own
+`knowledge/SNIPPET-INBOX.md` header byte-identical to it so the two cannot drift.
 
 ## Choosing the adapter
 

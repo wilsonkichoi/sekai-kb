@@ -212,6 +212,10 @@ export function isHttpUrl(value) {
  * is what a human approved, and silently cutting it publishes something nobody
  * signed off on. A refusal leaves the entry `approved` so a shortened rerun
  * picks it up.
+ *
+ * `text` is the returned file text computed against `source` as it was read. A
+ * caller whose adapter can block for a human re-reads the file afterwards and
+ * routes any change through `applyPublished` rather than writing this text.
  */
 export async function publishApproved(source, adapter, { log = () => {} } = {}) {
   const { lines, entries } = parseQueue(source);
@@ -260,11 +264,59 @@ export async function publishApproved(source, adapter, { log = () => {} } = {}) 
       continue;
     }
 
-    lines[entry.fieldLines.status] = '- status: posted';
-    lines[entry.fieldLines.url] = `- url: ${url}`;
-    published.push({ id: entry.id, url });
+    markPosted(lines, entry, url);
+    published.push({ id: entry.id, url, text: entry.text });
     log(`posted ${entry.id} -> ${url}`);
   }
 
   return { text: lines.join('\n'), published, refused, skipped };
+}
+
+/** The whole write-back: two line-level edits, never a re-serialization. */
+function markPosted(lines, entry, url) {
+  lines[entry.fieldLines.status] = '- status: posted';
+  lines[entry.fieldLines.url] = `- url: ${url}`;
+}
+
+/**
+ * Re-apply a finished run's publish results onto a NEWER read of the queue file.
+ *
+ * The manual sink blocks on a human for as long as it takes them to post, so the
+ * snapshot a run parsed is routinely stale by the time it finishes: another
+ * `/sekai-snippet` may have appended an entry, or the operator may have edited
+ * the file in another window. Writing the run's own snapshot back would discard
+ * that silently, so the runner re-reads and calls this instead.
+ *
+ * Only the `status` and `url` lines of entries this run actually published are
+ * touched. Anything that makes an entry no longer the one that was published --
+ * it is gone, its text changed, or its status moved -- is reported as a conflict
+ * rather than overwritten, because the alternative is recording a live URL
+ * against text nobody posted. A conflict list is a refusal: the caller writes
+ * nothing and reports the URLs so the operator can record them by hand.
+ */
+export function applyPublished(source, published) {
+  const { lines, entries } = parseQueue(source);
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const conflicts = [];
+
+  for (const { id, url, text } of published) {
+    const entry = byId.get(id);
+    if (entry === undefined) {
+      conflicts.push(`${id}: posted to ${url}, but the entry is no longer in the file`);
+      continue;
+    }
+    if (entry.text !== text) {
+      conflicts.push(`${id}: posted to ${url}, but its post text changed during the run`);
+      continue;
+    }
+    // Already recorded -- a rerun after an interrupted write, not a conflict.
+    if (entry.status === 'posted' && entry.url === url) continue;
+    if (entry.status !== 'approved') {
+      conflicts.push(`${id}: posted to ${url}, but its status changed to "${entry.status}" during the run`);
+      continue;
+    }
+    markPosted(lines, entry, url);
+  }
+
+  return { text: lines.join('\n'), conflicts };
 }

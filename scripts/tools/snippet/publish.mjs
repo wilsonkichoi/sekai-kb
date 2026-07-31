@@ -17,7 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { publishApproved, QueueError } from './queue.mjs';
+import { applyPublished, publishApproved, QueueError } from './queue.mjs';
 import { manualAdapter, closeManualAdapter } from './manual-adapter.mjs';
 
 const adapter = manualAdapter;
@@ -51,7 +51,35 @@ try {
   closeManualAdapter();
 }
 
-if (result.text !== source) writeFileSync(QUEUE, result.text);
+// The manual sink waits on a human between entries, so the file this run parsed
+// can be minutes old by the time it finishes: another /sekai-snippet may have
+// appended an entry, or the operator may have edited the queue in another
+// window. Writing this run's own snapshot back would drop that change silently,
+// so re-read and re-apply just the status/url lines of what was published.
+let conflicts = [];
+const current = readFileSync(QUEUE, 'utf8');
+if (current === source) {
+  if (result.text !== source) writeFileSync(QUEUE, result.text);
+} else {
+  let merged;
+  try {
+    merged = applyPublished(current, result.published);
+  } catch (err) {
+    if (!(err instanceof QueueError)) throw err;
+    merged = {
+      text: current,
+      conflicts: result.published.map(
+        ({ id, url }) => `${id}: posted to ${url}, but ${QUEUE_LABEL} was edited into a malformed state during the run`,
+      ),
+    };
+    console.error(`\n${err.message}`);
+  }
+  conflicts = merged.conflicts;
+  if (conflicts.length === 0) {
+    if (merged.text !== current) writeFileSync(QUEUE, merged.text);
+    console.log(`\nnote: ${QUEUE_LABEL} changed during this run; re-applied the publish results onto the current file.`);
+  }
+}
 
 const byStatus = new Map();
 for (const entry of result.skipped) byStatus.set(entry.status, (byStatus.get(entry.status) ?? 0) + 1);
@@ -62,6 +90,17 @@ console.log(`\nadapter: ${adapter.id} (maxChars ${adapter.maxChars})`);
 console.log(`published: ${result.published.length}`);
 for (const entry of result.published) console.log(`  ${entry.id} -> ${entry.url}`);
 console.log(`left alone: ${skippedSummary}`);
+
+if (conflicts.length > 0) {
+  console.error(`\nunrecorded: ${conflicts.length}`);
+  for (const line of conflicts) console.error(`  ${line}`);
+  console.error(
+    `\nFAIL: ${QUEUE_LABEL} was changed by something else while this run was posting, so ` +
+      'nothing was written back -- the change is still on disk, unharmed. Those posts ARE live. ' +
+      'Set each entry above to `- status: posted` with the URL shown, by hand.',
+  );
+  process.exit(1);
+}
 
 if (result.refused.length > 0) {
   console.error(`refused: ${result.refused.length}`);

@@ -61,14 +61,20 @@ tags, never framework `main`** (ADR 004, SPEC
   text for the operator to paste and records the URL they paste back, which is
   what makes `posted` reachable in the meantime. An entry over the adapter's
   `maxChars` is refused with a message naming the entry and the overage, never
-  truncated, and stays `approved` for a shortened rerun. The format contract is
+  truncated, and stays `approved` for a shortened rerun. Because the manual sink
+  waits on a human, the runner re-reads the queue when it finishes and re-applies
+  only the `status` and `url` lines it published, so an entry appended or edited
+  mid-run is never overwritten; a change to an entry it published is reported with
+  the live URL and written back by hand rather than merged. The format contract is
   gated by `npm run test:snippet` in CI; `scripts/tools/snippet/README.md`
   documents the interface.
 
   No **Upgrade note**: the skill, the runner, and the npm scripts are additive,
   and no `place.config.ts` key changed. A freshly adopted instance has no queue
   file at all — `npm run init` reseeds `knowledge/` with category folders and
-  `INBOX.md` only, and the skill creates `SNIPPET-INBOX.md` on first use.
+  `INBOX.md` only — so the skill creates `SNIPPET-INBOX.md` on first use by
+  copying `scripts/tools/snippet/queue-template.md`, which survives adoption
+  because it lives under `scripts/`.
 
 - **`/sekai-triage-feedback` turns new D1 feedback into deduplicated GitHub
   issues.** The framework-owned skill reads `status='new'` rows through Wrangler,

@@ -86,9 +86,17 @@ node -e 'process.stdout.write(String([...require("node:fs").readFileSync(0,"utf8
 
 Create `knowledge/SNIPPET-INBOX.md` if it is absent -- a freshly adopted instance
 has no queue until the first snippet, because the init wizard reseeds `knowledge/`
-with category folders and `INBOX.md` only. Copy the header from the framework's
-own copy of the file, including its lifecycle table and format example, so the
-human reading it later has the same instructions.
+with category folders and `INBOX.md` only. Create it by copying the framework's
+template, which lives under `scripts/` and therefore survives adoption:
+
+```bash
+[ -f knowledge/SNIPPET-INBOX.md ] \
+  || cp scripts/tools/snippet/queue-template.md knowledge/SNIPPET-INBOX.md
+```
+
+Never hand-write that header. The template carries the lifecycle table, the
+approval instruction, and the worked format example the human reads when deciding
+whether to approve an entry, and `npm run test:snippet` holds it to the parser.
 
 Append one entry at the end of the file, under its `## Entries` heading:
 

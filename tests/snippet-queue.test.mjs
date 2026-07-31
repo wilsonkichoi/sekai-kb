@@ -11,13 +11,14 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import {
   QueueError,
   STATUSES,
+  applyPublished,
   charCount,
   isHttpUrl,
   parseQueue,
@@ -275,7 +276,9 @@ describe('publishApproved', () => {
     const result = await publishApproved(source, adapter);
 
     assert.deepEqual(adapter.seen.map((d) => d.id), ['snippet-appr']);
-    assert.deepEqual(result.published, [{ id: 'snippet-appr', url: 'https://example.invalid/new' }]);
+    assert.deepEqual(result.published, [
+      { id: 'snippet-appr', url: 'https://example.invalid/new', text: 'approved draft' },
+    ]);
     assert.deepEqual(result.refused, []);
     assert.deepEqual(
       result.skipped.map((s) => `${s.id}:${s.status}`),
@@ -408,8 +411,122 @@ describe('publishApproved', () => {
   });
 });
 
-describe('the queue file this framework ships', () => {
-  const source = readFileSync(join(ROOT, 'knowledge', 'SNIPPET-INBOX.md'), 'utf8');
+describe('applyPublished', () => {
+  // What a finished run hands back: the manual sink has already posted these,
+  // so the URLs exist in the world whatever the file says.
+  const published = (id, url, text) => [{ id, url, text }];
+
+  test('re-applies onto a file that gained an entry mid-run', () => {
+    const before = queue(entry({ id: 'snippet-a', status: 'approved', text: 'approved draft' }));
+    const after = queue(
+      entry({ id: 'snippet-a', status: 'approved', text: 'approved draft' }),
+      entry({ id: 'snippet-b', status: 'pending', text: 'appended while posting' }),
+    );
+    const merged = applyPublished(after, published('snippet-a', 'https://example.invalid/1', 'approved draft'));
+
+    assert.deepEqual(merged.conflicts, []);
+    assert.deepEqual(
+      parseQueue(merged.text).entries.map((e) => `${e.id}:${e.status}:${e.url}`),
+      ['snippet-a:posted:https://example.invalid/1', 'snippet-b:pending:'],
+    );
+    // The entry appended during the run survives verbatim; the stale snapshot
+    // that `before` represents is never what gets written.
+    assert.ok(merged.text.includes('appended while posting'));
+    assert.notEqual(before, merged.text);
+  });
+
+  test('touches only the status and url lines of what it published', () => {
+    const source = queue(
+      entry({ id: 'snippet-a', status: 'approved', text: 'approved draft' }),
+      entry({ id: 'snippet-b', status: 'pending', text: 'pending draft' }),
+    );
+    const merged = applyPublished(source, published('snippet-a', 'https://example.invalid/1', 'approved draft'));
+    const changed = source
+      .split('\n')
+      .map((line, i) => [line, merged.text.split('\n')[i]])
+      .filter(([b, a]) => b !== a);
+    assert.deepEqual(changed, [
+      ['- status: approved', '- status: posted'],
+      ['- url:', '- url: https://example.invalid/1'],
+    ]);
+  });
+
+  test('is idempotent when the result was already recorded', () => {
+    const source = queue(
+      entry({ id: 'snippet-a', status: 'posted', url: 'https://example.invalid/1', text: 'approved draft' }),
+    );
+    const merged = applyPublished(source, published('snippet-a', 'https://example.invalid/1', 'approved draft'));
+    assert.deepEqual(merged.conflicts, []);
+    assert.equal(merged.text, source);
+  });
+
+  const conflicting = [
+    {
+      what: 'the entry was deleted during the run',
+      source: () => queue(entry({ id: 'snippet-other', status: 'pending', text: 'unrelated' })),
+      expect: /snippet-a: posted to https:\/\/example\.invalid\/1, but the entry is no longer in the file/,
+    },
+    {
+      what: 'the post text was edited during the run',
+      source: () => queue(entry({ id: 'snippet-a', status: 'approved', text: 'edited while posting' })),
+      expect: /but its post text changed during the run/,
+    },
+    {
+      what: 'the status was flipped to rejected during the run',
+      source: () => queue(entry({ id: 'snippet-a', status: 'rejected', text: 'approved draft' })),
+      expect: /but its status changed to "rejected" during the run/,
+    },
+    {
+      what: 'the entry was posted to a different url during the run',
+      source: () =>
+        queue(entry({ id: 'snippet-a', status: 'posted', url: 'https://example.invalid/9', text: 'approved draft' })),
+      expect: /but its status changed to "posted" during the run/,
+    },
+  ];
+
+  for (const testCase of conflicting) {
+    test(`refuses to overwrite when ${testCase.what}`, () => {
+      const source = testCase.source();
+      const merged = applyPublished(source, published('snippet-a', 'https://example.invalid/1', 'approved draft'));
+      assert.equal(merged.conflicts.length, 1);
+      assert.match(merged.conflicts[0], testCase.expect);
+      // A conflict is a refusal, so the caller has nothing safe to write: the
+      // returned text still equals the concurrent edit it was handed.
+      assert.equal(merged.text, source);
+    });
+  }
+
+  test('applies the clean results and reports only the conflicting one', () => {
+    const source = queue(
+      entry({ id: 'snippet-a', status: 'rejected', text: 'first draft' }),
+      entry({ id: 'snippet-b', status: 'approved', text: 'second draft' }),
+    );
+    const merged = applyPublished(source, [
+      { id: 'snippet-a', url: 'https://example.invalid/1', text: 'first draft' },
+      { id: 'snippet-b', url: 'https://example.invalid/2', text: 'second draft' },
+    ]);
+    assert.equal(merged.conflicts.length, 1);
+    assert.match(merged.conflicts[0], /^snippet-a: /);
+    assert.deepEqual(
+      parseQueue(merged.text).entries.map((e) => `${e.id}:${e.status}`),
+      ['snippet-a:rejected', 'snippet-b:posted'],
+    );
+  });
+
+  test('a queue edited into a malformed state throws rather than being repaired', () => {
+    const source = damaged(entry({ id: 'snippet-a', status: 'approved', text: 'twelve chars' }), '- chars: 12', '- chars: 99');
+    assert.throws(
+      () => applyPublished(source, published('snippet-a', 'https://example.invalid/1', 'twelve chars')),
+      QueueError,
+    );
+  });
+});
+
+describe('the queue template the skill copies', () => {
+  // Adoption wipes knowledge/ and reseeds INBOX.md alone, so this template --
+  // under scripts/, which survives -- is the only header a fresh instance has.
+  // Every assertion below is therefore about a file that always exists.
+  const source = readFileSync(join(ROOT, 'scripts', 'tools', 'snippet', 'queue-template.md'), 'utf8');
 
   test('parses, and its documented example is not read as an entry', () => {
     assert.deepEqual(parseQueue(source).entries, []);
@@ -426,5 +543,30 @@ describe('the queue file this framework ships', () => {
     assert.deepEqual(result.refused, []);
     assert.deepEqual(adapter.seen, []);
     assert.equal(result.text, source);
+  });
+
+  test('an entry appended to a fresh copy of it parses', () => {
+    const fresh = source + '\n' + entry({ id: 'snippet-2026-01-31-a', status: 'pending', text: 'A specific true thing.' });
+    assert.deepEqual(
+      parseQueue(fresh).entries.map((e) => `${e.id}:${e.status}`),
+      ['snippet-2026-01-31-a:pending'],
+    );
+  });
+
+  const demo = join(ROOT, 'knowledge', 'SNIPPET-INBOX.md');
+
+  test('the queue file in this checkout, if any, carries that exact header', {
+    // An adopted instance has no queue until its first snippet, and that is the
+    // supported state -- nothing here may require the file to exist.
+    skip: existsSync(demo) ? false : 'no knowledge/SNIPPET-INBOX.md in this checkout',
+  }, () => {
+    const header = (text) => {
+      const at = text.indexOf('\n## Entries\n');
+      assert.notEqual(at, -1, 'expected a "## Entries" heading');
+      return text.slice(0, at);
+    };
+    // Two copies of one header would drift, and the copy an adopter never sees
+    // is the one that would rot. This pins them.
+    assert.equal(header(readFileSync(demo, 'utf8')), header(source));
   });
 });
