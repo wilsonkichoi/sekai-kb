@@ -151,6 +151,49 @@ test('skill documents dry-run, approved-write mode, and optional database argume
   );
 });
 
+test('preflight pins the working directory and fails closed on an unresolvable database id', () => {
+  const preflight = markdownSection(skillSource(), /preflight/i);
+
+  // Wrangler resolves the database through whichever config it finds by walking
+  // up from the cwd, so the root requirement has to carry its reason: a run
+  // started inside the worker directory resolves through a placeholder id and
+  // dies before reading a row.
+  assert.match(preflight, /\brepository root\b/i, 'preflight must pin the repository root');
+  assert.match(
+    preflight,
+    /(?:never\s+change\s+directory|do\s+not\s+(?:cd|change\s+directory)|never\s+cd)/i,
+    'preflight must forbid running from the worker directory',
+  );
+  assert.match(
+    preflight,
+    /searches\s+upward|upward\s+from\s+the\s+working\s+directory/i,
+    'the root requirement must state why it is load-bearing',
+  );
+
+  assert.match(preflight, /\bdatabase_id\b/, 'preflight must inspect database_id');
+  assert.match(preflight, /\bplaceholder\b/i, 'preflight must name the placeholder case');
+  assert.match(
+    preflight,
+    /--database\s+<uuid>/i,
+    'the placeholder case must direct the run to the UUID form',
+  );
+  assert.match(
+    preflight,
+    /never edit[\s\S]{0,120}wrangler\.toml/i,
+    'preflight must forbid editing the placeholders-only config as a workaround',
+  );
+  assert.match(
+    preflight,
+    /accepts\s+no\s+UUID\s+override/i,
+    'the migration remedy must state that it cannot take a UUID',
+  );
+  assert.match(
+    preflight,
+    /\bnum_tables\b[\s\S]{0,200}\bnot\b[\s\S]{0,40}\bschema\s+check\b/i,
+    'preflight must reject num_tables as evidence of schema state',
+  );
+});
+
 test('new-row reads use the required remote wrangler command', () => {
   const source = skillSource();
   const readCommand = shellBlocks(source).find(

@@ -24,9 +24,12 @@ to GitHub or D1 during dry-run.
 Accept these optional arguments:
 
 - `--dry-run`: print the complete plan and stop before the approval prompt.
-- `--database <name>`: use this D1 database name. Without it, read the
-  `database_name` from the `[[d1_databases]]` block whose `binding` is `DB` in
+- `--database <name-or-id>`: use this D1 database, named either by its
+  `database_name` or by its UUID. Without it, read the `database_name` from the
+  `[[d1_databases]]` block whose `binding` is `DB` in
   `workers/feedback/wrangler.toml`. Fail if that block is absent or ambiguous.
+  The UUID form is what a checkout whose `database_id` is still a placeholder
+  needs; step 1 detects that case and requires it.
 
 Without `--dry-run`, live mode plans writes and reaches the approval gate. When
 the database argument is omitted, the `wrangler.toml` lookup above is mandatory.
@@ -34,7 +37,15 @@ Reject unknown arguments. Never hardcode a database name.
 
 ## 1. Preflight and resolve configuration
 
-Run from the repository root. Require these files:
+Run every command in this skill from the repository root, and never change
+directory into `workers/feedback`. This is load-bearing, not a formatting
+preference: Wrangler searches upward from the working directory for a
+configuration file, so a command started inside `workers/feedback` resolves the
+database through that file's `database_id` rather than by the name you passed.
+When that id is the template placeholder, every query fails with
+`Invalid property: databaseId => Invalid uuid` before a single row is read.
+
+Require these files:
 
 - `place.config.ts`
 - `workers/feedback/wrangler.toml`
@@ -67,6 +78,22 @@ Require the target repository to contain the `feedback` label. Check it without
 mutating the repository. If it is absent, stop; label administration is outside
 this triage run.
 
+When the database came from `wrangler.toml` rather than `--database`, read
+`database_id` from that same block. A framework checkout ships it as the
+`REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder, and an instance that has not
+deployed yet still carries it. An absent or placeholder id means the name cannot
+resolve through that file, so stop and require the run to name the database by
+UUID instead, reporting these commands:
+
+```bash
+npx wrangler d1 list
+```
+
+Rerun this skill with `--database <uuid>` from that listing. Never edit
+`wrangler.toml` to resolve this: the file is framework-owned and carries
+placeholders only, so writing a real account id into it is a repository contract
+violation rather than a fix.
+
 Read the remote schema through Wrangler and require the `feedback` table to have
 `issue_url`. If it does not, stop and report this operator command, substituting
 the resolved database name:
@@ -75,7 +102,20 @@ the resolved database name:
 cd workers/feedback && npx wrangler d1 migrations apply <database-name> --remote
 ```
 
+That command presumes `workers/feedback/wrangler.toml` carries a real
+`database_id`, which an adopter sets once at deploy time (see
+`docs/runbook/DEPLOY.md`). Unlike the query commands above it accepts no UUID
+override, because `d1 migrations apply` resolves the database only through that
+file and needs its `migrations_dir`. In a checkout still holding the placeholder,
+supplying the real id is the operator's separate deploy step, not a step this
+skill performs or works around.
+
 Do not apply a migration inside a triage run.
+
+`npx wrangler d1 list` reports a `num_tables` field. It is not a schema check and
+can read `0` for a fully migrated database. The `issue_url` check above is the
+only authoritative one; never conclude from `num_tables` that a database is
+unmigrated or undeployed.
 
 ## 2. Read new rows
 
