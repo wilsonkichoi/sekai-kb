@@ -119,13 +119,13 @@ const DARK_INK_COLORS = [
 
 function isLightOnlyBg(color) {
   if (!color) return false;
-  // Also catch near-white with alpha (rgba(255,255,255,0.95) etc.)
+  if (LIGHT_ONLY_COLORS.includes(color)) return true;
   const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (!match) return false;
   const [, r, g, b] = match.map(Number);
-  // Any rgb where all channels > 230 is a light-only surface
+  // Any rgb where all channels > 230 is a light-only surface in dark mode
   if (r > 230 && g > 230 && b > 230) return true;
-  return LIGHT_ONLY_COLORS.includes(color);
+  return false;
 }
 
 function isDarkInk(color) {
@@ -149,13 +149,18 @@ async function main() {
 
     // Dark theme check
     const darkPage = await browser.newPage();
-    await darkPage.goto(url, { waitUntil: 'domcontentloaded' });
-    // Set dark theme
+    // Set dark theme via JS before navigation to ensure styles apply from the start
+    await darkPage.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      });
+    });
+    await darkPage.goto(url, { waitUntil: 'networkidle' });
+    // Ensure the attribute is set (belt and suspenders)
     await darkPage.evaluate(() => {
       document.documentElement.setAttribute('data-theme', 'dark');
     });
-    // Wait for style recalculation
-    await darkPage.waitForTimeout(100);
+    await darkPage.waitForTimeout(200);
 
     const darkValue = await darkPage.evaluate(({ sel, prop }) => {
       const el = document.querySelector(sel);
