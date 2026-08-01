@@ -1919,12 +1919,13 @@ describe('warnings reach the build transcript in order (clause 11)', () => {
   });
 });
 
-test('DoD 11: the soundscape hero is centered like the visual reference', () => {
+test('DoD 11: the soundscape page is centered like the visual reference', () => {
   const template = readFileSync(
     new URL('../src/templates/soundscape.template.astro', import.meta.url),
     'utf8',
   );
 
+  assert.match(template, /\.soundscape\s*\{[^}]*max-width:\s*900px;[^}]*margin:\s*0 auto;/s);
   assert.match(template, /\.hero\s*\{[^}]*text-align:\s*center;/s);
   assert.match(template, /\.hero-subtitle\s*\{[^}]*margin:\s*0\.6rem auto 0;/s);
   assert.match(template, /\.stats\s*\{[^}]*justify-content:\s*center;/s);
