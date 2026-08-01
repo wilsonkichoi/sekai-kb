@@ -23,7 +23,7 @@
 
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -1917,4 +1917,15 @@ describe('warnings reach the build transcript in order (clause 11)', () => {
     assertWarningsWereLogged(call_);
     assertWarningOrder(call_);
   });
+});
+
+test('DoD 11: the soundscape hero is centered like the visual reference', () => {
+  const template = readFileSync(
+    new URL('../src/templates/soundscape.template.astro', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(template, /\.hero\s*\{[^}]*text-align:\s*center;/s);
+  assert.match(template, /\.hero-subtitle\s*\{[^}]*margin:\s*0\.6rem auto 0;/s);
+  assert.match(template, /\.stats\s*\{[^}]*justify-content:\s*center;/s);
 });
