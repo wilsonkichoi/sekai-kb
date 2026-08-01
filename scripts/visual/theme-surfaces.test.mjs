@@ -17,17 +17,28 @@
  */
 
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { createServer } from 'node:http';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve, dirname, join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../..');
 const distDir = resolve(repoRoot, 'dist');
 
-let serverProc = null;
+let server = null;
 let BASE_URL = process.env.BASE_URL || '';
+
+const MIME = {
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.woff2': 'font/woff2',
+};
 
 async function startServer() {
   if (BASE_URL) return;
@@ -37,35 +48,28 @@ async function startServer() {
   }
   const port = 4399;
   BASE_URL = `http://localhost:${port}`;
-  serverProc = spawn('npx', ['astro', 'preview', '--port', String(port)], {
-    cwd: repoRoot,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  // Wait for server to be ready (check both stdout and stderr, astro may log to either)
-  await new Promise((ok, fail) => {
-    const timeout = setTimeout(() => fail(new Error('preview server timeout after 20s')), 20000);
-    function check(chunk) {
-      const text = chunk.toString();
-      if (text.includes('localhost') || text.includes(String(port))) {
-        clearTimeout(timeout);
-        ok();
-      }
+  server = createServer((req, res) => {
+    let url = req.url.split('?')[0];
+    if (url.endsWith('/')) url += 'index.html';
+    if (!extname(url)) url += '/index.html';
+    const filePath = join(distDir, url);
+    try {
+      const data = readFileSync(filePath);
+      const ext = extname(filePath);
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+      res.end(data);
+    } catch {
+      res.writeHead(404);
+      res.end('Not found');
     }
-    serverProc.stdout.on('data', check);
-    serverProc.stderr.on('data', check);
-    serverProc.on('error', (err) => { clearTimeout(timeout); fail(err); });
-    serverProc.on('exit', (code) => {
-      if (code) { clearTimeout(timeout); fail(new Error(`preview exited ${code}`)); }
-    });
   });
-  // Extra settle time for the server to be fully ready
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((ok) => server.listen(port, ok));
 }
 
 function stopServer() {
-  if (serverProc) {
-    serverProc.kill();
-    serverProc = null;
+  if (server) {
+    server.close();
+    server = null;
   }
 }
 
