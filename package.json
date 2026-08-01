@@ -57,6 +57,7 @@
     "test:soundscape": "node --experimental-strip-types --test tests/soundscape-manifest.test.mjs",
     "snippet:publish": "node scripts/tools/snippet/publish.mjs",
     "test:workers": "node scripts/ci/run-worker-tests.mjs",
+    "test:theme": "node scripts/visual/theme-surfaces.test.mjs",
     "visual:baseline": "node scripts/visual/capture-baseline.mjs --baseline",
     "visual:capture": "node scripts/visual/capture-baseline.mjs",
     "visual:diff": "node scripts/visual/diff.mjs",

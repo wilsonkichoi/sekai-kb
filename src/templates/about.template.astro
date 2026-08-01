@@ -82,7 +82,7 @@ const siteGuideCards = [
     </section>
 
     <!-- Section 2: Origin -->
-    <section class="bg-[#f9fafb] px-4 py-16">
+    <section class="bg-[color:var(--color-bg-alt)] px-4 py-16">
       <div class="section-inner">
         <h2 class="section-title">{t('about.origin.title')}</h2>
         <p class="section-subtitle">{t('about.origin.subtitle')}</p>
@@ -159,7 +159,7 @@ const siteGuideCards = [
     </section>
 
     <!-- Section: Contact -->
-    <section class="bg-[#f9fafb] px-4 pt-16 pb-12">
+    <section class="bg-[color:var(--color-bg-alt)] px-4 pt-16 pb-12">
       <div class="section-inner">
         <h2 class="section-title">{t('about.contact.title')}</h2>
         <p class="section-subtitle">{t('about.contact.subtitle')}</p>
@@ -228,7 +228,7 @@ const siteGuideCards = [
   .section-title {
     font-size: 2.5rem;
     font-weight: 900;
-    color: #0e3a5c;
+    color: var(--color-ink-heading);
     text-align: center;
     margin-bottom: 0.5rem;
     letter-spacing: -0.02em;
@@ -236,7 +236,7 @@ const siteGuideCards = [
 
   .section-subtitle {
     text-align: center;
-    color: #6b7280;
+    color: var(--color-ink-soft);
     font-size: 1.15rem;
     margin-bottom: 3rem;
     line-height: 1.6;
@@ -251,8 +251,8 @@ const siteGuideCards = [
   }
 
   .naming-card {
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border-visible);
     border-radius: 12px;
     padding: 1.75rem;
     text-align: center;
@@ -272,12 +272,12 @@ const siteGuideCards = [
   .naming-card h4 {
     font-size: 1.05rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--color-ink);
     margin-bottom: 0.5rem;
   }
 
   .naming-card p {
-    color: #6b7280;
+    color: var(--color-ink-soft);
     font-size: 0.95rem;
     line-height: 1.6;
   }
@@ -292,7 +292,8 @@ const siteGuideCards = [
 
   /* Vision */
   .vision-block {
-    background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border);
     border-radius: 16px;
     padding: 2.5rem;
     margin-top: 3rem;
@@ -300,7 +301,7 @@ const siteGuideCards = [
   }
 
   .vision-block p {
-    color: #374151;
+    color: var(--color-ink-soft);
     font-size: 1.1rem;
     line-height: 1.8;
     margin-bottom: 1rem;
@@ -315,7 +316,7 @@ const siteGuideCards = [
 
   .vision-emphasis {
     font-weight: 500;
-    color: #1f2937 !important;
+    color: var(--color-ink) !important;
   }
 
   /* Timeline */
@@ -369,19 +370,19 @@ const siteGuideCards = [
   .timeline-content h3 {
     font-size: 1.35rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--color-ink);
     margin-bottom: 0.75rem;
   }
 
   .timeline-content p {
-    color: #4b5563;
+    color: var(--color-ink-soft);
     line-height: 1.8;
     font-size: 1.05rem;
   }
 
   /* One Layer Deeper (site-guide) */
   .site-guide-section {
-    background: linear-gradient(135deg, #f8fafc, #f0f9ff);
+    background: var(--color-bg-alt);
   }
 
   .guide-grid {
@@ -394,8 +395,8 @@ const siteGuideCards = [
   .guide-card {
     display: flex;
     flex-direction: column;
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-visible);
     border-radius: 16px;
     padding: 1.75rem;
     text-decoration: none;
@@ -406,7 +407,7 @@ const siteGuideCards = [
   .guide-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 24px rgba(30, 64, 175, 0.1);
-    border-color: #1e40af;
+    border-color: var(--color-accent);
   }
 
   .guide-icon {
@@ -417,14 +418,14 @@ const siteGuideCards = [
   .guide-card-title {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #1f2937;
+    color: var(--color-ink);
     margin-bottom: 0.6rem;
     line-height: 1.4;
   }
 
   .guide-card-desc {
     font-size: 0.95rem;
-    color: #4b5563;
+    color: var(--color-ink-soft);
     line-height: 1.7;
     margin: 0 0 1.25rem;
     flex: 1;
@@ -432,7 +433,7 @@ const siteGuideCards = [
 
   .guide-card-cta {
     font-weight: 600;
-    color: #1e40af;
+    color: var(--color-accent);
     font-size: 0.95rem;
   }
 
@@ -442,7 +443,7 @@ const siteGuideCards = [
   }
 
   .faq-item {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border-visible);
   }
 
   .faq-item[open] {
@@ -456,7 +457,7 @@ const siteGuideCards = [
     padding: 1.25rem 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--color-ink);
     cursor: pointer;
     list-style: none;
     line-height: 1.5;
@@ -487,7 +488,7 @@ const siteGuideCards = [
   .faq-answer p {
     font-size: 1rem;
     line-height: 1.8;
-    color: #4b5563;
+    color: var(--color-ink-soft);
   }
 
   /* Contact */
@@ -501,8 +502,8 @@ const siteGuideCards = [
   .contact-card {
     text-align: center;
     padding: 2rem 1.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-visible);
     border-radius: 12px;
   }
 
@@ -514,12 +515,12 @@ const siteGuideCards = [
   .contact-card h4 {
     font-size: 1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--color-ink);
     margin-bottom: 0.5rem;
   }
 
   .contact-card a {
-    color: #1e40af;
+    color: var(--color-accent);
     text-decoration: none;
     font-weight: 500;
     font-size: 0.95rem;
@@ -529,13 +530,13 @@ const siteGuideCards = [
   .contact-cta {
     text-align: center;
     padding: 2rem;
-    background: white;
+    background: var(--color-surface-raised);
     border-radius: 16px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border-visible);
   }
 
   .contact-cta p {
-    color: #4b5563;
+    color: var(--color-ink-soft);
     font-size: 1.05rem;
     margin-bottom: 1.5rem;
   }
@@ -566,14 +567,14 @@ const siteGuideCards = [
   }
 
   .btn-outline {
-    background: white;
-    color: #1e40af;
-    border: 2px solid #1e40af;
+    background: var(--color-surface-raised);
+    color: var(--color-accent);
+    border: 2px solid var(--color-accent);
   }
 
   .btn-outline:hover {
-    background: #1e40af;
-    color: white;
+    background: var(--color-accent);
+    color: #ffffff;
   }
 
   /* Responsive */

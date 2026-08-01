@@ -69,10 +69,14 @@
    */
   --color-bg: #ffffff;
   --color-bg-soft: #f8fafc;
+  --color-bg-alt: #f9fafb;
   --color-ink: #1a1a2e;
   --color-ink-soft: #475569;
+  --color-ink-heading: #0e3a5c;
   --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
   --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-visible: #e2e8f0;
   --color-accent: #3b82f6;
 
   /* === Reader font-size scale (2026-05-01 γ-late) ===
@@ -87,14 +91,18 @@
 :root[data-theme='dark'] {
   --color-bg: #050505;
   --color-bg-soft: #0d0d0f;
+  --color-bg-alt: #0a0a0c;
   --color-ink: #f1f5f9;
   /* slate-300 not slate-400 — at 4-5% body bg the slate-400 (#94a3b8)
    * read as too dim for sidebar metadata / TOC chrome / "share" labels
    * etc. slate-300 stays clearly secondary against --color-ink while
    * remaining legible on near-black. */
   --color-ink-soft: #cbd5e1;
+  --color-ink-heading: #e2e8f0;
   --color-surface: #141418;
+  --color-surface-raised: #1a1a1f;
   --color-border: rgba(241, 245, 249, 0.16);
+  --color-border-visible: rgba(241, 245, 249, 0.12);
   --color-accent: #60a5fa;
   color-scheme: dark;
 }

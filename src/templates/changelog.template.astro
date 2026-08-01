@@ -113,10 +113,10 @@ for (const commit of commits) {
   >
     {/* Hero */}
     <div class="mb-10">
-      <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[#0e3a5c]">
+      <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)]">
         Update History
       </h1>
-      <p class="mt-2 text-[1.05rem] text-[#64748b]">
+      <p class="mt-2 text-[1.05rem] text-[color:var(--color-ink-soft)]">
         Track every content addition and site improvement.
       </p>
       <p class="mt-1 text-sm text-[#94a3b8]">
@@ -135,14 +135,14 @@ for (const commit of commits) {
     {/* Search + Filter Controls */}
     <div
       id="changelog-controls"
-      class="sticky top-[64px] z-20 -mx-4 mb-6 border-b border-[#e2e8f0] bg-white/95 px-4 py-3 backdrop-blur-sm max-[768px]:top-[56px]"
+      class="sticky top-[64px] z-20 -mx-4 mb-6 border-b border-[color:var(--color-border-visible)] bg-[color:var(--color-bg)]/95 px-4 py-3 backdrop-blur-sm max-[768px]:top-[56px]"
     >
       <div class="mb-3">
         <input
           type="text"
           id="changelog-search"
           placeholder="Search updates..."
-          class="w-full rounded-lg border border-[#d1d5db] bg-white px-4 py-2.5 text-sm text-[#1f2937] outline-none transition-colors placeholder:text-[#9ca3af] focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
+          class="w-full rounded-lg border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] px-4 py-2.5 text-sm text-[color:var(--color-ink)] outline-none transition-colors placeholder:text-[color:var(--color-ink-soft)] focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
         />
       </div>
       <div
@@ -157,7 +157,7 @@ for (const commit of commits) {
                   'filter-pill whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
                   f.key === 'all'
                     ? 'border-[#3b82f6] bg-[#3b82f6] text-white'
-                    : 'border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8] hover:bg-[#f8fafc]',
+                    : 'border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] text-[color:var(--color-ink-soft)] hover:border-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-bg-soft)]',
                 ]}
                 data-type={f.key}
               >
@@ -216,14 +216,14 @@ for (const commit of commits) {
               >
                 {commitsByDay.get(day)!.map((commit) => (
                   <article
-                    class="commit-log-item grid grid-cols-[32px_1fr] gap-4 rounded-[10px] border border-[#e2e8f0] bg-white px-5 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[#cbd5e1] hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] max-[768px]:grid-cols-[24px_1fr] max-[768px]:gap-3 max-[768px]:px-4 max-[768px]:py-[0.9rem]"
+                    class="commit-log-item grid grid-cols-[32px_1fr] gap-4 rounded-[10px] border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] px-5 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-px hover:border-[color:var(--color-ink-soft)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] max-[768px]:grid-cols-[24px_1fr] max-[768px]:gap-3 max-[768px]:px-4 max-[768px]:py-[0.9rem]"
                     data-type={commitType(commit.message)}
                   >
                     <span class="text-center text-base leading-normal">
                       {commitIcon(commit.message)}
                     </span>
                     <div class="min-w-0">
-                      <p class="m-0 break-words text-[0.95rem] font-semibold leading-normal text-[#1f2937]">
+                      <p class="m-0 break-words text-[0.95rem] font-semibold leading-normal text-[color:var(--color-ink)]">
                         {commit.message}
                       </p>
                       <div class="mt-2 flex flex-wrap items-center gap-3 text-[0.82rem] text-[#64748b]">
@@ -367,9 +367,9 @@ for (const commit of commits) {
         p.classList.toggle('border-[#3b82f6]', isActive);
         p.classList.toggle('bg-[#3b82f6]', isActive);
         p.classList.toggle('text-white', isActive);
-        p.classList.toggle('border-[#e2e8f0]', !isActive);
-        p.classList.toggle('bg-white', !isActive);
-        p.classList.toggle('text-[#64748b]', !isActive);
+        p.classList.toggle('border-[color:var(--color-border-visible)]', !isActive);
+        p.classList.toggle('bg-[color:var(--color-surface-raised)]', !isActive);
+        p.classList.toggle('text-[color:var(--color-ink-soft)]', !isActive);
       });
 
       applyFilters();

@@ -41,6 +41,23 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **Route-wide dark theme repair.** Fixed white surfaces and dark-on-dark text
+  on `/`, `/latest`, `/dashboard`, `/about`, `/contribute`, and `/changelog` in
+  dark mode. All affected surfaces now resolve through `tokens.css` design tokens
+  (`--color-surface-raised`, `--color-bg-alt`, `--color-ink-heading`,
+  `--color-border-visible`) rather than hardcoded hex values. Shared components
+  (`ArticleCard`, `FeatureCards`, `CategoryGrid`, `ReaderDoors`, `CoverStory`,
+  `RecentUpdates`, `ContributeSection`) use token-bound colors so the fix stays
+  shared across pages.
+
+  A new browser-backed regression guard (`npm run test:theme`) asserts computed
+  background and text colors on every named surface in dark mode. It runs in the
+  CI build job after `npm run build` and fails on light-only backgrounds or
+  dark-on-dark text. No adopter action required: token additions are additive and
+  the new test runs only in the framework CI workflow.
+
 ### Added
 
 - **`/soundscape` layout: manifest categories, a card grid, per-category

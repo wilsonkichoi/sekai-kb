@@ -30,7 +30,7 @@ const TONE_ICON_BG: Record<string, string> = {
         <a
           href={door.href}
           class:list={[
-            'group flex flex-col items-start gap-3 rounded-xl border border-[#e2e8f0] bg-white p-5 no-underline shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)] max-[480px]:flex-row max-[480px]:items-center max-[480px]:gap-4 max-[480px]:p-4',
+            'group flex flex-col items-start gap-3 rounded-xl border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] p-5 no-underline shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)] max-[480px]:flex-row max-[480px]:items-center max-[480px]:gap-4 max-[480px]:p-4',
             TONE_BG[door.tone],
           ]}
         >
@@ -43,10 +43,10 @@ const TONE_ICON_BG: Record<string, string> = {
             {door.icon}
           </div>
           <div class="flex flex-col gap-1">
-            <span class="text-[1rem] font-bold leading-tight text-[#1f2937] max-[768px]:text-[0.95rem]">
+            <span class="text-[1rem] font-bold leading-tight text-[color:var(--color-ink)] max-[768px]:text-[0.95rem]">
               {door.title}
             </span>
-            <span class="text-[0.82rem] leading-snug text-[#6b7280] max-[768px]:text-[0.8rem]">
+            <span class="text-[0.82rem] leading-snug text-[color:var(--color-ink-soft)] max-[768px]:text-[0.8rem]">
               {door.sub}
             </span>
           </div>

@@ -40,7 +40,7 @@ const { features, home } = placeConfig;
         features.graph && (
           <a
             href="/graph"
-            class="inline-flex items-center gap-2 rounded-lg border-[1.5px] border-[rgba(45,80,22,0.2)] bg-[#f0f9ff] px-6 py-[0.7rem] text-[0.9rem] font-semibold text-[#1e3a5f] no-underline transition-all duration-[250ms] hover:-translate-y-px hover:border-[rgba(45,80,22,0.4)] hover:bg-[rgba(45,80,22,0.1)] hover:shadow-[0_2px_8px_rgba(45,80,22,0.15)]"
+            class="home-cta-btn home-cta-primary inline-flex items-center gap-2 rounded-lg border-[1.5px] px-6 py-[0.7rem] text-[0.9rem] font-semibold no-underline transition-all duration-[250ms] hover:-translate-y-px"
           >
             {home.features.cta.graph}
           </a>
@@ -50,7 +50,7 @@ const { features, home } = placeConfig;
         href={`${placeConfig.links.repo}/tree/main/knowledge`}
         target="_blank"
         rel="noopener noreferrer"
-        class="inline-flex items-center gap-2 rounded-lg border-[1.5px] border-[#d1d5db] bg-[#f8fafc] px-6 py-[0.7rem] text-[0.9rem] font-semibold text-[#374151] no-underline transition-all duration-[250ms] hover:-translate-y-px hover:border-[#9ca3af] hover:bg-[#f1f5f9] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+        class="home-cta-btn home-cta-secondary inline-flex items-center gap-2 rounded-lg border-[1.5px] px-6 py-[0.7rem] text-[0.9rem] font-semibold no-underline transition-all duration-[250ms] hover:-translate-y-px"
         >{home.features.cta.ssot}</a
       >
     </div>
@@ -59,7 +59,7 @@ const { features, home } = placeConfig;
   <section class="my-24">
     <div class="mb-8 text-center">
       <h2
-        class="text-center font-serif text-[2rem] font-light text-[#1f2937]"
+        class="text-center font-serif text-[2rem] font-light text-[color:var(--color-ink)]"
       >
         {home.exhibitions.heading}
       </h2>
@@ -76,15 +76,15 @@ const { features, home } = placeConfig;
       class="mx-auto my-12 flex max-w-[var(--container-prose)] items-center px-8 max-[480px]:px-4"
     >
       <div
-        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,#d1d5db,transparent)]"
+        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,var(--color-border-visible),transparent)]"
       >
       </div>
       <span
-        class="whitespace-nowrap px-6 font-[var(--font-title)] text-[1.3rem] font-bold tracking-[0.05em] text-[#0e3a5c]"
+        class="whitespace-nowrap px-6 font-[var(--font-title)] text-[1.3rem] font-bold tracking-[0.05em] text-[color:var(--color-ink-heading)]"
         >{home.exhibitions.divider}</span
       >
       <div
-        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,#d1d5db,transparent)]"
+        class="h-px flex-1 bg-[linear-gradient(90deg,transparent,var(--color-border-visible),transparent)]"
       >
       </div>
     </div>
@@ -98,6 +98,37 @@ const { features, home } = placeConfig;
 </Layout>
 
 <style>
+  :global(.home-cta-primary) {
+    border-color: rgba(45, 80, 22, 0.2);
+    background: #f0f9ff;
+    color: #1e3a5f;
+  }
+  :global(.home-cta-primary:hover) {
+    border-color: rgba(45, 80, 22, 0.4);
+    background: rgba(45, 80, 22, 0.1);
+    box-shadow: 0 2px 8px rgba(45, 80, 22, 0.15);
+  }
+  :global(.home-cta-secondary) {
+    border-color: var(--color-border-visible);
+    background: var(--color-bg-soft);
+    color: var(--color-ink);
+  }
+  :global(.home-cta-secondary:hover) {
+    border-color: var(--color-ink-soft);
+    background: var(--color-bg-alt);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  :global([data-theme='dark'] .home-cta-primary) {
+    border-color: rgba(96, 165, 250, 0.3);
+    background: rgba(96, 165, 250, 0.1);
+    color: #93c5fd;
+  }
+  :global([data-theme='dark'] .home-cta-primary:hover) {
+    border-color: rgba(96, 165, 250, 0.5);
+    background: rgba(96, 165, 250, 0.15);
+    box-shadow: 0 2px 8px rgba(96, 165, 250, 0.15);
+  }
+
   :global(.hall-divider) {
     display: flex;
     align-items: center;
@@ -112,7 +143,7 @@ const { features, home } = placeConfig;
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(45, 80, 22, 0.25),
+      var(--color-border-visible),
       transparent
     );
   }
@@ -121,7 +152,7 @@ const { features, home } = placeConfig;
     font-family: var(--font-title, serif);
     font-size: 1.15rem;
     font-weight: 300;
-    color: #0e3a5c;
+    color: var(--color-ink-heading);
     letter-spacing: 0.15em;
     white-space: nowrap;
   }
@@ -131,12 +162,12 @@ const { features, home } = placeConfig;
   :global(.hall-body p) {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--color-ink);
     margin-bottom: 1.5rem;
     text-align: justify;
   }
   :global(.hall-body a) {
-    color: #1f2937;
+    color: var(--color-ink);
     text-decoration: none;
     transition: all 0.3s ease;
     font-weight: 700;
@@ -148,7 +179,7 @@ const { features, home } = placeConfig;
     border-radius: 6px;
     padding: 0.15rem 0.6rem;
     font-weight: 700;
-    color: #1e3a5f;
+    color: var(--color-accent);
     transition: all 0.25s ease;
     white-space: nowrap;
   }
@@ -159,7 +190,7 @@ const { features, home } = placeConfig;
     box-shadow: 0 2px 6px rgba(45, 80, 22, 0.15);
   }
   :global(.hall-body a:hover) {
-    color: #1e3a5f;
+    color: var(--color-accent);
   }
 
   @media (max-width: 768px) {

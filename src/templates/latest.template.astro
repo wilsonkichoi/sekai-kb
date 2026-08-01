@@ -55,10 +55,10 @@ const fmtDayFull = (d: string) =>
 
 <Layout title="Latest" description="Recently added and updated articles, newest first.">
   <section class="mx-auto max-w-[var(--container-wide)] px-6 pt-12 pb-2 max-[768px]:px-4 max-[768px]:pt-10">
-    <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[#0e3a5c]">
+    <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)]">
       Latest
     </h1>
-    <p class="mt-2 text-[1.05rem] text-[#64748b]">
+    <p class="mt-2 text-[1.05rem] text-[color:var(--color-ink-soft)]">
       Recently added and updated articles, newest first.
     </p>
   </section>
@@ -67,7 +67,7 @@ const fmtDayFull = (d: string) =>
     <!-- Category filter chips -->
     <div
       id="latest-filters"
-      class="sticky top-[64px] z-20 -mx-4 mb-6 flex flex-wrap gap-2 border-b border-[#e2e8f0] bg-white/95 px-4 py-3 backdrop-blur-sm max-[768px]:top-[56px] max-[768px]:flex-nowrap max-[768px]:overflow-x-auto"
+      class="sticky top-[64px] z-20 -mx-4 mb-6 flex flex-wrap gap-2 border-b border-[color:var(--color-border-visible)] bg-[color:var(--color-bg)]/95 px-4 py-3 backdrop-blur-sm max-[768px]:top-[56px] max-[768px]:flex-nowrap max-[768px]:overflow-x-auto"
     >
       <button
         class="latest-chip whitespace-nowrap rounded-full border border-[#10b981] bg-[#10b981] px-3 py-1.5 text-xs font-semibold text-white transition-all"
@@ -80,7 +80,7 @@ const fmtDayFull = (d: string) =>
           const count = articles.filter((a) => a.category === c.slug).length;
           return (
             <button
-              class="latest-chip whitespace-nowrap rounded-full border border-[#e2e8f0] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] transition-all hover:border-[#94a3b8] hover:bg-[#f8fafc]"
+              class="latest-chip whitespace-nowrap rounded-full border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] transition-all hover:border-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-bg-soft)]"
               data-cat={c.slug}
             >
               {c.icon} {c.name}
@@ -91,7 +91,7 @@ const fmtDayFull = (d: string) =>
       }
     </div>
 
-    {articles.length === 0 && <p class="py-16 text-center text-[#94a3b8]">No articles yet.</p>}
+    {articles.length === 0 && <p class="py-16 text-center text-[color:var(--color-ink-soft)]">No articles yet.</p>}
 
     <div id="latest-timeline" class="flex flex-col gap-10">
       {
@@ -159,9 +159,9 @@ const fmtDayFull = (d: string) =>
           c.classList.toggle('border-[#10b981]', active);
           c.classList.toggle('bg-[#10b981]', active);
           c.classList.toggle('text-white', active);
-          c.classList.toggle('border-[#e2e8f0]', !active);
-          c.classList.toggle('bg-white', !active);
-          c.classList.toggle('text-[#64748b]', !active);
+          c.classList.toggle('border-[color:var(--color-border-visible)]', !active);
+          c.classList.toggle('bg-[color:var(--color-surface-raised)]', !active);
+          c.classList.toggle('text-[color:var(--color-ink-soft)]', !active);
         });
         apply(chip.getAttribute('data-cat'));
       });

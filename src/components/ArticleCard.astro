@@ -261,9 +261,9 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     gap: 10px;
     padding: 12px 14px;
     margin: 6px 0;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border-visible);
     border-radius: 10px;
-    background: white;
+    background: var(--color-surface-raised);
     cursor: pointer;
     transition:
       transform 0.16s,
@@ -279,7 +279,7 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
   }
   .article-card:hover {
     border-color: #16a34a;
-    background: #fafdf6;
+    background: var(--color-bg-soft);
     transform: translateY(-1px);
     box-shadow: 0 4px 10px rgba(22, 163, 74, 0.08);
   }
@@ -293,7 +293,7 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
   .article-card-title {
     font-size: 0.9rem;
     font-weight: 700;
-    color: #14532d;
+    color: var(--color-ink-heading);
     margin: 0;
     line-height: 1.35;
     overflow: hidden;
@@ -303,7 +303,7 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
   }
   .article-card-desc {
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--color-ink-soft);
     line-height: 1.45;
     margin: 0;
     overflow: hidden;
@@ -409,13 +409,13 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     font-family: var(--font-editorial);
     font-size: 1rem;
     font-weight: 600;
-    color: #0e3a5c;
+    color: var(--color-ink-heading);
     line-height: 1.45;
     -webkit-line-clamp: 2;
     transition: color 0.16s;
   }
   .article-card.is-premium:hover .article-card-title {
-    color: #0369a1;
+    color: var(--color-accent);
   }
   .article-card.is-premium .article-card-desc {
     font-size: 0.8rem;
@@ -445,8 +445,8 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     border-radius: 8px;
   }
   .article-card.is-row:hover {
-    border-color: #e2e8f0;
-    background: #f8fafc;
+    border-color: var(--color-border-visible);
+    background: var(--color-bg-soft);
     transform: none;
     box-shadow: none;
   }
@@ -469,13 +469,13 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     font-family: var(--font-editorial);
     font-size: 1.02rem;
     font-weight: 600;
-    color: #0e3a5c;
+    color: var(--color-ink-heading);
     line-height: 1.45;
     -webkit-line-clamp: 1;
     transition: color 0.16s;
   }
   .article-card.is-row:hover .article-card-title {
-    color: #065f46;
+    color: var(--color-accent);
   }
   .article-card.is-row .article-card-desc {
     font-size: 0.82rem;
@@ -576,17 +576,17 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     font-family: var(--font-editorial);
     font-size: 1.12rem;
     font-weight: 700;
-    color: #0e3a5c;
+    color: var(--color-ink-heading);
     line-height: 1.4;
     -webkit-line-clamp: 2;
     transition: color 0.16s;
   }
   .article-card.is-detailed:hover .article-card-title {
-    color: #065f46;
+    color: var(--color-accent);
   }
   .article-card.is-detailed .article-card-desc {
     font-size: 0.9rem;
-    color: #64748b;
+    color: var(--color-ink-soft);
     line-height: 1.6;
     display: block;
     -webkit-line-clamp: unset;
@@ -599,7 +599,7 @@ const classes = ['article-card', densityClass, imgSideClass, 'no-external-icon']
     gap: 12px;
     margin-top: 4px;
     padding-top: 12px;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--color-border);
   }
   .article-card.is-detailed .article-card-tags {
     display: flex;

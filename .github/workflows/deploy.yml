@@ -217,7 +217,10 @@ jobs:
       # that cross-platform validation; the build still uses exact locked versions
       # for all non-optional deps. Remove when npm ships the fix for nodejs/npm#7758.
       - run: npm ci --force
+      - run: npx playwright install --with-deps chromium
       - run: npm run build
+      - name: Theme surfaces regression guard
+        run: npm run test:theme
       # Only publish the artifact when we intend to deploy (push to main); PR
       # builds verify the build compiles but produce nothing to deploy.
       - name: Upload Pages artifact
