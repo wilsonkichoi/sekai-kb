@@ -89,7 +89,31 @@ export const ui = {
       'What this place sounds like. Each clip plays in the browser; nothing loads until you press play.',
     'soundscape.count': '{n} recordings',
     'soundscape.count.one': '1 recording',
+    // Hero stats line. "Wanted" counts the wishlist entries across every
+    // category: what this place is still missing is as much a fact about the
+    // collection as what it has.
+    'soundscape.stats.wanted': '{n} wanted',
+    'soundscape.stats.wanted.one': '1 wanted',
+    'soundscape.stats.categories': '{n} categories',
+    'soundscape.stats.categories.one': '1 category',
     'soundscape.unsupported': 'Your browser cannot play this audio file.',
+    // Per-category surfaces. A declared category renders even with nothing in it
+    // yet -- the gap is the point, and the wishlist beside it says what would
+    // fill it.
+    'soundscape.category.empty': 'No recordings in this category yet.',
+    'soundscape.category.article': 'Read the article',
+    'soundscape.wishlist.title': 'Still wanted',
+    // Contribute block. The steps are the actual mechanics of the manifest, so
+    // they stay true for every instance; the call to action goes to /contribute,
+    // which owns the full process.
+    'soundscape.contribute.title': 'Add a recording',
+    'soundscape.contribute.step.one':
+      'Record the sound and export it as an MP3 you have the right to publish.',
+    'soundscape.contribute.step.two':
+      'Add the file under public/media/sounds/ in the repository.',
+    'soundscape.contribute.step.three':
+      'Describe it in knowledge/sounds/_manifest.md -- title, location, credit, and file -- and open a pull request.',
+    'soundscape.contribute.cta': 'How to contribute',
     // Shown when no manifest exists, or it lists nothing playable. Documented
     // empty state: an adopted instance starts here until it adds its own audio.
     'soundscape.empty.title': 'No recordings yet',

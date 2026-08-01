@@ -9,6 +9,11 @@
 // remaining entries still render, and every skipped entry has to say so loudly
 // enough to appear in an `astro build` transcript.
 //
+// The manifest has two accepted shapes: a flat top-level `sounds:` list (what
+// shipped first) and a `categories:` list. Both normalize into the same
+// `categories` array, so the flat shape must keep rendering forever -- an
+// adopter's manifest is theirs, and an upgrade may not break it.
+//
 // These suites are written against the published contract only. Fixtures are
 // real directory trees under the OS temp dir, never the repository's own
 // knowledge/ or public/.
@@ -22,7 +27,16 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { MANIFEST_PATH, readSoundscape } from '../src/lib/sounds.ts';
+import {
+  CATEGORY_OPTIONAL_FIELDS,
+  CATEGORY_REQUIRED_FIELDS,
+  IMPLICIT_CATEGORY_ID,
+  MANIFEST_PATH,
+  RECORDING_OPTIONAL_FIELDS,
+  RECORDING_REQUIRED_FIELDS,
+  WISHLIST_REQUIRED_FIELDS,
+  readSoundscape,
+} from '../src/lib/sounds.ts';
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -79,6 +93,64 @@ function validItem(overrides = {}) {
   return item(...Object.entries(fields).map(([key, value]) => `${key}: ${value}`));
 }
 
+/** A `wishlist:` list from item() blocks. */
+const wishlist = (...items) => ['wishlist:', ...items].join('\n');
+
+/** Indent a whole YAML block, so a `sounds:`/`wishlist:` block can nest in a category. */
+const indentBlock = (block, pad = '    ') =>
+  block
+    .split('\n')
+    .map((line) => (line === '' ? line : pad + line))
+    .join('\n');
+
+/**
+ * One `categories:` list item. `fields` become `key: value` lines; `nested.sounds`
+ * and `nested.wishlist` are whole blocks (from sounds()/wishlist()) indented under
+ * the item. A scalar `sounds`/`wishlist` goes through `fields` instead, which is how
+ * the "present but not a list" cases are written.
+ */
+function categoryItem(fields = {}, nested = {}) {
+  const parts = [item(...Object.entries(fields).map(([key, value]) => `${key}: ${value}`))];
+  for (const key of ['sounds', 'wishlist']) {
+    if (nested[key] !== undefined) parts.push(indentBlock(nested[key]));
+  }
+  return parts.join('\n');
+}
+
+/** A `categories:` list from categoryItem() blocks. */
+const categories = (...items) => ['categories:', ...items].join('\n');
+
+/** A complete, valid category header. Ids are word-only so an index assertion cannot match one. */
+function validCategory(overrides = {}, nested = {}) {
+  return categoryItem({ id: 'alphagroup', icon: 'A', title: 'Group Alpha', ...overrides }, nested);
+}
+
+/** The whole SoundEntry shape: the four required values plus every optional, defaulted to null. */
+function expectedEntry(overrides = {}) {
+  return {
+    title: 'Clip One',
+    location: 'Site A',
+    credit: 'Recorded by Contributor A',
+    file: '/media/sounds/one.mp3',
+    description: null,
+    icon: null,
+    contributor: null,
+    contributorUrl: null,
+    date: null,
+    ...overrides,
+  };
+}
+
+/** The category a flat manifest normalizes into: an anchor, no heading, no extras. */
+const implicitCategory = (entries) => ({
+  id: IMPLICIT_CATEGORY_ID,
+  title: null,
+  icon: null,
+  article: null,
+  wishlist: [],
+  entries,
+});
+
 /**
  * Call the module with console.warn swapped out, so clause 11 is asserted
  * rather than dumped into the test transcript. Passing no argument exercises
@@ -104,6 +176,19 @@ function assertWarningsWereLogged({ result, logged }) {
       logged.some((line) => line.includes(warning)),
       `expected console.warn to carry the warning: ${warning}\nlogged: ${JSON.stringify(logged)}`,
     );
+  }
+}
+
+/** Clause 11 fixes the order too: the transcript carries the warnings in `warnings` order. */
+function assertWarningOrder({ result, logged }) {
+  let cursor = -1;
+  for (const warning of result.warnings) {
+    const at = logged.findIndex((line, i) => i > cursor && line.includes(warning));
+    assert.ok(
+      at > cursor,
+      `expected "${warning}" on the transcript after line ${cursor}\nlogged: ${JSON.stringify(logged)}`,
+    );
+    cursor = at;
   }
 }
 
@@ -138,7 +223,8 @@ describe('MANIFEST_PATH', () => {
     writeAudio(root, '/media/sounds/one.mp3');
 
     const { result } = call(root);
-    assert.deepEqual(result, { entries: [], notes: '', warnings: [] });
+    // Updated for the categories array: the empty result now carries it too.
+    assert.deepEqual(result, { categories: [], entries: [], notes: '', warnings: [] });
   });
 });
 
@@ -151,15 +237,9 @@ describe('a well-formed manifest (clauses 1, 9, 10)', () => {
     writeAudio(root, '/media/sounds/one.mp3');
 
     const { result, logged } = call(root);
-    assert.deepEqual(result.entries, [
-      {
-        title: 'Clip One',
-        location: 'Site A',
-        credit: 'Recorded by Contributor A',
-        file: '/media/sounds/one.mp3',
-        date: '2026-03-14T00:00:00.000Z',
-      },
-    ]);
+    // Updated for the five optional recording fields: an undeclared optional is
+    // null, and "nothing else" now means exactly the nine SoundEntry keys.
+    assert.deepEqual(result.entries, [expectedEntry({ date: '2026-03-14T00:00:00.000Z' })]);
     assert.deepEqual(result.warnings, []);
     assert.deepEqual(logged, [], 'a clean manifest must not warn at all');
   });
@@ -246,7 +326,9 @@ describe('a well-formed manifest (clauses 1, 9, 10)', () => {
 });
 
 describe('DoD 3(a): the manifest is absent (clause 2)', () => {
-  const empty = { entries: [], notes: '', warnings: [] };
+  // Updated for the categories array; the three absent-safe cases are otherwise
+  // unchanged, exactly as the DoD requires.
+  const empty = { categories: [], entries: [], notes: '', warnings: [] };
 
   test('no knowledge/ directory at all', () => {
     const root = makeRoot();
@@ -294,6 +376,8 @@ describe('DoD 3(b): the list is empty or missing (clause 3)', () => {
 
       const { result, logged } = call(root);
       assert.deepEqual(result.entries, []);
+      // No entry survives, so no implicit category is created either.
+      assert.deepEqual(result.categories, []);
       assert.deepEqual(result.warnings, [], 'an empty list is a supported state, not a defect');
       assert.deepEqual(logged, []);
       assert.equal(result.notes, 'Human notes survive.');
@@ -315,6 +399,7 @@ describe('sounds is present but not a list (clause 4)', () => {
 
       const call_ = call(root);
       assert.deepEqual(call_.result.entries, []);
+      assert.deepEqual(call_.result.categories, []);
       const warning = onlyWarning(call_);
       assert.ok(
         warning.includes(MANIFEST_PATH),
@@ -684,6 +769,14 @@ describe('readSoundscape never throws (clause 12)', () => {
     ['a title that is a mapping', withFrontmatter(sounds(validItem({ title: '\n      inner: value' })))],
     ['a date that is a mapping', withFrontmatter(sounds(validItem({ date: '\n      inner: value' })))],
     ['a very long file value', withFrontmatter(sounds(validItem({ file: `/media/sounds/${'x'.repeat(4000)}.mp3` })))],
+    ['a categories key with a null value', withFrontmatter('categories:')],
+    ['a categories list of nulls', withFrontmatter('categories:\n  -\n  -')],
+    ['a category whose id is a mapping', withFrontmatter(categories(validCategory({ id: '\n      inner: value' })))],
+    ['a category whose sounds value is a mapping', withFrontmatter(categories(validCategory({ sounds: '\n      one: two' })))],
+    ['a category whose wishlist value is a scalar', withFrontmatter(categories(validCategory({ wishlist: 'not a list' })))],
+    ['a wishlist of nulls', withFrontmatter(categories(validCategory({}, { wishlist: wishlist('  -', '  -') })))],
+    ['deeply nested category junk', withFrontmatter('categories:\n  - id:\n      nested:\n        deeper: [1, 2, 3]')],
+    ['both shapes, both broken', withFrontmatter(['categories: 3', 'sounds: 4'].join('\n'))],
   ];
 
   for (const [what, source] of hostile) {
@@ -695,10 +788,1133 @@ describe('readSoundscape never throws (clause 12)', () => {
       assert.doesNotThrow(() => {
         call_ = call(root);
       });
+      assert.ok(Array.isArray(call_.result.categories), 'categories must be an array');
       assert.ok(Array.isArray(call_.result.entries), 'entries must be an array');
       assert.ok(Array.isArray(call_.result.warnings), 'warnings must be an array');
       assert.equal(typeof call_.result.notes, 'string', 'notes must be a string');
       assertWarningsWereLogged(call_);
     });
   }
+
+  for (const [what, options] of [
+    ['a null knownRoutes', { knownRoutes: null }],
+    ['a number knownRoutes', { knownRoutes: 7 }],
+    ['a mapping knownRoutes', { knownRoutes: { one: '/routes/alpha' } }],
+    ['an empty options object', {}],
+  ]) {
+    test(`${what} returns a well-formed result instead of throwing`, () => {
+      // "readSoundscape never throws, for any input" covers the options argument
+      // too; what a non-iterable route set resolves to is unspecified, so only
+      // the shape of the result is asserted here.
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory({ article: '/routes/alpha' }, { sounds: sounds(validItem()) }))));
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      let call_;
+      assert.doesNotThrow(() => {
+        call_ = call(root, options);
+      });
+      assert.ok(Array.isArray(call_.result.categories), 'categories must be an array');
+      assert.ok(Array.isArray(call_.result.entries), 'entries must be an array');
+      assert.ok(Array.isArray(call_.result.warnings), 'warnings must be an array');
+    });
+  }
+});
+
+/* ---------------------------------------------- DoD 1: the published schema */
+
+describe('DoD 1: the field-name constants are the published schema', () => {
+  test('a recording requires exactly title, location, credit and file', () => {
+    assert.deepEqual([...RECORDING_REQUIRED_FIELDS], ['title', 'location', 'credit', 'file']);
+  });
+
+  test('a recording accepts exactly five optional fields', () => {
+    assert.deepEqual(
+      [...RECORDING_OPTIONAL_FIELDS],
+      ['description', 'icon', 'contributor', 'contributorUrl', 'date'],
+    );
+  });
+
+  test('a category requires exactly id, icon and title', () => {
+    assert.deepEqual([...CATEGORY_REQUIRED_FIELDS], ['id', 'icon', 'title']);
+  });
+
+  test('a category accepts exactly one optional field, article', () => {
+    assert.deepEqual([...CATEGORY_OPTIONAL_FIELDS], ['article']);
+  });
+
+  test('a wishlist item requires exactly icon and text', () => {
+    assert.deepEqual([...WISHLIST_REQUIRED_FIELDS], ['icon', 'text']);
+  });
+
+  test('the implicit category id is the anchor a flat manifest normalizes into', () => {
+    assert.equal(IMPLICIT_CATEGORY_ID, 'recordings');
+  });
+});
+
+describe('DoD 1: the optional recording fields', () => {
+  test('every optional field is returned, trimmed', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        sounds(
+          validItem({
+            description: '"  A short note about the clip  "',
+            icon: '"  B  "',
+            contributor: '"  Contributor B  "',
+            contributorUrl: '"  https://example.invalid/contributor  "',
+            // `date` is the one optional field the contract exempts: its
+            // normalization is "unchanged", and the clause-7 suite above owns it,
+            // so this fixture declares it unpadded and asserts carry-through only.
+            date: '"2026-03-14"',
+          }),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/one.mp3');
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.entries, [
+      expectedEntry({
+        description: 'A short note about the clip',
+        icon: 'B',
+        contributor: 'Contributor B',
+        contributorUrl: 'https://example.invalid/contributor',
+        date: '2026-03-14',
+      }),
+    ]);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  for (const field of ['description', 'icon', 'contributor', 'contributorUrl']) {
+    for (const [what, yamlValue] of [
+      ['an empty-string', '""'],
+      ['a whitespace-only', '"   "'],
+      ['a non-string', '\n      inner: value'],
+    ]) {
+      test(`${what} ${field} becomes null, and never skips the entry or warns`, () => {
+        const root = makeRoot();
+        writeManifest(root, withFrontmatter(sounds(validItem({ [field]: yamlValue }))));
+        writeAudio(root, '/media/sounds/one.mp3');
+
+        const { result, logged } = call(root);
+        assert.deepEqual(titles(result), ['Clip One'], 'an optional field must never skip an entry');
+        assert.equal(result.entries[0][field], null);
+        assert.deepEqual(result.warnings, [], 'an optional field must never warn');
+        assert.deepEqual(logged, []);
+      });
+    }
+
+    test(`an absent ${field} becomes null`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(sounds(validItem())));
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      const { result } = call(root);
+      assert.equal(result.entries[0][field], null);
+    });
+  }
+});
+
+/* ------------------------- DoD 2: the flat shape and the implicit category */
+
+describe('DoD 2: a flat manifest normalizes into one implicit category', () => {
+  test('the single category carries the anchor id and renders no heading', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(sounds(validItem())));
+    writeAudio(root, '/media/sounds/one.mp3');
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.categories, [implicitCategory([expectedEntry()])]);
+    assert.equal(result.categories[0].title, null, 'the implicit category renders no heading');
+    assert.equal(result.categories[0].icon, null);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  test('the top-level entries array mirrors the implicit category, in manifest order', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        sounds(
+          validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' }),
+          validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' }),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/one.mp3');
+    writeAudio(root, '/media/sounds/two.mp3');
+
+    const { result } = call(root);
+    assert.equal(result.categories.length, 1);
+    assert.deepEqual(result.categories[0].entries, result.entries);
+    assert.deepEqual(titles(result), ['Clip One', 'Clip Two']);
+  });
+
+  test('no implicit category is created when every entry is skipped', () => {
+    // The implicit category exists only to hold surviving entries; an empty one
+    // would render a heading-less empty section on the page.
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        sounds(
+          validItem({ title: 'Clip One', file: '/media/sounds/gone.mp3' }),
+          validItem({ title: 'Clip Two', file: '/media/sounds/also-gone.mp3' }),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.entries, []);
+    assert.deepEqual(call_.result.categories, []);
+    assert.equal(call_.result.warnings.length, 2);
+    assertWarningsWereLogged(call_);
+  });
+
+  test('a flat manifest keeps its wishlist empty and its article null', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(sounds(validItem())));
+    writeAudio(root, '/media/sounds/one.mp3');
+
+    const { result } = call(root);
+    assert.deepEqual(result.categories[0].wishlist, []);
+    assert.equal(result.categories[0].article, null);
+  });
+});
+
+describe('DoD 2: the manifest shipped before this change still renders', () => {
+  // The structure shipped at commit 72f2895: a top-level `sounds:` list of three
+  // items, each carrying the four required fields plus an unquoted `date`, all
+  // three sharing one credit string. The literals here are neutral stand-ins --
+  // tests/ is scanned by the place-name gate -- but the shape is the shipped one.
+  const SHIPPED_CREDIT = 'Synthesized demo clip generated for the template. Not a field recording.';
+  const SHIPPED_FILES = ['/media/sounds/one.mp3', '/media/sounds/two.mp3', '/media/sounds/three.mp3'];
+  const SHIPPED_TITLES = ['Clip One', 'Clip Two', 'Clip Three'];
+  const SHIPPED_FRONTMATTER = sounds(
+    ...SHIPPED_TITLES.map((title, i) =>
+      item(
+        `title: ${title}`,
+        `location: Site ${String.fromCharCode(65 + i)}`,
+        `credit: ${SHIPPED_CREDIT}`,
+        `file: ${SHIPPED_FILES[i]}`,
+        'date: 2026-07-30',
+      ),
+    ),
+  );
+
+  /** The shipped manifest, with all three clips present under public/. */
+  function shippedRoot() {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(SHIPPED_FRONTMATTER, 'How these were made.\n'));
+    for (const file of SHIPPED_FILES) writeAudio(root, file);
+    return root;
+  }
+
+  test('it normalizes to exactly one implicit category with no heading', () => {
+    const { result } = call(shippedRoot());
+    assert.equal(result.categories.length, 1);
+    assert.equal(result.categories[0].id, IMPLICIT_CATEGORY_ID);
+    assert.equal(result.categories[0].title, null);
+    assert.equal(result.categories[0].icon, null);
+    assert.equal(result.categories[0].article, null);
+    assert.deepEqual(result.categories[0].wishlist, []);
+  });
+
+  test('the same three recordings survive, in order', () => {
+    const { result } = call(shippedRoot());
+    assert.deepEqual(titles(result), SHIPPED_TITLES);
+    assert.deepEqual(result.entries.map((entry) => entry.file), SHIPPED_FILES);
+    assert.deepEqual(result.categories[0].entries, result.entries);
+  });
+
+  test('each recording keeps its credit and its normalized date', () => {
+    const { result } = call(shippedRoot());
+    for (const entry of result.entries) {
+      assert.equal(entry.credit, SHIPPED_CREDIT);
+      assert.equal(entry.date, '2026-07-30T00:00:00.000Z');
+    }
+  });
+
+  test('the new optional fields it never declared are null, not missing keys', () => {
+    const { result } = call(shippedRoot());
+    for (const entry of result.entries) {
+      for (const field of ['description', 'icon', 'contributor', 'contributorUrl']) {
+        assert.ok(field in entry, `expected the entry to carry the key "${field}"`);
+        assert.equal(entry[field], null);
+      }
+    }
+  });
+
+  test('it renders with no warning at all, and keeps its notes', () => {
+    const { result, logged } = call(shippedRoot());
+    assert.deepEqual(result.warnings, [], 'the shipped manifest must not warn under the new reader');
+    assert.deepEqual(logged, []);
+    assert.equal(result.notes, 'How these were made.');
+  });
+});
+
+/* ------------------------------------- DoD 1, DoD 3: the categorized shape */
+
+describe('DoD 1: a categorized manifest', () => {
+  /** Two categories, two clips each, all four audio files present. */
+  function twoCategories(root) {
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha', article: '/routes/alpha' },
+            {
+              sounds: sounds(
+                validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' }),
+                validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' }),
+              ),
+              wishlist: wishlist(item('icon: W', 'text: A sound still wanted')),
+            },
+          ),
+          validCategory(
+            { id: 'betagroup', icon: 'B', title: 'Group Beta' },
+            {
+              sounds: sounds(
+                validItem({ title: 'Clip Three', file: '/media/sounds/three.mp3' }),
+                validItem({ title: 'Clip Four', file: '/media/sounds/four.mp3' }),
+              ),
+            },
+          ),
+        ),
+        'How these were made.\n',
+      ),
+    );
+    for (const name of ['one', 'two', 'three', 'four']) writeAudio(root, `/media/sounds/${name}.mp3`);
+    return root;
+  }
+
+  test('each declared category keeps its id, icon, title and article', () => {
+    const call_ = call(twoCategories(makeRoot()), { knownRoutes: ['/routes/alpha'] });
+    assert.deepEqual(
+      call_.result.categories.map(({ id, icon, title, article }) => ({ id, icon, title, article })),
+      [
+        { id: 'alphagroup', icon: 'A', title: 'Group Alpha', article: '/routes/alpha' },
+        { id: 'betagroup', icon: 'B', title: 'Group Beta', article: null },
+      ],
+    );
+    assert.deepEqual(call_.result.warnings, []);
+    assert.deepEqual(call_.logged, []);
+  });
+
+  test('each category holds its own entries, and its wishlist', () => {
+    const { result } = call(twoCategories(makeRoot()), { knownRoutes: ['/routes/alpha'] });
+    assert.deepEqual(result.categories[0].entries.map((entry) => entry.title), ['Clip One', 'Clip Two']);
+    assert.deepEqual(result.categories[1].entries.map((entry) => entry.title), ['Clip Three', 'Clip Four']);
+    assert.deepEqual(result.categories[0].wishlist, [{ icon: 'W', text: 'A sound still wanted' }]);
+    assert.deepEqual(result.categories[1].wishlist, []);
+  });
+
+  test('the top-level entries array is every surviving entry, in manifest order', () => {
+    const { result } = call(twoCategories(makeRoot()), { knownRoutes: ['/routes/alpha'] });
+    assert.deepEqual(titles(result), ['Clip One', 'Clip Two', 'Clip Three', 'Clip Four']);
+  });
+
+  test('a later category entry follows an earlier one even when earlier entries are skipped', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+            {
+              sounds: sounds(
+                validItem({ title: 'Clip One', file: '/media/sounds/gone.mp3' }),
+                validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' }),
+              ),
+            },
+          ),
+          validCategory(
+            { id: 'betagroup', icon: 'B', title: 'Group Beta' },
+            { sounds: sounds(validItem({ title: 'Clip Three', file: '/media/sounds/three.mp3' })) },
+          ),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/two.mp3');
+    writeAudio(root, '/media/sounds/three.mp3');
+
+    const call_ = call(root);
+    assert.deepEqual(titles(call_.result), ['Clip Two', 'Clip Three']);
+    assert.deepEqual(call_.result.categories[0].entries.map((entry) => entry.title), ['Clip Two']);
+    onlyWarning(call_);
+  });
+
+  test('notes still come from the body', () => {
+    const { result } = call(twoCategories(makeRoot()), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(result.notes, 'How these were made.');
+  });
+
+  test('a declared category with no surviving entries is kept, unlike the implicit one', () => {
+    // The page renders a per-category empty state, so the category has to exist.
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+            { sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/gone.mp3' })) },
+          ),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    assert.equal(call_.result.categories.length, 1, 'a declared category is kept even when empty');
+    assert.deepEqual(call_.result.categories[0].entries, []);
+    assert.deepEqual(call_.result.entries, []);
+    onlyWarning(call_);
+  });
+
+  test('a declared category with no sounds key at all is kept, with no warning', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(categories(validCategory())));
+
+    const { result, logged } = call(root);
+    assert.equal(result.categories.length, 1);
+    assert.deepEqual(result.categories[0].entries, []);
+    assert.deepEqual(result.categories[0].wishlist, []);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  test('an empty categories list yields no categories and no warning', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter('categories: []', 'Human notes survive.\n'));
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.categories, []);
+    assert.deepEqual(result.entries, []);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+    assert.equal(result.notes, 'Human notes survive.');
+  });
+});
+
+describe('both manifest shapes declared at once', () => {
+  test('a top-level sounds list is ignored, with one warning naming the manifest', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        [
+          categories(
+            validCategory(
+              { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+              { sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' })) },
+            ),
+          ),
+          sounds(validItem({ title: 'Clip Flat', file: '/media/sounds/flat.mp3' })),
+        ].join('\n'),
+      ),
+    );
+    // Both files exist, so a missing asset cannot explain the flat entry's absence.
+    writeAudio(root, '/media/sounds/one.mp3');
+    writeAudio(root, '/media/sounds/flat.mp3');
+
+    const call_ = call(root);
+    assert.deepEqual(titles(call_.result), ['Clip One'], 'the top-level list must not render');
+    assert.equal(call_.result.categories.length, 1);
+    const warning = onlyWarning(call_);
+    assert.ok(
+      warning.includes(MANIFEST_PATH),
+      `expected the warning to name ${MANIFEST_PATH}, got: ${warning}`,
+    );
+    assert.ok(warning.includes('categories'), `expected the warning to name categories, got: ${warning}`);
+    assert.match(warning, /ignor/i, `expected the warning to say the list was ignored, got: ${warning}`);
+  });
+});
+
+describe('categories present but not a list falls back to the flat shape', () => {
+  const cases = [
+    ['a scalar string', 'categories: not a list', /string/i],
+    ['a number', 'categories: 4', /number/i],
+    ['a mapping', 'categories:\n  one: Group Alpha', /object|map/i],
+  ];
+
+  for (const [what, broken, typeMatch] of cases) {
+    test(`${what} is reported once, naming the manifest path and the type`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter([broken, sounds(validItem())].join('\n')));
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      const call_ = call(root);
+      const warning = onlyWarning(call_);
+      assert.ok(
+        warning.includes(MANIFEST_PATH),
+        `expected the warning to name ${MANIFEST_PATH}, got: ${warning}`,
+      );
+      assert.match(warning, typeMatch);
+    });
+
+    test(`${what} still lets the top-level sounds list render`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter([broken, sounds(validItem())].join('\n')));
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      const { result } = call(root);
+      assert.deepEqual(titles(result), ['Clip One']);
+      assert.deepEqual(result.categories, [implicitCategory([expectedEntry()])]);
+    });
+  }
+});
+
+describe('DoD 3: category validation', () => {
+  const required = ['id', 'icon', 'title'];
+
+  for (const field of required) {
+    test(`a missing ${field} skips the whole category, naming the field and the index`, () => {
+      const root = makeRoot();
+      const fields = { id: 'alphagroup', icon: 'A', title: 'Group Alpha' };
+      delete fields[field];
+      writeManifest(
+        root,
+        withFrontmatter(
+          categories(
+            categoryItem(fields, {
+              sounds: sounds(validItem()),
+              wishlist: wishlist(item('icon: W', 'text: A sound still wanted')),
+            }),
+          ),
+        ),
+      );
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.categories, [], 'a malformed category is skipped whole');
+      assert.deepEqual(call_.result.entries, [], 'its entries do not render either');
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes(field), `expected the warning to name "${field}", got: ${warning}`);
+      assert.match(warning, /\b0\b/, `expected the warning to name index 0, got: ${warning}`);
+    });
+
+    test(`an empty-string ${field} skips the whole category`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory({ [field]: '""' }))));
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.categories, []);
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes(field), `expected the warning to name "${field}", got: ${warning}`);
+    });
+
+    test(`a non-string ${field} skips the whole category`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory({ [field]: '\n      - a nested list' }))));
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.categories, []);
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes(field), `expected the warning to name "${field}", got: ${warning}`);
+    });
+  }
+
+  test('one warning names every field the category got wrong', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(categories(categoryItem({ id: 'alphagroup' }))));
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.categories, []);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('icon'), `expected the warning to name "icon", got: ${warning}`);
+    assert.ok(warning.includes('title'), `expected the warning to name "title", got: ${warning}`);
+  });
+
+  test('the warning names the offending category by its 0-based index', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory({ id: 'alphagroup', icon: 'A', title: 'Group Alpha' }),
+          categoryItem({ id: 'betagroup', icon: 'B' }),
+          validCategory({ id: 'gammagroup', icon: 'C', title: 'Group Gamma' }),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.categories.map((category) => category.id), ['alphagroup', 'gammagroup']);
+    const warning = onlyWarning(call_);
+    assert.match(warning, /\b1\b/, `expected the warning to name index 1, got: ${warning}`);
+  });
+
+  for (const [what, yaml] of [
+    ['a bare string', '  - Group Alpha'],
+    ['a number', '  - 7'],
+    ['a nested list', '  - - id: alphagroup'],
+    ['a null hole', '  -'],
+  ]) {
+    test(`${what} in place of a category is skipped with a warning naming its index`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(['categories:', yaml].join('\n')));
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.categories, []);
+      const warning = onlyWarning(call_);
+      assert.match(warning, /\b0\b/, `expected the warning to name index 0, got: ${warning}`);
+    });
+  }
+
+  test('a duplicate id skips the later category, naming the duplicated id', () => {
+    // Ids are anchors on the page; two sections cannot share one.
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'twice', icon: 'A', title: 'Group Alpha' },
+            { sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' })) },
+          ),
+          validCategory(
+            { id: 'twice', icon: 'B', title: 'Group Beta' },
+            { sounds: sounds(validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' })) },
+          ),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/one.mp3');
+    writeAudio(root, '/media/sounds/two.mp3');
+
+    const call_ = call(root);
+    assert.equal(call_.result.categories.length, 1, 'the first use of an id wins');
+    assert.equal(call_.result.categories[0].title, 'Group Alpha');
+    assert.deepEqual(titles(call_.result), ['Clip One']);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('twice'), `expected the warning to name the duplicated id, got: ${warning}`);
+  });
+
+  test('a skipped category does not take the other categories with it', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          categoryItem({ icon: 'A', title: 'Group Alpha' }, { sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' })) }),
+          validCategory(
+            { id: 'betagroup', icon: 'B', title: 'Group Beta' },
+            { sounds: sounds(validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' })) },
+          ),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/one.mp3');
+    writeAudio(root, '/media/sounds/two.mp3');
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.categories.map((category) => category.id), ['betagroup']);
+    assert.deepEqual(titles(call_.result), ['Clip Two']);
+    onlyWarning(call_);
+  });
+
+  for (const [what, fields, nested] of [
+    ['absent', {}, {}],
+    ['null', { sounds: '' }, {}],
+    ['an empty list', { sounds: '[]' }, {}],
+  ]) {
+    test(`a category whose sounds is ${what} yields no entries and no warning`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory(fields, nested))));
+
+      const { result, logged } = call(root);
+      assert.equal(result.categories.length, 1);
+      assert.deepEqual(result.categories[0].entries, []);
+      assert.deepEqual(result.warnings, []);
+      assert.deepEqual(logged, []);
+    });
+  }
+
+  for (const [what, value] of [
+    ['a scalar string', 'not a list'],
+    ['a number', '4'],
+    ['a mapping', '\n      one: /media/sounds/one.mp3'],
+  ]) {
+    test(`a category whose sounds is ${what} warns, naming the category id`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory({ sounds: value }))));
+
+      const call_ = call(root);
+      assert.equal(call_.result.categories.length, 1, 'the category itself is still valid');
+      assert.deepEqual(call_.result.categories[0].entries, []);
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+    });
+  }
+
+  for (const [what, fields] of [
+    ['absent', {}],
+    ['null', { wishlist: '' }],
+    ['an empty list', { wishlist: '[]' }],
+  ]) {
+    test(`a category whose wishlist is ${what} yields no wishlist and no warning`, () => {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(categories(validCategory(fields))));
+
+      const { result, logged } = call(root);
+      assert.equal(result.categories.length, 1);
+      assert.deepEqual(result.categories[0].wishlist, []);
+      assert.deepEqual(result.warnings, []);
+      assert.deepEqual(logged, []);
+    });
+  }
+
+  for (const [what, value] of [
+    ['a scalar string', 'not a list'],
+    ['a number', '4'],
+    ['a mapping', '\n      one: A sound still wanted'],
+  ]) {
+    test(`a category whose wishlist is ${what} warns, naming the category id`, () => {
+      const root = makeRoot();
+      writeManifest(
+        root,
+        withFrontmatter(categories(validCategory({ wishlist: value }, { sounds: sounds(validItem()) }))),
+      );
+      writeAudio(root, '/media/sounds/one.mp3');
+
+      const call_ = call(root);
+      assert.equal(call_.result.categories.length, 1);
+      assert.deepEqual(call_.result.categories[0].wishlist, []);
+      assert.deepEqual(titles(call_.result), ['Clip One'], 'a broken wishlist must not drop the recordings');
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+    });
+  }
+});
+
+describe('DoD 1, DoD 3: wishlist entries', () => {
+  test('a well-formed wishlist is returned as icon and text, in manifest order', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            {},
+            {
+              wishlist: wishlist(
+                item('icon: W', 'text: A sound still wanted'),
+                item('icon: X', 'text: Another sound still wanted'),
+              ),
+            },
+          ),
+        ),
+      ),
+    );
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.categories[0].wishlist, [
+      { icon: 'W', text: 'A sound still wanted' },
+      { icon: 'X', text: 'Another sound still wanted' },
+    ]);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  for (const field of ['icon', 'text']) {
+    for (const [what, mutate] of [
+      ['a missing', (fields) => { delete fields[field]; }],
+      ['an empty-string', (fields) => { fields[field] = '""'; }],
+      ['a non-string', (fields) => { fields[field] = '\n        - a nested list'; }],
+    ]) {
+      test(`${what} ${field} skips that wishlist item alone`, () => {
+        const root = makeRoot();
+        const fields = { icon: 'W', text: 'A sound still wanted' };
+        mutate(fields);
+        writeManifest(
+          root,
+          withFrontmatter(
+            categories(
+              validCategory(
+                {},
+                {
+                  sounds: sounds(validItem()),
+                  wishlist: wishlist(
+                    item(...Object.entries(fields).map(([key, value]) => `${key}: ${value}`)),
+                    item('icon: X', 'text: Another sound still wanted'),
+                  ),
+                },
+              ),
+            ),
+          ),
+        );
+        writeAudio(root, '/media/sounds/one.mp3');
+
+        const call_ = call(root);
+        assert.deepEqual(
+          call_.result.categories[0].wishlist,
+          [{ icon: 'X', text: 'Another sound still wanted' }],
+          'the other wishlist items still render',
+        );
+        assert.deepEqual(titles(call_.result), ['Clip One'], 'the recordings still render');
+        const warning = onlyWarning(call_);
+        assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+        assert.match(warning, /\b0\b/, `expected the warning to name index 0, got: ${warning}`);
+      });
+    }
+  }
+
+  for (const [what, yaml] of [
+    ['a bare string', '  - A sound still wanted'],
+    ['a number', '  - 7'],
+    ['a nested list', '  - - icon: W'],
+    ['a null hole', '  -'],
+  ]) {
+    test(`${what} in place of a wishlist item is skipped, naming the category and the index`, () => {
+      const root = makeRoot();
+      writeManifest(
+        root,
+        withFrontmatter(categories(validCategory({}, { wishlist: ['wishlist:', yaml].join('\n') }))),
+      );
+
+      const call_ = call(root);
+      assert.deepEqual(call_.result.categories[0].wishlist, []);
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+      assert.match(warning, /\b0\b/, `expected the warning to name index 0, got: ${warning}`);
+    });
+  }
+
+  test('the warning names the offending wishlist item by its 0-based index', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            {},
+            {
+              wishlist: wishlist(
+                item('icon: W', 'text: A sound still wanted'),
+                item('icon: X'),
+                item('icon: Y', 'text: A third sound still wanted'),
+              ),
+            },
+          ),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.categories[0].wishlist.map((entry) => entry.icon), ['W', 'Y']);
+    const warning = onlyWarning(call_);
+    assert.match(warning, /\b1\b/, `expected the warning to name index 1, got: ${warning}`);
+  });
+});
+
+describe('DoD 3: a skipped recording inside a declared category names the category', () => {
+  test('the warning carries the category id as well as the field', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+            { sounds: sounds(item('title: Clip One', 'location: Site A', 'file: /media/sounds/one.mp3')) },
+          ),
+        ),
+      ),
+    );
+    writeAudio(root, '/media/sounds/one.mp3');
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.entries, []);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+    assert.ok(warning.includes('credit'), `expected the warning to name the missing field, got: ${warning}`);
+  });
+
+  test('a missing asset inside a category names the category, the title and the file', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+            { sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/gone.mp3' })) },
+          ),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category id, got: ${warning}`);
+    assert.ok(warning.includes('Clip One'), `expected the warning to name the title, got: ${warning}`);
+    assert.ok(
+      warning.includes('/media/sounds/gone.mp3'),
+      `expected the warning to name the declared file, got: ${warning}`,
+    );
+  });
+
+  test('the index in the warning counts within the entry own category list', () => {
+    // Two good entries in the first category, then a bad entry at position 0 of
+    // the second: a reader counting across the whole manifest would say 2.
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha' },
+            {
+              sounds: sounds(
+                validItem({ title: 'Clip One', file: '/media/sounds/one.mp3' }),
+                validItem({ title: 'Clip Two', file: '/media/sounds/two.mp3' }),
+              ),
+            },
+          ),
+          validCategory(
+            { id: 'betagroup', icon: 'B', title: 'Group Beta' },
+            { sounds: sounds(item('location: Site A', 'credit: Recorded by Contributor A', 'file: /media/sounds/three.mp3')) },
+          ),
+        ),
+      ),
+    );
+    for (const name of ['one', 'two', 'three']) writeAudio(root, `/media/sounds/${name}.mp3`);
+
+    const call_ = call(root);
+    assert.deepEqual(titles(call_.result), ['Clip One', 'Clip Two']);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('betagroup'), `expected the warning to name the category id, got: ${warning}`);
+    assert.match(warning, /\b0\b/, `expected the warning to name index 0, got: ${warning}`);
+    assert.ok(!/\b2\b/.test(warning), `expected a per-category index, not a manifest-wide one, got: ${warning}`);
+  });
+});
+
+/* --------------------------------- DoD 4: article route validation */
+
+describe('DoD 4: a category article is proven against the built routes', () => {
+  /** A one-category manifest with one valid recording; `yamlValue` is raw YAML, null for no key. */
+  function articleRoot(yamlValue) {
+    const root = makeRoot();
+    const fields = { id: 'alphagroup', icon: 'A', title: 'Group Alpha' };
+    if (yamlValue !== null) fields.article = yamlValue;
+    writeManifest(root, withFrontmatter(categories(categoryItem(fields, { sounds: sounds(validItem()) }))));
+    writeAudio(root, '/media/sounds/one.mp3');
+    return root;
+  }
+
+  const articleOf = (call_) => call_.result.categories[0].article;
+
+  test('a declared route this build produces is kept, with no warning', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), '/routes/alpha');
+    assert.deepEqual(call_.result.warnings, []);
+    assert.deepEqual(call_.logged, []);
+  });
+
+  test('a trailing slash on the declared value still matches the route', () => {
+    const call_ = call(articleRoot('"/routes/alpha/"'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), '/routes/alpha/', 'the declared form is what gets linked');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('a trailing slash on the known route still matches the declared value', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'), { knownRoutes: ['/routes/alpha/'] });
+    assert.equal(articleOf(call_), '/routes/alpha');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('a fragment is ignored when matching and preserved in the link', () => {
+    const call_ = call(articleRoot('"/routes/alpha#recordings"'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), '/routes/alpha#recordings');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('a query is ignored when matching and preserved in the link', () => {
+    const call_ = call(articleRoot('"/routes/alpha?from=soundscape"'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), '/routes/alpha?from=soundscape');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('the declared value is trimmed before it is matched and before it is linked', () => {
+    const call_ = call(articleRoot('"  /routes/alpha  "'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), '/routes/alpha');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('knownRoutes may be any iterable, not only an array', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'), { knownRoutes: new Set(['/routes/alpha']) });
+    assert.equal(articleOf(call_), '/routes/alpha');
+    assert.deepEqual(call_.result.warnings, []);
+  });
+
+  test('a route this build does not produce is omitted rather than shipped as a 404', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'), { knownRoutes: ['/routes/beta'] });
+    assert.equal(articleOf(call_), null, 'the link is omitted, not shipped');
+    assert.deepEqual(titles(call_.result), ['Clip One'], 'the category still renders its recordings');
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+    assert.ok(warning.includes('/routes/alpha'), `expected the warning to name the declared value, got: ${warning}`);
+  });
+
+  test('a fragment-only difference does not rescue an unbuilt route', () => {
+    const call_ = call(articleRoot('"/routes/alpha#recordings"'), { knownRoutes: ['/routes/beta'] });
+    assert.equal(articleOf(call_), null);
+    onlyWarning(call_);
+  });
+
+  for (const [what, yamlValue, declared] of [
+    ['a root-relative path', '"routes/alpha"', 'routes/alpha'],
+    ['a bare slug', '"alpha"', 'alpha'],
+    ['an absolute URL', '"https://example.invalid/routes/alpha"', 'https://example.invalid/routes/alpha'],
+  ]) {
+    test(`${what} is not site-root-absolute, so the link is omitted`, () => {
+      // The declared value is planted in knownRoutes, so a pass proves the value
+      // was rejected on its shape rather than merely missing from the route set.
+      const call_ = call(articleRoot(yamlValue), { knownRoutes: ['/routes/alpha', declared] });
+      assert.equal(articleOf(call_), null);
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+      assert.ok(warning.includes(declared), `expected the warning to name the declared value, got: ${warning}`);
+    });
+  }
+
+  test('a protocol-relative URL is not a route this build produces, so the link is omitted', () => {
+    // `//host/path` carries a leading slash, so the contract's shape test alone
+    // does not settle it; what does settle it is that no build ever produces such
+    // a route, so it can never be proven and can never ship.
+    const call_ = call(articleRoot('"//example.invalid/routes/alpha"'), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), null, 'an off-site link must never ship from a category article');
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+  });
+
+  for (const [what, yamlValue] of [
+    ['an empty-string', '""'],
+    ['a whitespace-only', '"   "'],
+    ['a non-string', '\n      - /routes/alpha'],
+  ]) {
+    test(`${what} article is omitted, with a warning naming the category`, () => {
+      const call_ = call(articleRoot(yamlValue), { knownRoutes: ['/routes/alpha'] });
+      assert.equal(articleOf(call_), null);
+      assert.deepEqual(titles(call_.result), ['Clip One'], 'a bad article must not drop the recordings');
+      const warning = onlyWarning(call_);
+      assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+    });
+  }
+
+  test('an absent article is null, with no warning', () => {
+    const call_ = call(articleRoot(null), { knownRoutes: ['/routes/alpha'] });
+    assert.equal(articleOf(call_), null);
+    assert.deepEqual(call_.result.warnings, []);
+    assert.deepEqual(call_.logged, []);
+  });
+
+  test('an empty knownRoutes is a supplied route set: every article misses it', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'), { knownRoutes: [] });
+    assert.equal(articleOf(call_), null);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+    assert.ok(warning.includes('/routes/alpha'), `expected the warning to name the declared value, got: ${warning}`);
+  });
+
+  test('no knownRoutes at all fails closed: the link is omitted, not assumed good', () => {
+    const call_ = call(articleRoot('"/routes/alpha"'));
+    assert.equal(articleOf(call_), null, 'an unprovable link must not ship');
+    assert.deepEqual(titles(call_.result), ['Clip One']);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('alphagroup'), `expected the warning to name the category, got: ${warning}`);
+    // The contract words this warning as "no route set was supplied"; the exact
+    // sentence is the implementation's, so only the word "route" is asserted here,
+    // plus the distinctness test below.
+    assert.match(warning, /route/i, `expected the warning to talk about the route set, got: ${warning}`);
+  });
+
+  test('the fail-closed warning is a different message from the does-not-resolve one', () => {
+    // Both cases omit the link, so the transcript text is the only thing that
+    // tells a maintainer "you forgot to pass the route set" apart from
+    // "that article does not exist".
+    const unsupplied = onlyWarning(call(articleRoot('"/routes/alpha"')));
+    const unresolved = onlyWarning(call(articleRoot('"/routes/alpha"'), { knownRoutes: ['/routes/beta'] }));
+    assert.notEqual(unsupplied, unresolved);
+  });
+
+  test('a manifest with no article anywhere never warns about routes', () => {
+    const { result, logged } = call(articleRoot(null));
+    assert.deepEqual(result.warnings, [], 'fail-closed must not fire when nothing declares an article');
+    assert.deepEqual(logged, []);
+  });
+
+  test('a flat manifest never warns about routes either', () => {
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(sounds(validItem())));
+    writeAudio(root, '/media/sounds/one.mp3');
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  test('one fail-closed warning per category that declares an article, and no more', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory({ id: 'alphagroup', icon: 'A', title: 'Group Alpha', article: '"/routes/alpha"' }),
+          validCategory({ id: 'betagroup', icon: 'B', title: 'Group Beta', article: '"/routes/beta"' }),
+          validCategory({ id: 'gammagroup', icon: 'C', title: 'Group Gamma' }),
+        ),
+      ),
+    );
+
+    const call_ = call(root);
+    assert.deepEqual(call_.result.categories.map((category) => category.article), [null, null, null]);
+    assert.equal(call_.result.warnings.length, 2, JSON.stringify(call_.result.warnings));
+    assert.ok(call_.result.warnings[0].includes('alphagroup'));
+    assert.ok(call_.result.warnings[1].includes('betagroup'));
+    assertWarningsWereLogged(call_);
+  });
+
+  test('a skipped category produces no article warning at all', () => {
+    // The category never survives validation, so there is nothing to link.
+    const root = makeRoot();
+    writeManifest(root, withFrontmatter(categories(categoryItem({ id: 'alphagroup', icon: 'A', article: '/routes/alpha' }))));
+
+    const call_ = call(root, { knownRoutes: [] });
+    assert.deepEqual(call_.result.categories, []);
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('title'), `expected the one warning to be the category one, got: ${warning}`);
+  });
+});
+
+describe('warnings reach the build transcript in order (clause 11)', () => {
+  test('a categorized manifest logs its warnings in the order warnings carries them', () => {
+    const root = makeRoot();
+    writeManifest(
+      root,
+      withFrontmatter(
+        categories(
+          validCategory(
+            { id: 'alphagroup', icon: 'A', title: 'Group Alpha', article: '"/routes/alpha"' },
+            {
+              sounds: sounds(validItem({ title: 'Clip One', file: '/media/sounds/gone.mp3' })),
+              wishlist: wishlist(item('icon: W')),
+            },
+          ),
+          categoryItem({ id: 'betagroup', icon: 'B' }),
+        ),
+      ),
+    );
+
+    const call_ = call(root, { knownRoutes: [] });
+    assert.ok(call_.result.warnings.length >= 3, JSON.stringify(call_.result.warnings));
+    assertWarningsWereLogged(call_);
+    assertWarningOrder(call_);
+  });
 });

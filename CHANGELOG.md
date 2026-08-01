@@ -43,6 +43,55 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **`/soundscape` layout: manifest categories, a card grid, per-category
+  wishlists, and a contribute block.** The page was a single-column stack of
+  cards; it now reads as a collection. The hero carries a stats line (recordings,
+  wanted, categories), each category is an anchored `<section id>` with an icon
+  and a heading, its recordings render in a responsive `auto-fill` grid with a
+  ~280px minimum, and each category can declare the sounds it still wants and a
+  link to one article. A contribute block with numbered steps and a call to
+  action for `/contribute` closes the page. No `<script>` was added: the page
+  still ships zero client JavaScript of its own, and `<audio controls
+  preload="none">` is still the whole player.
+
+  The manifest schema is **additive**. `knowledge/sounds/_manifest.md` now accepts
+  an ordered `categories` list — each category requiring `id`, `icon`, `title`,
+  accepting optional `article`, and carrying its own `sounds` list plus an
+  optional `wishlist` whose entries carry `icon`, `text`. A recording still
+  requires `title`, `location`, `credit`, `file`, and now accepts optional
+  `description`, `icon`, `contributor`, `contributorUrl`, `date` alongside them.
+  `src/lib/sounds.ts` normalizes both shapes into one structure and applies the
+  same skip-one-keep-the-rest discipline to a malformed category and a malformed
+  wishlist entry that it already applied to a malformed recording.
+
+  A category's `article` is validated at build time against the routes the build
+  actually produces (static pages, category hubs, and article routes). One that
+  resolves to nothing is dropped with a warning naming the category, so the page
+  cannot ship a link into a 404 — and the post-build internal-link check cannot
+  fail the whole build over one manifest typo.
+
+  `scripts/ci/check-soundscape-schema-docs.mjs` (`npm run schema-docs`, run in CI)
+  derives all five field lists from `src/lib/sounds.ts` and fails when
+  `docs/SPEC.md` or the manifest's own body disagrees with the reader, so the
+  documented schema cannot drift from the code that implements it.
+
+  Every colour the page renders now resolves through the theme tokens in
+  `src/styles/tokens.css`. This fixes a live defect: in dark mode the previous
+  page painted white cards on a near-black body (`card=rgb(255,255,255)` on
+  `body=rgb(5,5,5)`) with a barely legible hero. It now measures
+  `card=rgb(20,20,24)`, `card title=rgb(241,245,249)`, `hero=rgb(241,245,249)`.
+
+  **Upgrade note:** the schema is additive and no instance action is required. An
+  existing manifest that declares a top-level `sounds` list keeps rendering
+  untouched — it normalizes to one implicit category that renders no heading, so
+  the page looks as it did apart from the theme fix and the contribute block. To
+  adopt categories, edit `knowledge/sounds/_manifest.md` alone: replace the
+  top-level `sounds:` list with a `categories:` list whose entries carry `id`,
+  `icon`, `title` and their own `sounds:` list, and add a `wishlist:` (entries of
+  `icon`, `text`) or an `article:` route per category where you want them. A
+  top-level `sounds` list is ignored, with a build-time warning, if `categories`
+  is also declared — move those entries into a category rather than keeping both.
+
 - **`/soundscape`: a native HTML5 audio page over a `knowledge/sounds/`
   manifest.** `src/pages/soundscape.astro` +
   `src/templates/soundscape.template.astro` render one

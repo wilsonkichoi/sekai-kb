@@ -45,6 +45,12 @@ jobs:
         run: node scripts/ci/check-scan-root-docs.mjs
       - name: Version ownership contract
         run: npm run version:check
+      # The soundscape manifest schema is implemented once, in src/lib/sounds.ts, and
+      # restated in prose by the engineering spec and by the manifest's own body. This
+      # derives all five field lists from the reader and fails when either document
+      # disagrees, so a schema edit cannot ship a stale field list to adopters.
+      - name: Soundscape schema statements match src/lib/sounds.ts
+        run: npm run schema-docs
       - name: Self-test — both gates scan .agents/skills/ and workers/ in instance mode
         run: bash scripts/ci/check-skills-gated.sh
       - name: Self-test — the scan-root docs guard fails on doc, script, and anchor drift

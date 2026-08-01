@@ -264,14 +264,27 @@ sentence fails CI.
    records the URL they return, so `posted` is reachable before any instance has a platform
    account. A platform adapter is added only once a real instance has that account.
 4. **Soundscape.** A native HTML5 audio page reads a `knowledge/sounds/` manifest. No
-   player library is introduced. The manifest is `knowledge/sounds/_manifest.md`:
-   gray-matter frontmatter carrying a `sounds` list of `{title, location, credit, file}`
-   plus optional `date`, body free for human notes. The leading `_` is mandatory — it is
+   player library is introduced, and the template carries no `<script>`. The manifest is
+   `knowledge/sounds/_manifest.md`: gray-matter frontmatter, body free for human notes.
+   A recording requires `title`, `location`, `credit`, `file`. A recording also accepts
+   optional `description`, `icon`, `contributor`, `contributorUrl`, `date`. Recordings are
+   grouped by an ordered `categories` list, one anchored page section each. A category
+   requires `id`, `icon`, `title`. A category also accepts optional `article`, and carries
+   its own `sounds` list plus an optional `wishlist`, whose entries carry `icon`, `text`
+   and name the sounds the place still wants. A manifest that declares a top-level
+   `sounds` list instead — the shape the first release of this page shipped — still
+   renders, as one implicit category with no heading, so the schema is additive and an
+   existing manifest needs no edit. The leading `_` is mandatory — it is
    what makes the file invisible to the three scanners that walk `knowledge/` looking for
    articles. `src/lib/sounds.ts` reads it with `readFileSync` + `try/catch`, so an absent
    manifest, an empty list, and an entry whose `file` is missing under `public/` all leave
    the build green: the page renders its empty state, or drops the offending entry with a
-   build-time warning and renders the rest. `features.soundscape` gates only the Header
+   build-time warning and renders the rest. A category's `article` is validated against the
+   routes the build produces, and one that resolves to none is dropped with a build-time
+   warning naming the category, so the page never links into a 404.
+   `scripts/ci/check-soundscape-schema-docs.mjs` derives all five field lists in this
+   paragraph from that reader and fails CI when the prose disagrees with it.
+   `features.soundscape` gates only the Header
    and Footer entry points; the page itself always builds, as `/map`, `/graph`, and
    `/dashboard` do. The template ships three synthesized demo clips under
    `public/media/sounds/` that adoption removes.
