@@ -100,18 +100,19 @@ const isLinkable = (url: string) =>
     <section class="hero">
       <h1>{t('soundscape.hero.title')}</h1>
       <p class="hero-subtitle">{t('soundscape.hero.subtitle')}</p>
-      {
-        categories.length > 0 && (
-          <p class="stats">
-            {stats.map((stat, i) => (
-              <>
-                {i > 0 && <span class="stat-sep" aria-hidden="true"></span>}
-                <span class="stat">{stat}</span>
-              </>
-            ))}
-          </p>
-        )
-      }
+      {/* Always rendered, zeros included: an instance with nothing published yet
+          is a real state of the collection, and "0 recordings, 0 wanted" says so
+          more honestly than an absent line. */}
+      <p class="stats">
+        {
+          stats.map((stat, i) => (
+            <>
+              {i > 0 && <span class="stat-sep" aria-hidden="true"></span>}
+              <span class="stat">{stat}</span>
+            </>
+          ))
+        }
+      </p>
     </section>
 
     {
