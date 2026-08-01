@@ -147,7 +147,28 @@ function isDarkInk(color) {
   return DARK_INK_COLORS.includes(color);
 }
 
+function selfTest() {
+  const planted = [
+    ['isLightOnlyBg', 'rgb(255, 255, 255)', true],
+    ['isLightOnlyBg', 'rgb(248, 250, 252)', true],
+    ['isLightOnlyBg', 'rgb(235, 235, 235)', true],
+    ['isLightOnlyBg', 'rgb(20, 20, 31)', false],
+    ['isDarkInk', 'rgb(31, 41, 55)', true],
+    ['isDarkInk', 'rgb(50, 60, 70)', true],
+    ['isDarkInk', 'rgb(241, 245, 249)', false],
+  ];
+  for (const [fn, input, expected] of planted) {
+    const actual = fn === 'isLightOnlyBg' ? isLightOnlyBg(input) : isDarkInk(input);
+    if (actual !== expected) {
+      console.error(`NON-VACUITY FAIL: ${fn}(${input}) = ${actual}, expected ${expected}`);
+      process.exit(1);
+    }
+  }
+  console.log('non-vacuity: heuristic self-test passed (7 planted values)');
+}
+
 async function main() {
+  selfTest();
   await startServer();
   const browser = await chromium.launch();
   const failures = [];

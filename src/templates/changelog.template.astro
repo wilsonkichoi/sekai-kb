@@ -169,7 +169,7 @@ for (const commit of commits) {
             ))
         }
       </div>
-      <div id="filter-status" class="mt-2 hidden text-xs text-[#64748b]"></div>
+      <div id="filter-status" class="mt-2 hidden text-xs text-[color:var(--color-ink-soft)]"></div>
     </div>
 
     {/* Two-column layout */}
@@ -188,10 +188,10 @@ for (const commit of commits) {
         {
           commits.length === 0 ? (
             <div class="py-16 text-center">
-              <h3 class="text-lg font-semibold text-[#1f2937]">
+              <h3 class="text-lg font-semibold text-[color:var(--color-ink)]">
                 Update history is temporarily unavailable
               </h3>
-              <p class="mt-2 text-[#64748b]">
+              <p class="mt-2 text-[color:var(--color-ink-soft)]">
                 This page reads from git, then falls back to a build-time cache and GitHub.
               </p>
               <a
@@ -226,7 +226,7 @@ for (const commit of commits) {
                       <p class="m-0 break-words text-[0.95rem] font-semibold leading-normal text-[color:var(--color-ink)]">
                         {commit.message}
                       </p>
-                      <div class="mt-2 flex flex-wrap items-center gap-3 text-[0.82rem] text-[#64748b]">
+                      <div class="mt-2 flex flex-wrap items-center gap-3 text-[0.82rem] text-[color:var(--color-ink-soft)]">
                         {commit.author && (
                           <span class="font-semibold">{commit.author}</span>
                         )}
