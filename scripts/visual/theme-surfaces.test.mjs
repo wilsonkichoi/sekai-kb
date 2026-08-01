@@ -41,20 +41,25 @@ async function startServer() {
     cwd: repoRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  // Wait for server to be ready
+  // Wait for server to be ready (check both stdout and stderr, astro may log to either)
   await new Promise((ok, fail) => {
-    const timeout = setTimeout(() => fail(new Error('preview server timeout')), 15000);
-    serverProc.stdout.on('data', (chunk) => {
-      if (chunk.toString().includes('localhost')) {
+    const timeout = setTimeout(() => fail(new Error('preview server timeout after 20s')), 20000);
+    function check(chunk) {
+      const text = chunk.toString();
+      if (text.includes('localhost') || text.includes(String(port))) {
         clearTimeout(timeout);
         ok();
       }
-    });
+    }
+    serverProc.stdout.on('data', check);
+    serverProc.stderr.on('data', check);
     serverProc.on('error', (err) => { clearTimeout(timeout); fail(err); });
     serverProc.on('exit', (code) => {
       if (code) { clearTimeout(timeout); fail(new Error(`preview exited ${code}`)); }
     });
   });
+  // Extra settle time for the server to be fully ready
+  await new Promise((r) => setTimeout(r, 500));
 }
 
 function stopServer() {
@@ -155,7 +160,7 @@ async function main() {
         document.documentElement.setAttribute('data-theme', 'dark');
       });
     });
-    await darkPage.goto(url, { waitUntil: 'networkidle' });
+    await darkPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     // Ensure the attribute is set (belt and suspenders)
     await darkPage.evaluate(() => {
       document.documentElement.setAttribute('data-theme', 'dark');
