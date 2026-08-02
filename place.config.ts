@@ -18,6 +18,7 @@
 export interface PlaceConfig {
   place: {
     name: string;
+    brandSuffix?: string;
     tagline: string;
     domain: string;
     locale: string;
@@ -145,9 +146,8 @@ export interface PlaceConfig {
 
 const config: PlaceConfig = {
   place: {
-    // Single-token brand for the "{name}.{tld}" wordmark (renders "MarisolCove.com").
-    // Article prose refers to the town as "Marisol Cove".
-    name: 'MarisolCove',
+    name: 'Sekai',
+    brandSuffix: '-kb',
     tagline:
       'Open-source, AI-friendly knowledge base for the fictional coastal town of Marisol Cove — the sekai-kb demo place.',
     domain: 'sekai-kb.42init.com',

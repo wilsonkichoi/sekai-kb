@@ -105,7 +105,7 @@
 /* Global "card" surfaces — many components use these class fragments.
    Catch the visible-bg ones with a broad pattern. */
 :root[data-theme='dark']
-  [class*='card']:not([class*='category-card']) {
+  [class*='card']:not([class*='category-card']):not([class*='article-card']):not([class*='place-card']) {
   background-color: color-mix(in srgb, var(--color-ink) 6%, transparent);
   border-color: var(--color-border);
 }

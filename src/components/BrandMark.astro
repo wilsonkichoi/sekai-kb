@@ -38,9 +38,8 @@ const {
 const Tag = href ? 'a' : 'span';
 const fontSize = `${size}rem`;
 
-// Wordmark: place name + the domain's TLD as the accent dot (e.g. ".md").
 const brandName = placeConfig.place.name;
-const domainDot = `.${placeConfig.place.domain.split('.').pop()}`;
+const brandSuffix = placeConfig.place.brandSuffix ?? `.${placeConfig.place.domain.split('.').pop()}`;
 ---
 
 <Tag
@@ -49,7 +48,7 @@ const domainDot = `.${placeConfig.place.domain.split('.').pop()}`;
   class:list={['brand-mark', `brand-mark--${variant}`, extraClass]}
   style={`--brand-size: ${fontSize};`}
 >
-  <span class="brand-text">{brandName}<span class="brand-dot">{domainDot}</span> </span>
+  <span class="brand-text">{brandName}<span class="brand-dot">{brandSuffix}</span></span>
 </Tag>
 
 <style>
@@ -89,7 +88,7 @@ const domainDot = `.${placeConfig.place.domain.split('.').pop()}`;
     color: #ffffff;
   }
   .brand-mark--light .brand-dot {
-    color: #00d4aa;
+    color: #60a5fa;
   }
 
   /* dark: for light backgrounds where we want a specific dark wordmark */
@@ -97,6 +96,6 @@ const domainDot = `.${placeConfig.place.domain.split('.').pop()}`;
     color: #1a1a2e;
   }
   .brand-mark--dark .brand-dot {
-    color: #00d4aa;
+    color: #60a5fa;
   }
 </style>

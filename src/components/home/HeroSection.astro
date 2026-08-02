@@ -2,11 +2,10 @@
 import HeroStats from '../HeroStats.astro';
 import placeConfig from '../../../place.config';
 
-const { name, domain } = placeConfig.place;
+const { name, domain, brandSuffix } = placeConfig.place;
 const { links } = placeConfig;
 const { hero } = placeConfig.home;
-const brandDot = domain.split('.').pop();
-const brandBase = name.replace(/\s+/g, '');
+const suffix = brandSuffix ?? `.${domain.split('.').pop()}`;
 ---
 
 <section
@@ -26,7 +25,7 @@ const brandBase = name.replace(/\s+/g, '');
     >
       <span
         class="relative z-[2] block text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.3)]"
-        >{brandBase}<span class="text-[#38bdf8]">.{brandDot}</span></span
+        >{name}<span class="text-[#60a5fa]">{suffix}</span></span
       >
     </h1>
     <h2

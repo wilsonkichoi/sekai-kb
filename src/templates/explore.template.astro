@@ -51,10 +51,10 @@ const dayShort = (d: Date) =>
   description={`Search across all articles and browse every topic on ${placeConfig.place.name}.`}
 >
   <section class="mx-auto max-w-[var(--container-wide)] px-6 pt-12 pb-4 text-center max-[768px]:px-4 max-[768px]:pt-10">
-    <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[#0e3a5c]">
+    <h1 class="text-[clamp(2rem,5vw,3rem)] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)]">
       Explore
     </h1>
-    <p class="mx-auto mt-3 max-w-[600px] text-[1.05rem] leading-[1.6] text-[#64748b] max-[480px]:text-[0.95rem]">
+    <p class="mx-auto mt-3 max-w-[600px] text-[1.05rem] leading-[1.6] text-[color:var(--color-ink-soft)] max-[480px]:text-[0.95rem]">
       Full-text search across every article, or browse by topic.
       <span class="whitespace-nowrap"><strong>{totalArticles}</strong> articles.</span>
     </p>
@@ -62,11 +62,11 @@ const dayShort = (d: Date) =>
 
   <!-- Search + random -->
   <section class="relative mb-10 px-4">
-    <div class="mx-auto flex max-w-[820px] gap-3 rounded-[18px] border border-[#e2e8f0] bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)] max-[600px]:flex-col">
+    <div class="mx-auto flex max-w-[820px] gap-3 rounded-[18px] border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)] max-[600px]:flex-col">
       <button
         type="button"
         id="explore-search-trigger"
-        class="group flex flex-1 items-center gap-3 rounded-xl border-2 border-[#cbd5e1] bg-[#f8fafc] px-5 py-[0.95rem] text-left transition-all hover:border-[#10b981] hover:bg-white focus:border-[#10b981] focus:outline-none"
+        class="group flex flex-1 items-center gap-3 rounded-xl border-2 border-[color:var(--color-border-visible)] bg-[color:var(--color-bg-soft)] px-5 py-[0.95rem] text-left transition-all hover:border-[#10b981] hover:bg-[color:var(--color-surface-raised)] focus:border-[#10b981] focus:outline-none"
         aria-label="Search all articles"
       >
         <svg
@@ -105,7 +105,7 @@ const dayShort = (d: Date) =>
   <!-- Categories -->
   <section class="my-14 max-[768px]:my-10">
     <div class="mb-6 px-4 text-center">
-      <h2 class="text-[2rem] font-black -tracking-[0.02em] text-[#1a1a2e] max-[768px]:text-[1.6rem]">
+      <h2 class="text-[2rem] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)] max-[768px]:text-[1.6rem]">
         Browse by Topic
       </h2>
     </div>
@@ -117,7 +117,7 @@ const dayShort = (d: Date) =>
     latest.length > 0 && (
       <section class="mx-auto my-14 max-w-[860px] px-8 max-[768px]:my-10 max-[768px]:px-4">
         <div class="mb-6 flex items-end justify-between gap-4">
-          <h2 class="text-[2rem] font-black -tracking-[0.02em] text-[#1a1a2e] max-[768px]:text-[1.6rem]">
+          <h2 class="text-[2rem] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)] max-[768px]:text-[1.6rem]">
             Latest
           </h2>
           <a
@@ -133,7 +133,7 @@ const dayShort = (d: Date) =>
             return (
               <a
                 href={`/${a.category}/${encodeURIComponent(a.slug)}`}
-                class="group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 no-underline transition-all hover:border-[#e2e8f0] hover:bg-[#f8fafc]"
+                class="group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 no-underline transition-all hover:border-[color:var(--color-border-visible)] hover:bg-[color:var(--color-bg-soft)]"
               >
                 <span
                   class="flex-shrink-0 rounded-full px-[0.5rem] py-[0.15rem] text-[0.68rem] font-semibold"
@@ -141,7 +141,7 @@ const dayShort = (d: Date) =>
                 >
                   {cfg.icon} {cfg.name}
                 </span>
-                <span class="min-w-0 flex-1 truncate text-[0.98rem] font-semibold text-[#1a1a2e] group-hover:text-[#065f46]">
+                <span class="min-w-0 flex-1 truncate text-[0.98rem] font-semibold text-[color:var(--color-ink)] group-hover:text-[#065f46]">
                   {a.title}
                 </span>
                 <span class="flex-shrink-0 font-mono text-[0.76rem] tabular-nums text-[#94a3b8]">
@@ -160,7 +160,7 @@ const dayShort = (d: Date) =>
     (features.graph || features.map) && (
       <section class="mx-auto my-16 max-w-[var(--container-wide)] px-8 max-[768px]:my-10 max-[768px]:px-4">
         <div class="mb-8 text-center">
-          <h2 class="text-[1.6rem] font-black -tracking-[0.02em] text-[#1a1a2e] max-[768px]:text-[1.35rem]">
+          <h2 class="text-[1.6rem] font-black -tracking-[0.02em] text-[color:var(--color-ink-heading)] max-[768px]:text-[1.35rem]">
             More ways to explore
           </h2>
         </div>
@@ -168,14 +168,14 @@ const dayShort = (d: Date) =>
           {features.graph && (
             <a
               href="/graph"
-              class="group flex items-start gap-4 rounded-2xl border border-[#e2e8f0] bg-white p-6 no-underline transition-all hover:-translate-y-1 hover:border-[#7c3aed]"
+              class="group flex items-start gap-4 rounded-2xl border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] p-6 no-underline transition-all hover:-translate-y-1 hover:border-[#7c3aed]"
             >
               <span class="flex-shrink-0 text-[2rem]">🕸️</span>
               <div class="flex-1">
-                <h3 class="mb-1 text-[1.05rem] font-bold text-[#1a1a2e] group-hover:text-[#7c3aed]">
+                <h3 class="mb-1 text-[1.05rem] font-bold text-[color:var(--color-ink)] group-hover:text-[#7c3aed]">
                   Knowledge Graph
                 </h3>
-                <p class="text-[0.88rem] leading-[1.55] text-[#64748b]">
+                <p class="text-[0.88rem] leading-[1.55] text-[color:var(--color-ink-soft)]">
                   See how every topic connects.
                 </p>
               </div>
@@ -184,14 +184,14 @@ const dayShort = (d: Date) =>
           {features.map && (
             <a
               href="/map"
-              class="group flex items-start gap-4 rounded-2xl border border-[#e2e8f0] bg-white p-6 no-underline transition-all hover:-translate-y-1 hover:border-[#10b981]"
+              class="group flex items-start gap-4 rounded-2xl border border-[color:var(--color-border-visible)] bg-[color:var(--color-surface-raised)] p-6 no-underline transition-all hover:-translate-y-1 hover:border-[#10b981]"
             >
               <span class="flex-shrink-0 text-[2rem]">🗺️</span>
               <div class="flex-1">
-                <h3 class="mb-1 text-[1.05rem] font-bold text-[#1a1a2e] group-hover:text-[#065f46]">
+                <h3 class="mb-1 text-[1.05rem] font-bold text-[color:var(--color-ink)] group-hover:text-[#065f46]">
                   Map
                 </h3>
-                <p class="text-[0.88rem] leading-[1.55] text-[#64748b]">
+                <p class="text-[0.88rem] leading-[1.55] text-[color:var(--color-ink-soft)]">
                   Browse everything by location.
                 </p>
               </div>

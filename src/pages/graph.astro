@@ -245,7 +245,7 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
           class="whitespace-nowrap text-[0.8rem] text-white/70"></span>
       </div>
     </div>
-    <div id="graph-container" class="flex-1 overflow-hidden bg-[#fafafa]"></div>
+    <div id="graph-container" class="flex-1 overflow-hidden bg-[color:var(--color-bg)]"></div>
     <div
       id="tooltip"
       class="pointer-events-none absolute z-[100] hidden rounded-md bg-[rgba(26,26,46,0.9)] px-[0.8rem] py-[0.4rem] text-[0.85rem] text-white"
@@ -336,7 +336,7 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
           .id((d) => d.id)
           .distance((d) => {
             if (d.source.id === centerId || d.target.id === centerId)
-              return 700;
+              return 350;
             // Subcategory ↔ article: tight
             if (d.source.isSubcategory || d.target.isSubcategory) return 40;
             // Same group: medium
@@ -346,7 +346,7 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
               d.source.group === d.target.group
             )
               return 60;
-            return 250;
+            return 150;
           })
           .strength(1),
       )
@@ -363,9 +363,9 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
       .selectAll('line')
       .data(data.edges)
       .join('line')
-      .attr('stroke', '#ddd')
-      .attr('stroke-width', 1)
-      .attr('stroke-opacity', 0.5);
+      .attr('stroke', '#999')
+      .attr('stroke-width', 1.2)
+      .attr('stroke-opacity', 0.6);
 
     // Nodes
     const node = g
@@ -419,8 +419,8 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
       .attr('font-weight', (d) => (d.size >= 14 ? 'bold' : 'normal'))
       .attr('text-anchor', 'middle')
       .attr('dy', (d) => d.size + 14)
-      .attr('fill', '#333')
-      .attr('stroke', 'rgba(255,255,255,0.92)')
+      .attr('fill', 'var(--color-ink)')
+      .attr('stroke', 'var(--color-bg)')
       .attr('stroke-width', 3)
       .attr('paint-order', 'stroke')
       .attr('stroke-linejoin', 'round')
@@ -436,7 +436,7 @@ const graphData = JSON.stringify({ nodes, edges }).replace(/</g, '\\u003c');
     // Edge endpoint id helper (source/target are node objects post-forceLink).
     const endId = (v) => (typeof v === 'object' ? v.id : v);
     function resetFocus() {
-      link.attr('stroke', '#ddd');
+      link.attr('stroke', '#999');
       // Restore to the active search state if one is set, else full opacity.
       if (searchInput && searchInput.value.trim()) {
         applySearch(searchInput.value);
