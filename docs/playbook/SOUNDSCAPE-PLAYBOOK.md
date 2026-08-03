@@ -23,12 +23,12 @@ Capture the audio. Any format works; ffmpeg converts to mp3 on ingest. Aim for
 
 ```
 npm run sounds:add -- <audio-file> \
-  --title "Surf wash on the cove shingle" \
-  --location "Lantern Cove, north end" \
+  --title "Morning birdsong at the trailhead" \
+  --location "Main trailhead, east side" \
   --credit "Your Name" \
-  --category shoreline \
-  --description "The tide dragging back over rounded stones." \
-  --date 2026-07-30
+  --category nature \
+  --description "Dawn chorus recorded from the bench beside the parking area." \
+  --date 2026-01-15
 ```
 
 The script:

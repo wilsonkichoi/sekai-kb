@@ -129,9 +129,9 @@ Body notes with special chars: & < > "quotes"
 
     const after = readFileSync(join(dir, 'knowledge', 'sounds', '_manifest.md'), 'utf8');
     const insertedEntry =
-      '      - title: New clip\n' +
-      '        location: New loc\n' +
-      '        credit: New cred\n' +
+      '      - title: "New clip"\n' +
+      '        location: "New loc"\n' +
+      '        credit: "New cred"\n' +
       '        file: /media/sounds/new-clip.mp3';
 
     assert.ok(after.includes(insertedEntry), 'should contain the new entry');

@@ -97,13 +97,7 @@ function convertToMp3(inputPath, outputPath) {
 }
 
 function yamlQuote(value) {
-  if (/[:{}\[\],&*?|<>=!%@#'"`\n\\]/.test(value) ||
-      value !== value.trim() ||
-      value === '' ||
-      /^[\-?:]/.test(value)) {
-    return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
-  }
-  return value;
+  return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
 function buildYamlEntry(opts) {
@@ -151,7 +145,7 @@ function findCategorySoundsInsertPoint(raw, categoryId) {
     // Detect category start: `  - id: <categoryId>`
     const catMatch = line.match(/^(\s*)- id:\s*(.+)$/);
     if (catMatch) {
-      const id = catMatch[2].trim();
+      const id = catMatch[2].trim().replace(/^["']|["']$/g, '');
       if (id === categoryId) {
         inCategory = true;
         categoryIndent = catMatch[1].length;
@@ -226,7 +220,7 @@ function spliceEntry(raw, categoryId, yamlEntry) {
   for (let i = 0; i < lines0.length; i++) {
     const catMatch = lines0[i].match(/^(\s*)- id:\s*(.+)$/);
     if (catMatch) {
-      inCat = catMatch[2].trim() === categoryId;
+      inCat = catMatch[2].trim().replace(/^["']|["']$/g, '') === categoryId;
     }
     if (inCat && /^\s*sounds:\s*\[\]\s*$/.test(lines0[i])) {
       lines0[i] = lines0[i].replace(/\[\]\s*$/, '');
@@ -342,7 +336,7 @@ for (const inputFile of opts.files) {
   if (existsSync(manifestPath)) {
     manifestRaw = readFileSync(manifestPath, 'utf8');
   } else {
-    const catIcon = opts.categoryIcon || opts.icon || '🎵';
+    const catIcon = opts.categoryIcon || opts.icon || '\u{1F3B5}';
     mkdirSync(join(root, 'knowledge', 'sounds'), { recursive: true });
     manifestRaw = createEmptyManifest(opts.category, catIcon);
     console.log(`created: ${MANIFEST_PATH}`);
