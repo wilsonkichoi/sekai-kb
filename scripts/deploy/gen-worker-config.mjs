@@ -17,7 +17,9 @@
 //
 // where <place-slug> is `place.name` lowercased, every run of characters outside
 // [a-z0-9] collapsed to a single "-", leading and trailing "-" removed, truncated to
-// 40 characters. workers/feedback/ therefore deploys as "<place-slug>-feedback".
+// 40 characters, then any trailing "-" the cut exposed removed again -- so a name the
+// truncation lands mid-separator on yields "<slug>-feedback", never "<slug>--feedback".
+// workers/feedback/ therefore deploys as "<place-slug>-feedback".
 //
 //   ALLOWED_ORIGIN = `place.domain`, with https:// added when it carries no scheme.
 //   database_id    = `workers.<worker>DatabaseId` in place.config.ts, when set.

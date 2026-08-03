@@ -24,6 +24,10 @@
 //   - `name`, any `[[d1_databases]]` `database_name` or `database_id`, or any [vars]
 //     value that is not the constant the framework ships;
 //   - a missing registered key (deleting ALLOWED_ORIGIN is not a way to pass);
+//   - a `[[d1_databases]]` block set that does not match the bindings registered
+//     below, including a deleted one (removing the whole block is not a way to pass
+//     either: the generator only rewrites keys the template already has, so a
+//     template with no D1 block generates a deploy config with no `env.DB`);
 //   - a wrangler.generated.toml tracked by git (it is derived and gitignored; the two
 //     machine gates skip it by name, so committing one would smuggle identity past
 //     them).
@@ -55,6 +59,13 @@ import {
  * cors.test.mjs) plus the rate-limit defaults. `name`, `database_name`, and
  * `database_id` are always the placeholder, so they are not repeated per worker.
  *
+ * `d1Bindings` lists the `binding` of every [[d1_databases]] block the template
+ * ships, in order, and is what makes a deleted block a failure rather than a pass.
+ * The generator rewrites keys the template already carries; it never adds a block.
+ * So a template whose D1 block went missing still generates cleanly, and the
+ * deployed worker reaches `env.DB.prepare` with `env.DB` undefined -- a checkable
+ * count here is the only place that stays wrong loudly.
+ *
  * A framework change to a default is a deliberate edit here as well as in the
  * template; that second edit is what keeps this gate a contract rather than a
  * restatement of whatever the file happens to say today.
@@ -66,6 +77,7 @@ const EXPECTED = {
       RATE_LIMIT_MAX: '5',
       RATE_LIMIT_WINDOW_SECONDS: '3600',
     },
+    d1Bindings: ['DB'],
   },
 };
 
@@ -156,7 +168,25 @@ for (const dir of workerDirs) {
   }
 
   const databases = config.arrays.d1_databases ?? [];
+  const wantBindings = expected.d1Bindings ?? [];
+  if (databases.length !== wantBindings.length) {
+    failures.push(
+      `${rel}: ships ${databases.length} [[d1_databases]] block(s), but ` +
+        `${wantBindings.length} are registered (${JSON.stringify(wantBindings)}). The generator ` +
+        'rewrites keys the template already has and never adds a block, so a missing one ' +
+        'generates a deploy config with no database binding. Restore the block, or update ' +
+        'd1Bindings in scripts/ci/check-worker-config.mjs if the worker genuinely dropped it.',
+    );
+  }
   databases.forEach((db, i) => {
+    const wantBinding = wantBindings[i];
+    if (wantBinding !== undefined) {
+      if (!('binding' in db)) {
+        failures.push(`${rel}: [[d1_databases]][${i}] has no "binding" key; the worker code resolves the database through it.`);
+      } else if (db.binding !== wantBinding) {
+        report(`[[d1_databases]][${i}] binding`, db.binding, wantBinding);
+      }
+    }
     for (const key of ['database_name', 'database_id']) {
       if (!(key in db)) {
         failures.push(`${rel}: [[d1_databases]][${i}] has no "${key}" key; the generator overrides it and needs it present.`);

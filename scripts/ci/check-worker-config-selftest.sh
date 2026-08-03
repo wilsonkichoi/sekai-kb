@@ -5,9 +5,9 @@
 #
 # A guard that only ever asserts the green path proves nothing: it would pass
 # just as happily with an empty file list or an unreachable comparison. This
-# test plants four defect classes -- every kind of deployment identity that
-# must never be committed, plus the worker the guard has never heard of -- and
-# requires the guard to FAIL each time:
+# test plants five defect classes -- every kind of deployment identity that
+# must never be committed, plus the worker the guard has never heard of and the
+# template that lost a whole block -- and requires the guard to FAIL each time:
 #
 #   1. ORIGIN        -- a real https origin in [vars] ALLOWED_ORIGIN. The
 #                       template ships it empty; a real one is a deploy config
@@ -21,6 +21,12 @@
 #                       Coverage that a later phase's worker inherits by
 #                       omission is no coverage: a new worker must be registered
 #                       deliberately, so an unregistered one fails closed.
+#   5. DROPPED D1    -- the [[d1_databases]] block deleted outright. Every check
+#                       above is per-key, so a template with no block has no
+#                       offending key to find; the generator then emits a deploy
+#                       config with no database binding and the deployed worker
+#                       hits `env.DB.prepare` with `env.DB` undefined. Absence
+#                       must fail as loudly as a wrong value.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -133,21 +139,41 @@ assert_guard_catches() {
   fi
 }
 
-# Replace a literal line in the copied template (portable: sed -i differs
-# between BSD and GNU, so write through a temp file). A substitution that
-# changes nothing means the shipped file no longer carries the text this test
-# plants against, which must fail loudly instead of handing the guard a
-# compliant file to pass on.
-plant() {
-  copy="$1"; from="$2"; to="$3"
-  target="$copy/$REL"
-  sed "s|$from|$to|" "$target" > "$WORK_DIR/plant.tmp"
+# Commit $WORK_DIR/plant.tmp over the copied template. An edit that changes
+# nothing means the shipped file no longer carries the text this test plants
+# against, which must fail loudly instead of handing the guard a compliant file
+# to pass on.
+commit_plant() {
+  target="$1"; what="$2"
   if cmp -s "$WORK_DIR/plant.tmp" "$target"; then
-    echo "worker config self-test: planting [$from] changed nothing in $REL -- the text" >&2
+    echo "worker config self-test: planting [$what] changed nothing in $REL -- the text" >&2
     echo "  this test plants against has moved; re-point the self-test." >&2
     exit 1
   fi
   cp "$WORK_DIR/plant.tmp" "$target"
+}
+
+# Replace a literal line in the copied template (portable: sed -i differs
+# between BSD and GNU, so write through a temp file).
+plant() {
+  copy="$1"; from="$2"; to="$3"
+  target="$copy/$REL"
+  sed "s|$from|$to|" "$target" > "$WORK_DIR/plant.tmp"
+  commit_plant "$target" "$from"
+}
+
+# Delete a whole [[table]] block from the copied template: the header line and
+# every line after it up to the next table header or end of file.
+drop_table() {
+  copy="$1"; header="$2"
+  target="$copy/$REL"
+  awk -v header="$header" '
+    $0 == header { skip = 1; next }
+    skip == 1 && substr($0, 1, 1) == "[" { skip = 0 }
+    skip == 1 { next }
+    { print }
+  ' "$target" > "$WORK_DIR/plant.tmp"
+  commit_plant "$target" "$header"
 }
 
 assert_guard_passes "" "the shipped tree"
@@ -183,4 +209,11 @@ cp "$COPY/$REL" "$NEW_WORKER/wrangler.toml"
 assert_guard_catches "$COPY" "a worker directory with no registered expectation" \
   "workers/selftest-unregistered/wrangler.toml"
 
-echo "OK: worker config self-test passed -- the guard catches a committed origin, a place-named worker name, a place-named database_name, and an unregistered worker"
+# 5. DROPPED D1: the whole [[d1_databases]] block removed. No key is wrong
+# because no key is left, so only a registered block count catches it.
+COPY="$(fresh_copy dropped-d1)"
+assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
+drop_table "$COPY" '[[d1_databases]]'
+assert_guard_catches "$COPY" "a deleted [[d1_databases]] block"
+
+echo "OK: worker config self-test passed -- the guard catches a committed origin, a place-named worker name, a place-named database_name, an unregistered worker, and a deleted [[d1_databases]] block"

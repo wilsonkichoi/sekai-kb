@@ -312,7 +312,9 @@ rule 2 — both machine gates scan it). So:
 
 `<place-slug>` is `place.name` from `place.config.ts`, lowercased, with every run of
 characters outside `[a-z0-9]` collapsed to a single `-`, leading and trailing `-`
-removed, truncated to 40 characters. So a place named "Marisol Cove" deploys
+removed, truncated to 40 characters, and any trailing `-` the cut exposed removed
+again — a name truncated mid-separator yields `<slug>-feedback`, never
+`<slug>--feedback`. So a place named "Marisol Cove" deploys
 `workers/feedback/` as `marisol-cove-feedback`. `ALLOWED_ORIGIN` is `place.domain`,
 with `https://` added when the domain carries no scheme. Everything else in the
 template — `main`, `compatibility_date`, the D1 `binding`, `migrations_dir`, and the
@@ -452,19 +454,25 @@ name the worker's code uses and is framework-owned, not instance identity.
 
 The triage skill reads D1 directly, but any query works from the CLI. `--remote`
 targets the deployed database; without it you get the local dev copy. `<worker-name>`
-is the derived name from step 1.
+is the derived name from step 1. These run from the repository root like every step
+above, and pass the same `--config`: the path is repo-relative, and without it
+`wrangler` resolves whichever config it finds nearest the directory you happen to be
+in.
 
 ```bash
 # The newest submissions
 npx wrangler d1 execute <worker-name> --remote \
+  --config workers/feedback/wrangler.generated.toml \
   --command "SELECT id, created_at, page, category, status FROM feedback ORDER BY created_at DESC LIMIT 20"
 
 # One submission in full
 npx wrangler d1 execute <worker-name> --remote \
+  --config workers/feedback/wrangler.generated.toml \
   --command "SELECT * FROM feedback WHERE id = 'PASTE_AN_ID'"
 
 # Mark one triaged
 npx wrangler d1 execute <worker-name> --remote \
+  --config workers/feedback/wrangler.generated.toml \
   --command "UPDATE feedback SET status = 'triaged' WHERE id = 'PASTE_AN_ID'"
 ```
 
