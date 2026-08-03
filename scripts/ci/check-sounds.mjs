@@ -9,9 +9,10 @@
 //   - a `file` that does not resolve under public/
 //   - a `file` escaping public/ (leading-slash violation or `..` segment)
 //   - a duplicate category `id`
-//   - a published mp3 that still carries a metadata tag, or is not an mp3 at all
+//   - a published file that still carries a metadata tag, or is a recognized
+//     non-mp3 container
 //
-// An mp3 under public/media/sounds/ that no entry references is REPORTED on
+// A file under public/media/sounds/ that no entry references is REPORTED on
 // stdout and does NOT fail -- an adopter mid-session legitimately has one.
 //
 // The field lists are IMPORTED from the reader, never restated here. If the
@@ -187,10 +188,19 @@ if (Array.isArray(categories)) {
   }
 }
 
-// Every mp3 under public/media/sounds/, at any depth. One walk feeds both the
-// orphan report and the metadata scan, so a clip in a subdirectory cannot be
-// visible to one and invisible to the other.
-function listMp3s(dir, prefix = '') {
+// Every file under public/media/sounds/, at any depth, whatever it is named. One
+// walk feeds both the orphan report and the metadata scan, so a clip in a
+// subdirectory cannot be visible to one and invisible to the other.
+//
+// The walk deliberately matches no extension. Astro copies this directory into
+// dist/ byte-for-byte, so what makes a file published is its location, not its
+// name: a `.MP3`, a `.m4a` left unconverted, or a file with no extension at all
+// ships exactly as an `.mp3` does. An extension filter here -- of any spelling,
+// case-sensitive or not -- would be a list of names to evade rather than a rule,
+// which is the same reason scanMp3Tags() rejects any tag instead of a denylist of
+// identifying frames. A non-audio file that strays in carries no tag and no
+// foreign-container signature, so it passes the scan and is reported as an orphan.
+function listPublishedFiles(dir, prefix = '') {
   const found = [];
   let entries;
   try {
@@ -200,8 +210,8 @@ function listMp3s(dir, prefix = '') {
   }
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      found.push(...listMp3s(join(dir, entry.name), `${prefix}${entry.name}/`));
-    } else if (entry.name.endsWith('.mp3')) {
+      found.push(...listPublishedFiles(join(dir, entry.name), `${prefix}${entry.name}/`));
+    } else if (entry.isFile()) {
       found.push(`${prefix}${entry.name}`);
     }
   }
@@ -212,7 +222,7 @@ let metadataFindings = 0;
 let scannedFiles = 0;
 
 if (existsSync(SOUNDS_DIR)) {
-  for (const relative of listMp3s(SOUNDS_DIR)) {
+  for (const relative of listPublishedFiles(SOUNDS_DIR)) {
     const publicPath = `/media/sounds/${relative}`;
 
     // Orphan detection: an mp3 no manifest entry references.

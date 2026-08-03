@@ -25,6 +25,11 @@
 #   7. ID3v1 TAG      -- a trailing 128-byte TAG block.
 #   8. APE TAG        -- an APETAGEX footer.
 #   9. WRONG CONTAINER -- bytes that are not an MPEG audio stream at all.
+#  10. EXTENSION EVASION -- the same leaks under names an extension filter would
+#                        miss (`.MP3`, `.m4a`). Astro publishes a file because of
+#                        where it sits, not what it is called, so the walk must
+#                        not filter on the name; this case is what keeps that
+#                        true.
 #
 # Every planted tag is fabricated in this script; no real recording and no real
 # coordinate is ever committed as a fixture.
@@ -328,6 +333,34 @@ check_metadata_class id3v2 "class 6 (ID3v2 tag)" "com.example.device.location.IS
 check_metadata_class id3v1 "class 7 (ID3v1 tag)" "ID3v1"
 check_metadata_class ape "class 8 (APE tag)" "APEv2"
 check_metadata_class container "class 9 (wrong container)" "not an mp3"
+
+# -- Class 10: extension evasion --
+#
+# Both planted files are unreferenced, so the manifest checks say nothing about
+# them; the only thing that can catch either is the published-file walk. An
+# extension filter that matched `.mp3` case-sensitively would exit 0 here while
+# reporting that it had scanned one file.
+echo -n "class 10 (extension evasion): "
+FIXTURE="$WORK_DIR/class10"
+build_fixture "$FIXTURE"
+plant_tag id3v2 "$FIXTURE/public/media/sounds/leak.MP3"
+plant_tag container "$FIXTURE/public/media/sounds/leak.m4a"
+if run_guard "$FIXTURE"; then
+  echo "FAILED -- gate did not catch a leak under a non-matching extension"
+  cat "$OUT"
+  FAIL=$((FAIL + 1))
+elif ! grep -q "leak.MP3" "$OUT"; then
+  echo "FAILED -- gate exited nonzero but did not name leak.MP3"
+  cat "$OUT"
+  FAIL=$((FAIL + 1))
+elif ! grep -q "leak.m4a" "$OUT"; then
+  echo "FAILED -- gate exited nonzero but did not name leak.m4a"
+  cat "$OUT"
+  FAIL=$((FAIL + 1))
+else
+  echo "OK (caught)"
+  PASS=$((PASS + 1))
+fi
 
 # -- Summary --
 echo ""

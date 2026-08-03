@@ -60,17 +60,28 @@ tags, never framework `main`** (ADR 004, SPEC
 - **`npm run sounds:check` rejects a published file that carries a metadata tag.**
   Hand-placing a file into `public/media/sounds/` and hand-writing its manifest
   entry is a supported path that bypasses the script, so fixing only the writer
-  would have left the class open. The gate now scans every mp3 under
-  `public/media/sounds/` at any depth and fails on an ID3v2 tag, an ID3v1 trailer,
-  an APE footer, or bytes that are not an MPEG audio stream at all (a recording
-  renamed to `.mp3` rather than converted), naming the file, the tag form, and the
-  offending frame. The rule is absolute rather than a denylist of sensitive
-  fields, because the page reads every displayed field from the manifest and never
-  from the audio file. The scan reads the container in JavaScript
-  (`scripts/lib/mp3-tags.mjs`, shared with the writer so the two cannot drift), so
-  it still runs in `postbuild` and in CI, neither of which has ffmpeg. Self-test
-  coverage at `npm run sounds:selftest` grew from five planted defect classes to
-  nine, one per tag container.
+  would have left the class open. The gate now scans every file under
+  `public/media/sounds/` at any depth, whatever it is named — Astro publishes a
+  file because of where it sits, not what its extension says — and fails on an
+  ID3v2 tag, an ID3v1 trailer, an APE footer, or one of six recognized non-mp3
+  container signatures (RIFF/WAVE, ISO base media, Ogg, FLAC, AIFF,
+  Matroska/WebM), which is how a recording renamed rather than converted is
+  caught. Recognition is a positive signature match, not a test for MPEG audio, so
+  a container outside that list is not detected as one; the alternative would
+  break an adopter's build over a valid but unusual mp3. Each finding names the
+  file and the tag form, and adds the offending frame identifiers when the tag
+  exposes a readable frame area — an ID3v1 trailer, an APE footer, and an ID3v2
+  tag behind an extended header carry no frame list to name, and are findings all
+  the same. The rule is absolute rather than a denylist of sensitive fields,
+  because the page reads every displayed field from the manifest and never from
+  the audio file. The scan reads the container in JavaScript
+  (`scripts/lib/mp3-tags.mjs`, shared with the writer so the two cannot drift) and
+  needs no ffmpeg, so it runs unchanged in every adopter's `postbuild` chain and
+  in this repository's CI build job, neither of which has one. (CI's test job does
+  install ffmpeg, but only so the writer's suite can exercise the real
+  conversion.) Self-test coverage at `npm run sounds:selftest` grew from five
+  planted defect classes to ten: one per tag container, one for a renamed
+  container, and one proving the walk does not filter on a file's name.
 - The three synthesized demo clips under `public/media/sounds/` were re-muxed to
   drop the encoder tag ffmpeg had written into them. Their audio is unchanged.
 

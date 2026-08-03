@@ -58,8 +58,9 @@ npm run sounds:check
 
 This gate validates the manifest against the filesystem. It exits nonzero on
 missing fields, unresolved files, path escapes, duplicate category ids, or a
-published file that still carries a metadata tag. Orphan mp3s (files that exist
-but are not referenced) are reported as warnings.
+published file that still carries a metadata tag. Orphan files (anything under
+`public/media/sounds/` that no manifest entry references) are reported as
+warnings.
 
 ### 4. Build
 
@@ -99,8 +100,12 @@ your own words and at the precision you choose.
 yourself and writing its manifest entry by hand is a supported path, and it
 bypasses the script entirely, so `npm run sounds:check` enforces the same rule
 from the other side: a published recording carries **no metadata tag of any
-kind**, not merely no location tag. The gate rejects any tag it finds, names the
-file and the field, and prints the command to strip it:
+kind**, not merely no location tag. The gate reads every file under
+`public/media/sounds/`, whatever its extension — what publishes a file is the
+directory it sits in, not its name — and rejects any tag it finds. It names the
+file and the tag form, and adds the offending frame identifiers when the tag has
+a frame area it can read (an ID3v1 trailer and an APE footer have none to name).
+It also prints the command to strip the file:
 
 ```
 ffmpeg -i <file>.mp3 -map_metadata -1 -map_chapters -1 -id3v2_version 0 -c:a copy <stripped>.mp3
