@@ -229,7 +229,7 @@ this — documented honestly, never patched with code.
 
 `sync.sh` → parallel prebuild (`run-p`: kb-index, search, content-dates, git-info,
 related, changelog, map-markers, dashboard) → latest → `astro build` → post-build
-contract checks (`run-s`: smoke, internal-links, map-markers, graph, dashboard). Target
+contract checks (`run-s`: smoke, internal-links, map-markers, graph, dashboard, sounds). Target
 under 60s at 50 articles. The dashboard job shells into article-health (uv) absent-safe.
 Both job lists are derived from `package.json` and gated by
 `scripts/ci/check-framework-docs.mjs`.

@@ -104,6 +104,14 @@ jobs:
       # degradations happens; a suite CI does not run would not keep it true.
       - name: Soundscape manifest contract
         run: npm run test:soundscape
+      # Soundscape manifest validation: imports field arrays from src/lib/sounds.ts
+      # and exits nonzero on missing required fields, unresolved files, path escape,
+      # or duplicate category ids. The postbuild chain also runs it, but CI runs it
+      # independently so a broken manifest is caught before the build job.
+      - name: Soundscape manifest validation gate
+        run: npm run sounds:check
+      - name: Self-test — the soundscape gate fails on every planted defect class
+        run: npm run sounds:selftest
       - name: Install Chromium for feedback widget contract tests
         run: npx playwright install --with-deps chromium
       - name: Feedback widget browser contract

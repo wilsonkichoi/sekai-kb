@@ -1,0 +1,318 @@
+#!/usr/bin/env node
+// add.mjs -- `npm run sounds:add`.
+//
+// Converts and places audio into public/media/sounds/<slug>.mp3 and appends a
+// schema-valid recording entry to the named category in the manifest. Strictly
+// additive: an entry whose slug already exists is a nonzero exit, never a silent
+// update. The writer splices text into the manifest; it never parses-then-
+// reserializes the whole document, so hand-edited YAML (comments, key order,
+// multi-line descriptions) is preserved byte-for-byte outside the inserted entry.
+//
+// Usage:
+//   node scripts/tools/sounds/add.mjs <audio-path> [<audio-path>...]
+//     --title <title>
+//     --location <location>
+//     --credit <credit>
+//     --category <category-id>
+//     [--description <description>]
+//     [--icon <icon>]
+//     [--contributor <contributor>]
+//     [--contributor-url <url>]
+//     [--date <ISO date>]
+//     [--slug <slug>]           (override auto-derived slug)
+//     [--root <repo-root>]     (default: repository root)
+//
+// Multiple audio paths produce one entry per path with the same metadata (except
+// slug, which is derived per file). For batch adds with different metadata, run
+// the command once per recording.
+//
+// This file lives under scripts/, which both machine gates scan: its source is
+// pure ASCII and carries no denylisted place term.
+
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { basename, extname, join, resolve } from 'node:path';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import { MANIFEST_PATH } from '../../../src/lib/sounds.ts';
+
+const SCRIPT_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const opts = { files: [], root: SCRIPT_ROOT };
+
+  const named = [
+    'title', 'location', 'credit', 'category', 'description',
+    'icon', 'contributor', 'contributor-url', 'date', 'slug', 'root',
+  ];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      const key = arg.slice(2);
+      if (!named.includes(key)) {
+        console.error(`FAIL: unknown option --${key}`);
+        process.exit(2);
+      }
+      const value = args[++i];
+      if (value === undefined) {
+        console.error(`FAIL: --${key} requires a value`);
+        process.exit(2);
+      }
+      if (key === 'contributor-url') {
+        opts.contributorUrl = value;
+      } else {
+        opts[key] = value;
+      }
+    } else {
+      opts.files.push(arg);
+    }
+  }
+
+  return opts;
+}
+
+function slugify(filename) {
+  const name = basename(filename, extname(filename));
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function ffmpegAvailable() {
+  try {
+    execSync('ffmpeg -version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function convertToMp3(inputPath, outputPath) {
+  execSync(`ffmpeg -i "${inputPath}" -y -q:a 2 "${outputPath}"`, { stdio: 'pipe' });
+}
+
+function buildYamlEntry(opts) {
+  const lines = [];
+  lines.push(`      - title: ${opts.title}`);
+  lines.push(`        location: ${opts.location}`);
+  lines.push(`        credit: ${opts.credit}`);
+  lines.push(`        file: /media/sounds/${opts.outputFilename}`);
+  if (opts.description) lines.push(`        description: ${opts.description}`);
+  if (opts.icon) lines.push(`        icon: ${opts.icon}`);
+  if (opts.contributor) lines.push(`        contributor: ${opts.contributor}`);
+  if (opts.contributorUrl) lines.push(`        contributorUrl: ${opts.contributorUrl}`);
+  if (opts.date) lines.push(`        date: ${opts.date}`);
+  return lines.join('\n');
+}
+
+function createEmptyManifest(categoryId) {
+  return `---
+categories:
+  - id: ${categoryId}
+    icon: ""
+    title: ${categoryId}
+    sounds:
+---
+
+# Soundscape manifest
+`;
+}
+
+function findCategorySoundsInsertPoint(raw, categoryId) {
+  // Find the category's `sounds:` key and locate where to append.
+  // Strategy: find `- id: <categoryId>` then find its `sounds:` line, then
+  // find the end of the sounds list (next line that is at a lower indent
+  // level than a sounds entry, or end of frontmatter `---`).
+
+  const lines = raw.split('\n');
+  let inCategory = false;
+  let soundsLineIdx = -1;
+  let insertIdx = -1;
+  let categoryIndent = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Detect category start: `  - id: <categoryId>`
+    const catMatch = line.match(/^(\s*)- id:\s*(.+)$/);
+    if (catMatch) {
+      const id = catMatch[2].trim();
+      if (id === categoryId) {
+        inCategory = true;
+        categoryIndent = catMatch[1].length;
+        continue;
+      } else if (inCategory) {
+        // Moved to a different category; the insert point is here.
+        insertIdx = i;
+        break;
+      }
+    }
+
+    if (!inCategory) continue;
+
+    // Detect `sounds:` within this category
+    const soundsMatch = line.match(/^(\s*)sounds:/);
+    if (soundsMatch && soundsLineIdx === -1) {
+      soundsLineIdx = i;
+      // Check if sounds list is empty (no entries follow at deeper indent)
+      const entryIndent = soundsMatch[1].length + 2; // `- ` under sounds
+      let j = i + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        // End of frontmatter
+        if (nextLine.match(/^---\s*$/)) {
+          insertIdx = j;
+          break;
+        }
+        // Another key at category level or a new category item
+        if (nextLine.trim() !== '' && !nextLine.match(/^\s*#/)) {
+          const nextIndent = nextLine.match(/^(\s*)/)[1].length;
+          if (nextIndent <= soundsMatch[1].length && nextLine.trim() !== '') {
+            insertIdx = j;
+            break;
+          }
+          // An entry within sounds (starts with `- ` at the right indent)
+          if (nextLine.match(/^\s*- /) && nextIndent >= entryIndent) {
+            // Keep going, looking for the end of entries
+            j++;
+            continue;
+          }
+          // A continuation line of an entry
+          if (nextIndent > soundsMatch[1].length) {
+            j++;
+            continue;
+          }
+          insertIdx = j;
+          break;
+        }
+        j++;
+      }
+      if (insertIdx === -1) {
+        insertIdx = j; // End of file / frontmatter
+      }
+      break;
+    }
+  }
+
+  if (soundsLineIdx === -1) {
+    return { found: false, categoryFound: inCategory };
+  }
+
+  return { found: true, insertIdx, soundsLineIdx };
+}
+
+function spliceEntry(raw, categoryId, yamlEntry) {
+  const result = findCategorySoundsInsertPoint(raw, categoryId);
+
+  if (!result.found && !result.categoryFound) {
+    return { success: false, error: `category "${categoryId}" not found in the manifest.` };
+  }
+
+  if (!result.found) {
+    return { success: false, error: `category "${categoryId}" has no \`sounds:\` key.` };
+  }
+
+  const lines = raw.split('\n');
+  // Insert the new entry just before insertIdx
+  lines.splice(result.insertIdx, 0, yamlEntry);
+  return { success: true, content: lines.join('\n') };
+}
+
+// -- Main --
+
+const opts = parseArgs(process.argv);
+
+if (opts.files.length === 0) {
+  console.error('FAIL: no audio file(s) specified.');
+  console.error('Usage: npm run sounds:add -- <audio-path> --title <title> --location <location> --credit <credit> --category <category-id>');
+  process.exit(2);
+}
+
+for (const required of ['title', 'location', 'credit', 'category']) {
+  if (!opts[required]) {
+    console.error(`FAIL: --${required} is required.`);
+    process.exit(2);
+  }
+}
+
+const root = resolve(opts.root);
+const manifestPath = join(root, MANIFEST_PATH);
+const soundsDir = join(root, 'public', 'media', 'sounds');
+
+mkdirSync(soundsDir, { recursive: true });
+
+for (const inputFile of opts.files) {
+  const inputPath = resolve(inputFile);
+  if (!existsSync(inputPath)) {
+    console.error(`FAIL: input file does not exist: ${inputFile}`);
+    process.exit(1);
+  }
+
+  const slug = opts.slug || slugify(inputFile);
+  const outputFilename = `${slug}.mp3`;
+  const outputPath = join(soundsDir, outputFilename);
+
+  // DoD 3: strictly additive -- refuse if slug already exists
+  if (existsSync(outputPath)) {
+    console.error(
+      `FAIL: "${outputFilename}" already exists at ${outputPath}.\n` +
+        `  The manifest at ${MANIFEST_PATH} may already have an entry for this slug.\n` +
+        '  This script is strictly additive and will not overwrite. ' +
+        'To update, edit the manifest by hand.',
+    );
+    process.exit(1);
+  }
+
+  // DoD 5: conversion is conditional
+  const ext = extname(inputFile).toLowerCase();
+  if (ext === '.mp3') {
+    copyFileSync(inputPath, outputPath);
+    console.log(`placed: ${inputFile} -> ${outputPath}`);
+  } else {
+    if (!ffmpegAvailable()) {
+      console.error(
+        `FAIL: "${inputFile}" is not an mp3 and ffmpeg is not on PATH.\n` +
+          '  Install ffmpeg to convert non-mp3 audio:\n' +
+          '    macOS:  brew install ffmpeg\n' +
+          '    Ubuntu: sudo apt install ffmpeg',
+      );
+      process.exit(1);
+    }
+    convertToMp3(inputPath, outputPath);
+    console.log(`converted: ${inputFile} -> ${outputPath}`);
+  }
+
+  // Read or create manifest
+  let manifestRaw;
+  if (existsSync(manifestPath)) {
+    manifestRaw = readFileSync(manifestPath, 'utf8');
+  } else {
+    mkdirSync(join(root, 'knowledge', 'sounds'), { recursive: true });
+    manifestRaw = createEmptyManifest(opts.category);
+    console.log(`created: ${MANIFEST_PATH}`);
+  }
+
+  const yamlEntry = buildYamlEntry({
+    title: opts.title,
+    location: opts.location,
+    credit: opts.credit,
+    outputFilename,
+    description: opts.description,
+    icon: opts.icon,
+    contributor: opts.contributor,
+    contributorUrl: opts.contributorUrl,
+    date: opts.date,
+  });
+
+  const result = spliceEntry(manifestRaw, opts.category, yamlEntry);
+  if (!result.success) {
+    console.error(`FAIL: ${result.error}`);
+    process.exit(1);
+  }
+
+  writeFileSync(manifestPath, result.content);
+  console.log(`appended: entry for "${opts.title}" to category "${opts.category}" in ${MANIFEST_PATH}`);
+}

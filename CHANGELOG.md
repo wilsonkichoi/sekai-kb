@@ -41,6 +41,14 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **Soundscape ingest script** (`npm run sounds:add`): converts and places audio into `public/media/sounds/`, appends a schema-valid YAML entry to the manifest. Strictly additive; preserves surrounding bytes. Requires ffmpeg on PATH for non-mp3 input.
+- **Soundscape validation gate** (`npm run sounds:check`): imports field arrays from `src/lib/sounds.ts`, exits nonzero on missing required fields, unresolved files, path escapes, or duplicate category ids. Wired into postbuild and CI. Self-test at `npm run sounds:selftest`.
+- **Soundscape playbook** (`docs/playbook/SOUNDSCAPE-PLAYBOOK.md`): documents the record, convert, add, verify, commit workflow and the hand-editing path.
+
+No upgrade note required (no config-schema change, no instance action required).
+
 ## [1.0.18] — 2026-08-02
 
 Generate deploy-time Worker configs from place.config.ts, add CI guards for placeholder-only committed templates, and document the Worker and D1 rename path.

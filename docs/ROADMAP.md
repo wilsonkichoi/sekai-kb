@@ -21,7 +21,7 @@ so task ids (`LB-*`) are continuous across the split.
 
 | # | Milestone | Outcome | Scope (tasks) | Exit gate | Est |
 |---|---|---|---|---|---|
-| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.4 | Live submission → D1 → GitHub issue; three real recordings and the tag adoption in 6.4; phase confirm | AI 16h \| Human 3h |
+| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.4 | Live submission → D1 → GitHub issue; three real recordings and the tag adoption in 6.4; phase confirm | AI 18.5h \| Human 3h |
 | 7 | Differentiators | On-demand OG worker, RAG chat (bge-m3 + Workers AI + Claude API), QR flow | 7.1 · 7.2a-c · 7.3 | Eval set answered with citations, no hallucinated places (7.2c); phase confirm | AI 12.25h \| Human 1.75h |
 | 8 | Semiont plugin layer | Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 | Site builds with `semiont/` deleted; organs toggle via config only; phase confirm | AI 4.25h \| Human 0h |
 | 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook proven on the first real post-cut feature release | 9.1 · 9.2 · 9.3 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; phase shipped as a sekai-kb tag → instance `/sekai-upgrade` clean (9.3); maintainer phase confirm | AI 6h \| Human 0.75h |
@@ -162,6 +162,29 @@ block below carries the decision inline, this section is the rationale.
 
 ---
 
+## Phase 6 planning amendment — approved 2026-08-03
+
+Records the one block added after 6.3b shipped. Same form as the 2026-07-31 amendment: the
+block below carries the decision inline, this section is the rationale.
+
+- **6.3c is a new block, inserted between 6.3b and 6.4.** 6.3 shipped the soundscape reader
+  (`src/lib/sounds.ts`) and 6.3b shipped the categorized layout, but neither shipped a writer
+  or a validation gate. Every other Phase 6 content surface has both: 6.2 ships
+  `scripts/tools/snippet/publish.mjs` plus `npm run test:snippet` in CI, the feedback worker
+  carries its own D1 schema and test suite, and the manifest itself is the one surface with no
+  check at all — a typo'd `file`, a missing mp3, or a missing required field is silently
+  dropped and CI says nothing. The writer (`npm run sounds:add`) and gate (`npm run
+  sounds:check`) close that asymmetry.
+- **It blocks 6.4 rather than following it.** 6.4 DoD 6 requires committing the instance's
+  three real recordings through `npm run sounds:add`. Hand-writing the entries and shipping the
+  tool later writes them twice and validates the exit gate against a path the framework does
+  not support. Ordering the tool before 6.4 costs this block's estimate and buys one write
+  — the same tradeoff the 2026-07-31 amendment made for 6.3b.
+- **Estimates:** Phase 6 becomes AI ≈ 18.5h | Human ≈ 3h (was AI ≈ 16h | Human ≈ 3h), from
+  6.3c alone.
+
+---
+
 ## Detailed task blocks: Phases 6-8
 
 These are the active source blocks for `/dev:plan`. Model names are advisory and
@@ -253,10 +276,29 @@ names the instance in its own `Execution repo:` line.
        contribute block. No player library, no client framework, zero script tags.
   Acceptance: the page passes the visual bar at desktop and mobile widths; an existing flat
     manifest renders unchanged; an absent manifest still renders the empty state green
+  Downstream: 6.3c, 6.4
+
+[6.3c] Soundscape ingest: npm run sounds:add, manifest validation gate, authoring playbook
+  Effort: M | Model: Opus | Depends: 6.3b
+  Est: AI 2.5h + 0.5h review
+  Decision: hand-writing manifest entries and shipping the tool later writes them twice, and
+    validates the exit gate against a path the framework does not support. Build the tool
+    first; 6.4 DoD 6 uses it to produce the three real recordings.
+  Steps:
+    1. Build scripts/ci/check-sounds.mjs (npm run sounds:check): imports the five field
+       arrays from src/lib/sounds.ts, exits nonzero on missing required fields / unresolved
+       file / path-escape / duplicate category id. Orphan mp3s are reported but do not fail.
+    2. Build scripts/tools/sounds/add.mjs (npm run sounds:add): takes input audio paths +
+       metadata, places/converts to public/media/sounds/<slug>.mp3, appends YAML entry to
+       the manifest. Strictly additive; preserves surrounding bytes.
+    3. Write docs/playbook/SOUNDSCAPE-PLAYBOOK.md: record, convert, add, verify, commit.
+    4. Wire sounds:check into postbuild and CI; add sounds:selftest to CI.
+  Acceptance: npm run sounds:add on a fixture produces a valid manifest that passes
+    sounds:check; the self-test proves every failure class; genericity passes
   Downstream: 6.4
 
 [6.4] Phase 6 exit gate: ship the tag, adopt it in the instance, go live
-  Effort: M | Model: Opus | Depends: 6.1b, 6.1c, 6.2, 6.3, 6.3b
+  Effort: M | Model: Opus | Depends: 6.1b, 6.1c, 6.2, 6.3, 6.3b, 6.3c
   Est: AI 1h + 0.25h review | Human 2.5h (Cloudflare setup, three recordings, confirm)
   Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
     last framework task.
@@ -271,7 +313,7 @@ names the instance in its own `Execution repo:` line.
   Downstream: Phase 7 entry
 ```
 
-_Phase 6 subtotal: AI 13.75h | Human 2.5h_
+_Phase 6 subtotal: AI 16.25h | Human 2.5h_
 
 **Phase 7: Differentiators**
 
