@@ -41,6 +41,73 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **Worker deploy configs are generated from `place.config.ts`, not committed.**
+  `workers/feedback/wrangler.toml` carried three values that are deployment
+  identity — the Worker script `name`, the D1 `database_name`, and
+  `ALLOWED_ORIGIN` — inside a tree both machine gates scan for exactly that.
+  Worker and D1 names are **account-scoped**, so every instance was deploying
+  under the framework's `sekai-feedback`: a second instance in the same Cloudflare
+  account overwrites the first's script and rebinds it to the second's database,
+  and the public `workers.dev` URL carried the framework's name rather than the
+  place's. The runbook told adopters to commit their real origin into that file,
+  which the denylist gate then failed as soon as the origin contained their place
+  name.
+
+  The committed `wrangler.toml` is now a template carrying placeholders only, and
+  `npm run worker-config` (`scripts/deploy/gen-worker-config.mjs`) writes the
+  effective `workers/<worker>/wrangler.generated.toml` from `place.config.ts`.
+  Names derive as `<place-slug>-<worker-directory-name>`, where `<place-slug>` is
+  `place.name` lowercased with every run of non-`[a-z0-9]` characters collapsed to
+  `-` and truncated to 40 characters; `ALLOWED_ORIGIN` comes from `place.domain`;
+  `database_id` comes from the new optional `place.config.ts` key
+  `workers.feedbackDatabaseId`. `main`, `compatibility_date`, the D1 `binding`,
+  `migrations_dir`, and the rate-limit vars carry through from the template
+  unchanged. The generated file is gitignored, and both machine gates skip it by
+  name because it is derived and place-specific by design.
+
+  A new gate, `npm run worker-config:check`
+  (`scripts/ci/check-worker-config.mjs`), asserts every committed
+  `workers/*/wrangler.toml` still carries the framework placeholders and that no
+  generated config is tracked by git. It catches what the place-name denylist
+  cannot: a committed origin or worker name whose text contains no denylisted term
+  at all. It runs in the `genericity` CI job alongside its non-vacuity self-test
+  (`npm run worker-config:selftest`), and it fails in an adopter's checkout too,
+  which is the point.
+
+  `docs/runbook/DEPLOY.md` §Cloudflare Workers is rewritten around `--config`
+  (a global Wrangler flag accepted by `deploy`, `d1 create`, and
+  `d1 migrations apply`), states the derivation rule and that `npm run init` does
+  nothing for `workers/`, and no longer claims an instance owns
+  `workers/feedback/wrangler.toml` — no path under `workers/` carries
+  `merge=ours`, and after this change the file is genuinely framework-owned and
+  unedited. The `/sekai-triage-feedback` skill now resolves its database through
+  the generated config.
+
+  **Upgrade note.** New `place.config.ts` key `workers.feedbackDatabaseId`
+  (optional, absent-safe: unset generates an empty `database_id` and a note).
+  An instance that already deployed the feedback worker under the framework's
+  `sekai-feedback` names is renaming, so re-deploy under the derived names:
+
+  1. `npm run worker-config` and read the derived `<worker-name>` from its output.
+  2. `npx wrangler d1 create <worker-name>`, then put the id it prints in
+     `place.config.ts` as `workers.feedbackDatabaseId` and regenerate.
+  3. `npx wrangler d1 migrations apply <worker-name> --remote --config workers/feedback/wrangler.generated.toml`.
+  4. `npx wrangler secret put IP_HASH_SALT --config workers/feedback/wrangler.generated.toml`
+     (secrets are per-Worker; the new script has none).
+  5. `npx wrangler deploy --config workers/feedback/wrangler.generated.toml`, then
+     set `workers.feedback` in `place.config.ts` to the new URL and rebuild the
+     site.
+  6. Delete the old Worker and database once the new endpoint answers:
+     `npx wrangler delete --name sekai-feedback` and
+     `npx wrangler d1 delete sekai-feedback`. Existing rows do not migrate; export
+     anything you still need from the old database first
+     (`npx wrangler d1 execute sekai-feedback --remote --command "SELECT * FROM feedback" --json`).
+
+  An instance that has **not** deployed the worker needs no action beyond the
+  merge: the template's placeholders are the state it already has.
+
 ## [1.0.17] — 2026-08-02
 
 Adds the /soundscape page, the /sekai-snippet and /sekai-triage-feedback skills, and a feedback widget over a new workers/feedback Worker; extends the denylist gate to workers/; and repairs the dark theme plus two tooling defects.

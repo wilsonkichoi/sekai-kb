@@ -22,6 +22,11 @@ public/kb/
 public/llms.txt
 src/data/
 
+# derived worker deploy configs (written by scripts/deploy/gen-worker-config.mjs via
+# `npm run worker-config`; they carry this instance's account-scoped worker names,
+# database ids, and origin, which must never be committed under workers/)
+workers/*/wrangler.generated.toml
+
 # visual regression (baseline PNGs are large; commit only the manifest)
 reports/visual/baseline/*.png
 reports/visual/current/

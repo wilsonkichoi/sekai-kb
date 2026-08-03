@@ -116,6 +116,9 @@ them per instance (see playbook §8).
 # Genericity + English-only gates (the same gates CI runs)
 npm run genericity
 
+# Committed worker configs carry framework placeholders only
+npm run worker-config:check
+
 # Frontmatter validation, CI-strict
 npm run test:ci
 ```
@@ -134,6 +137,12 @@ outside both, so they legitimately carry your place's name. A gate skips any of
 its roots this checkout does not have.
 Your place name is added to `scripts/ci/genericity-denylist.local.txt` by the
 init wizard, which keeps it out of framework code from day one.
+
+`npm run worker-config:check` covers what a name denylist cannot: a committed
+`ALLOWED_ORIGIN` or Worker name is deployment identity even when its text contains
+no place name at all. It asserts every committed `workers/*/wrangler.toml` still
+carries the framework placeholders (see §Cloudflare Workers). It runs in the same
+`genericity` CI job, and it fails in your checkout too — that is the point.
 
 ---
 
@@ -178,7 +187,7 @@ credential).
 
 | Job          | What it does                                                                | Runs on            |
 | ------------ | ---------------------------------------------------------------------------- | ------------------- |
-| `genericity` | Place-string denylist + CJK/English-only scan                                | every PR + main     |
+| `genericity` | Place-string denylist + CJK/English-only scan + committed worker configs      | every PR + main     |
 | `test`       | `npm run test:ci` + `article-health --all --profile=ci-deploy`               | every PR + main     |
 | `build`      | `npm run build` including all post-build contract checks                     | every PR + main     |
 | `init-check` | Init-wizard self-check (init → build on a disposable checkout)               | every PR + main     |
@@ -275,6 +284,46 @@ feedback widget posts to.
 
 Everything below stays inside the **free tier**: one Worker and one D1 database.
 
+### The config you deploy is generated, not committed
+
+A Worker script name and a D1 `database_name` are **account-scoped**: two instances
+that deploy under the same names collide in one Cloudflare account, the second
+overwriting the first's script and rebinding it to the second's database. The
+Worker's `ALLOWED_ORIGIN` is your site's origin. All three are your place's
+identity, and `workers/` is a code tree that may carry none of it (AGENTS.md iron
+rule 2 — both machine gates scan it). So:
+
+- **`workers/<worker>/wrangler.toml` is a committed template.** It ships
+  placeholders and you never edit it. `npm run worker-config:check` fails the build
+  if a real name, database name, or `[vars]` value is committed there — in your
+  checkout as well as in the framework's.
+- **`workers/<worker>/wrangler.generated.toml` is what you deploy.** `npm run
+  worker-config` writes it from `place.config.ts`. It is gitignored, disposable, and
+  regenerated whenever your config changes.
+- Every `wrangler` command below therefore passes `--config` (global flag: "Path to
+  your Wrangler configuration file"), which `deploy`, `d1 create`, and
+  `d1 migrations apply` all accept.
+
+**The derivation rule**, applied to both the Worker name and the D1 database name:
+
+```
+<place-slug>-<worker-directory-name>
+```
+
+`<place-slug>` is `place.name` from `place.config.ts`, lowercased, with every run of
+characters outside `[a-z0-9]` collapsed to a single `-`, leading and trailing `-`
+removed, truncated to 40 characters. So a place named "Marisol Cove" deploys
+`workers/feedback/` as `marisol-cove-feedback`. `ALLOWED_ORIGIN` is `place.domain`,
+with `https://` added when the domain carries no scheme. Everything else in the
+template — `main`, `compatibility_date`, the D1 `binding`, `migrations_dir`, and the
+rate-limit vars — is carried through unchanged.
+
+**`npm run init` does nothing for `workers/`.** The wizard never touches the tree:
+its only worker-related prompt asks for the deployed `workers.feedback` URL, with a
+blank default, because at init time no worker exists yet. Generation at deploy time
+is the whole adoption path for `workers/`, and it needs no wizard step — your
+`place.config.ts` is the only input.
+
 ### Prerequisites
 
 - A Cloudflare account (free plan is enough).
@@ -289,94 +338,133 @@ npx wrangler login
 
 ### Deploying the feedback worker
 
-Run every command from the worker's own directory, so `wrangler` picks up its
-`wrangler.toml`:
+Run every command from the **repository root** — `--config` carries the path, so
+there is no directory to change into.
+
+**1. Generate the config.** Read the derived name out of its output; the steps below
+use `<worker-name>` for it.
 
 ```bash
-cd workers/feedback
+npm run worker-config
 ```
 
-**1. Create the D1 database.** The command prints a `database_id`; paste it into
-`wrangler.toml` under `[[d1_databases]]`, replacing the
-`REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder. The checked-in file ships with
-placeholders only — your instance owns it after adoption, so your real id is a
-normal commit in your repository.
+It reports one line per worker (`name=…  ALLOWED_ORIGIN=…`) and notes that
+`database_id` is still empty, which is expected until step 3.
+
+**2. Create the D1 database**, under the same derived name:
 
 ```bash
-npx wrangler d1 create sekai-feedback
+npx wrangler d1 create <worker-name> \
+  --config workers/feedback/wrangler.generated.toml
 ```
 
-**2. Apply the schema.** This creates the `feedback` and `submission_window`
+The database this creates is what `database_id` will point at; the generated
+config's own `database_id` is still empty at this point, which is expected until
+step 3. Do not pass `--update-config`: it would write the id into the generated
+file, which the next regeneration discards. `place.config.ts` is where it lives.
+
+**3. Record the database id and regenerate.** The command above printed a
+`database_id`. Put it in `place.config.ts` — that file is yours (`merge=ours`), sits
+outside every gate scan root, and survives a fresh clone, which a gitignored
+generated file does not:
+
+```ts
+workers: {
+  feedback: '',                                  // filled in at step 6
+  feedbackDatabaseId: 'PASTE_THE_DATABASE_ID',
+},
+```
+
+Then regenerate so the id reaches the config wrangler reads:
+
+```bash
+npm run worker-config
+```
+
+**4. Apply the schema.** This creates the `feedback` and `submission_window`
 tables. Re-running it is safe; only unapplied migrations run.
 
 ```bash
-npx wrangler d1 migrations apply sekai-feedback --remote
+npx wrangler d1 migrations apply <worker-name> --remote \
+  --config workers/feedback/wrangler.generated.toml
 ```
 
-**3. Set the IP-hash salt.** The worker rate-limits per address, and it stores only
+**5. Set the IP-hash salt.** The worker rate-limits per address, and it stores only
 `sha256(address + salt)` — never the address itself. Without the salt a hash of an
 IPv4 address is reversible by brute force in seconds, so the worker refuses to run
-(HTTP 500) rather than hash unsalted. Use a long random value and keep it out of
-`wrangler.toml`: a secret is not a var.
+(HTTP 500) rather than hash unsalted. Use a long random value; a secret is never a
+var, so it goes in neither config file:
 
 ```bash
-openssl rand -hex 32 | npx wrangler secret put IP_HASH_SALT
+openssl rand -hex 32 | npx wrangler secret put IP_HASH_SALT \
+  --config workers/feedback/wrangler.generated.toml
 ```
 
-**4. Set your site's origin and deploy.** `ALLOWED_ORIGIN` is the only origin the
-worker accepts; edit it in `wrangler.toml` before deploying.
+**6. Deploy, then point the site at it.**
 
 ```bash
-npx wrangler deploy
+npx wrangler deploy --config workers/feedback/wrangler.generated.toml
 ```
 
-`wrangler` prints the deployed URL (`https://sekai-feedback.<subdomain>.workers.dev`).
-
-**5. Point the site at it.** In `place.config.ts`, set the endpoint and turn the
-feature on. The widget needs both: with either half missing it renders nothing, so
-a flag switched on before the worker exists cannot produce a form that posts
-nowhere.
+`wrangler` prints the deployed URL (`https://<worker-name>.<subdomain>.workers.dev`).
+Set it in `place.config.ts` and turn the feature on. The widget needs both: with
+either half missing it renders nothing, so a flag switched on before the worker
+exists cannot produce a form that posts nowhere.
 
 ```ts
 features: { feedback: true, /* ... */ },
-workers: { feedback: 'https://sekai-feedback.<subdomain>.workers.dev' },
+workers: {
+  feedback: 'https://<worker-name>.<subdomain>.workers.dev',
+  feedbackDatabaseId: '…',
+},
 ```
 
 Rebuild and redeploy the site afterwards — the endpoint is read at build time, so
-the browser never fetches config. `ALLOWED_ORIGIN` must be the origin the site is
-served from, or every submission comes back 403.
+the browser never fetches config. `ALLOWED_ORIGIN` (generated from `place.domain`)
+must be the origin the site is served from, or every submission comes back 403.
+
+> If a step ever needs a value generation cannot supply, `wrangler deploy` also
+> accepts `--name`. Reach for it only as a fallback; the generated config is the
+> supported path, and the D1 binding resolves through `database_name` in the file
+> regardless.
 
 ### Configuration
 
-Set in `wrangler.toml` under `[vars]`, except `IP_HASH_SALT`, which is a secret:
+Everything below is derived into `wrangler.generated.toml` by `npm run
+worker-config`, except `IP_HASH_SALT`, which is a secret you set once (step 5). The
+committed `wrangler.toml` is where the framework's own defaults live; the
+"Source" column says where each value comes from.
 
-| Name | Required | Default | Meaning |
+| Name | Required | Source | Meaning |
 |---|---|---|---|
-| `ALLOWED_ORIGIN` | yes | — | The single origin allowed to post, e.g. `https://kb.example.invalid`. Never `*`. Unset or mismatched → every request is 403. |
-| `IP_HASH_SALT` | yes (secret) | — | Salt for the per-address hash. Missing → every POST is 500. |
-| `RATE_LIMIT_MAX` | no | `5` | Submissions allowed per address per window. |
-| `RATE_LIMIT_WINDOW_SECONDS` | no | `3600` | Length of the rolling window, in seconds. |
+| `name` | yes | derived: `<place-slug>-<worker>` | The Worker script name, account-scoped, and the subdomain of its `workers.dev` URL. |
+| `ALLOWED_ORIGIN` | yes | `place.domain` | The single origin allowed to post. Never `*`. Unset or mismatched → every request is 403. |
+| `database_name` | yes | derived: `<place-slug>-<worker>` | The D1 database, account-scoped. Must match the database you created in step 2. |
+| `database_id` | yes | `place.config.ts` → `workers.feedbackDatabaseId` | Printed by `wrangler d1 create`. Absent-safe: unset generates an empty value and a note, which is the state between steps 1 and 3. |
+| `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the per-address hash. Missing → every POST is 500. Never a var. |
+| `RATE_LIMIT_MAX` | no | template (`5`) | Submissions allowed per address per window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`) | Length of the rolling window, in seconds. |
 
-The `[[d1_databases]]` block binds the database as `DB`; leave `binding = "DB"`
-alone, and change `database_name` only if you created the database under a
-different name.
+The `[[d1_databases]]` block binds the database as `DB`; `binding = "DB"` is the
+name the worker's code uses and is framework-owned, not instance identity.
 
 ### Reading rows back
 
 The triage skill reads D1 directly, but any query works from the CLI. `--remote`
-targets the deployed database; without it you get the local dev copy.
+targets the deployed database; without it you get the local dev copy. `<worker-name>`
+is the derived name from step 1.
 
 ```bash
 # The newest submissions
-npx wrangler d1 execute sekai-feedback --remote \
+npx wrangler d1 execute <worker-name> --remote \
   --command "SELECT id, created_at, page, category, status FROM feedback ORDER BY created_at DESC LIMIT 20"
 
 # One submission in full
-npx wrangler d1 execute sekai-feedback --remote \
+npx wrangler d1 execute <worker-name> --remote \
   --command "SELECT * FROM feedback WHERE id = 'PASTE_AN_ID'"
 
 # Mark one triaged
-npx wrangler d1 execute sekai-feedback --remote \
+npx wrangler d1 execute <worker-name> --remote \
   --command "UPDATE feedback SET status = 'triaged' WHERE id = 'PASTE_AN_ID'"
 ```
 

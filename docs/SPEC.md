@@ -158,7 +158,7 @@ Schema: `place {name, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`workers? {feedback?}`,
+`workers? {feedback?, feedbackDatabaseId?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
 Init-time: written only by the `npm run init`
@@ -172,13 +172,20 @@ Both the top-level section list and the `features` flag list are derived from
 > extended rather than dropping the links. `links.social.*` render only when
 > `features.social` is true; the init wizard includes `links` prompts.
 
-> **`workers?`:** deployed Cloudflare Worker endpoint URLs, one optional key per
-> worker (`workers.feedback` for `workers/feedback/`). A worker is deployed by hand
-> after adoption, so the wizard prompts for the URL with a blank default and an
-> instance fills it in later. The endpoint is place identity — it names this
-> instance's deployment — so under iron rule 2 it may live only here, never in
-> `src/`. Absent-safe by construction: a consumer requires both its `features` flag
-> and a non-empty endpoint, so a missing `workers` block leaves the capability off.
+> **`workers?`:** this instance's Cloudflare Worker deployment identity, one
+> optional key per worker for each of two roles: the deployed endpoint URL
+> (`workers.feedback` for `workers/feedback/`) and the D1 database id
+> (`workers.feedbackDatabaseId`, `<worker>DatabaseId` in general). A worker is
+> deployed by hand after adoption, so the wizard prompts for the URL with a blank
+> default and an instance fills both in later. Both are place identity — they name
+> this instance's deployment — so under iron rule 2 they may live only here, never in
+> `src/` and never in the committed `workers/*/wrangler.toml`, which
+> `scripts/ci/check-worker-config.mjs` holds to framework placeholders. The effective
+> deploy config is derived from this block into a gitignored
+> `wrangler.generated.toml` by `npm run worker-config`. Absent-safe by construction:
+> a consumer requires both its `features` flag and a non-empty endpoint, so a missing
+> `workers` block leaves the capability off, and an unset database id generates an
+> empty value with a note rather than failing.
 
 > **`categories[].color?` / `colorLight?`:** optional hex color strings
 > for category display (hero tints, tag badges, sidebar accents). Absent-safe: when

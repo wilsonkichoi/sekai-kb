@@ -157,6 +157,14 @@ export interface PlaceConfig {
   workers?: {
     /** URL of this instance's deployed \`workers/feedback/\` worker. */
     feedback?: string;
+    /**
+     * D1 \`database_id\` for \`workers/feedback/\`, printed by \`wrangler d1 create\`.
+     * It lives here because the generated \`workers/feedback/wrangler.generated.toml\`
+     * is disposable and gitignored, and \`workers/\` may carry no instance identity
+     * (iron rule 2). An account-scoped id, not a credential: useless without account
+     * auth. \`npm run worker-config\` reads it; unset generates an empty id and says so.
+     */
+    feedbackDatabaseId?: string;
   };
   seo: {
     defaultOgImage: string;

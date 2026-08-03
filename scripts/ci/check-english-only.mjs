@@ -41,6 +41,11 @@ const SKIP_DIRS = new Set([
 const SKIP_PATHS = new Set([
   'src/content', 'src/data', 'public/kb',
 ]);
+// Derived worker deploy configs (workers/*/wrangler.generated.toml, written by
+// `npm run worker-config` from place.config.ts). Gitignored and place-specific by
+// design, like the projections above, and skipped by BASENAME because they sit
+// inside the worker directories rather than in a tree of their own.
+const SKIP_FILES = new Set(['wrangler.generated.toml']);
 // Audio extensions are listed for the same reason the image ones are: template
 // mode walks the whole tree, so public/media/ is in scope, and the NUL-byte
 // fallback below is a heuristic no format guarantees. Naming the extension makes
@@ -64,6 +69,7 @@ function walk(dir) {
       if (SKIP_PATHS.has(relative(ROOT, p).split(sep).join('/'))) continue;
       walk(p);
     } else if (entry.isFile()) {
+      if (SKIP_FILES.has(entry.name)) continue;
       if (BINARY_EXT.has(extname(entry.name).toLowerCase())) continue;
       let text;
       try {
@@ -88,8 +94,8 @@ function walk(dir) {
 // sekai-kb template, which ships English-only demo content — so the CJK gate runs
 // over the WHOLE tree, not just code trees. `npm run init` removes the marker on
 // adoption, reverting to the code trees only (src/, scripts/, tests/, workers/,
-// .agents/skills/) -- this gate's own root list, which is not the genericity
-// gate's (check-genericity.sh has no workers/).
+// .agents/skills/) -- this gate's own root list. check-genericity.sh derives its
+// own; the two agree today but are never merged into one claim.
 const scanned = [];
 if (existsSync(join(ROOT, '.sekai-template'))) {
   scanned.push('(whole tree — template mode)');

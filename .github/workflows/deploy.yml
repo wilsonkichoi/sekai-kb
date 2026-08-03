@@ -53,6 +53,16 @@ jobs:
         run: npm run schema-docs
       - name: Self-test — both gates scan .agents/skills/ and workers/ in instance mode
         run: bash scripts/ci/check-skills-gated.sh
+      # A Worker script name, a D1 database_name, and ALLOWED_ORIGIN are all
+      # account-scoped deployment identity, and the denylist gate cannot see them: a
+      # real origin whose domain carries no denylisted term passes it cleanly. This
+      # asserts every committed workers/*/wrangler.toml still holds the framework
+      # placeholders, and it fails in an adopter's checkout too — which is the point,
+      # since an adopter is who would otherwise paste their own origin in.
+      - name: Committed worker configs carry framework placeholders only
+        run: npm run worker-config:check
+      - name: Self-test — the worker config gate fails on every planted defect class
+        run: npm run worker-config:selftest
       - name: Self-test — the scan-root docs guard fails on doc, script, and anchor drift
         run: bash scripts/ci/check-scan-root-docs-selftest.sh
       # ADR 008: the maintainer docs adoption strips, the instance-owned merge=ours

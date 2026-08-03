@@ -27,12 +27,14 @@ Accept these optional arguments:
 - `--database <name-or-id>`: use this D1 database, named either by its
   `database_name` or by its UUID. Without it, read the `database_name` from the
   `[[d1_databases]]` block whose `binding` is `DB` in
-  `workers/feedback/wrangler.toml`. Fail if that block is absent or ambiguous.
-  The UUID form is what a checkout whose `database_id` is still a placeholder
-  needs; step 1 detects that case and requires it.
+  `workers/feedback/wrangler.generated.toml`, the config `npm run worker-config`
+  derives from `place.config.ts`, never the committed `wrangler.toml`, which
+  carries framework placeholders only. Fail if that file or that block is absent
+  or ambiguous. The UUID form is what a checkout whose generated `database_id` is
+  empty needs; step 1 detects that case and requires it.
 
 Without `--dry-run`, live mode plans writes and reaches the approval gate. When
-the database argument is omitted, the `wrangler.toml` lookup above is mandatory.
+the database argument is omitted, the generated-config lookup above is mandatory.
 Reject unknown arguments. Never hardcode a database name.
 
 ## 1. Preflight and resolve configuration
@@ -48,7 +50,10 @@ When that id is the template placeholder, every query fails with
 Require these files:
 
 - `place.config.ts`
-- `workers/feedback/wrangler.toml`
+- `workers/feedback/wrangler.generated.toml`. Absent means the operator has not
+  run `npm run worker-config` in this checkout. Stop and report that command
+  rather than falling back to the committed `workers/feedback/wrangler.toml`,
+  whose values are placeholders and would resolve to no database at all.
 - `workers/feedback/migrations/0002_triage.sql`
 
 Use `npx wrangler`; do not add Wrangler to project dependencies. Confirm both
@@ -78,37 +83,40 @@ Require the target repository to contain the `feedback` label. Check it without
 mutating the repository. If it is absent, stop; label administration is outside
 this triage run.
 
-When the database came from `wrangler.toml` rather than `--database`, read
-`database_id` from that same block. A framework checkout ships it as the
-`REPLACE_WITH_YOUR_D1_DATABASE_ID` placeholder, and an instance that has not
-deployed yet still carries it. An absent or placeholder id means the name cannot
-resolve through that file, so stop and require the run to name the database by
-UUID instead, reporting these commands:
+When the database came from the generated config rather than `--database`, read
+`database_id` from that same block. It is empty in an instance that has recorded
+no id yet: `npm run worker-config` reads it from `place.config.ts`
+(`workers.feedbackDatabaseId`), which the operator fills in after
+`wrangler d1 create`. An absent or empty id means the name cannot resolve through
+that file, so stop and require the run to name the database by UUID instead,
+reporting these commands:
 
 ```bash
 npx wrangler d1 list
 ```
 
 Rerun this skill with `--database <uuid>` from that listing. Never edit
-`wrangler.toml` to resolve this: the file is framework-owned and carries
-placeholders only, so writing a real account id into it is a repository contract
-violation rather than a fix.
+`workers/feedback/wrangler.toml` to resolve this: it is framework-owned, carries
+placeholders only, and `npm run worker-config:check` fails the build on a real
+value committed there. Recording the id in `place.config.ts` and regenerating is
+the operator's deploy step (`docs/runbook/DEPLOY.md`), not a step this skill takes.
 
 Read the remote schema through Wrangler and require the `feedback` table to have
 `issue_url`. If it does not, stop and report this operator command, substituting
 the resolved database name:
 
 ```bash
-cd workers/feedback && npx wrangler d1 migrations apply <database-name> --remote
+npx wrangler d1 migrations apply <database-name> --remote \
+  --config workers/feedback/wrangler.generated.toml
 ```
 
-That command presumes `workers/feedback/wrangler.toml` carries a real
-`database_id`, which an adopter sets once at deploy time (see
+That command presumes the generated config carries a real `database_id`, which an
+adopter records in `place.config.ts` once at deploy time and regenerates from (see
 `docs/runbook/DEPLOY.md`). Unlike the query commands above it accepts no UUID
-override, because `d1 migrations apply` resolves the database only through that
-file and needs its `migrations_dir`. In a checkout still holding the placeholder,
-supplying the real id is the operator's separate deploy step, not a step this
-skill performs or works around.
+override, because `d1 migrations apply` resolves the database only through a config
+file and needs its `migrations_dir`. In a checkout whose generated id is still
+empty, supplying the real one is the operator's separate deploy step, not a step
+this skill performs or works around.
 
 Do not apply a migration inside a triage run.
 

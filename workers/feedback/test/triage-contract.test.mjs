@@ -137,7 +137,10 @@ test('skill documents dry-run, approved-write mode, and optional database argume
   assert.match(argumentsSection, /\bdry-run\b/i);
   assert.match(argumentsSection, /\bdatabase(?:[- ]name)?\b/i);
   assert.match(argumentsSection, /\boptional\b|\bif omitted\b|\bdefault\b/i);
-  assert.match(source, /workers\/feedback\/wrangler\.toml/);
+  // The fallback resolves through the GENERATED config, never the committed
+  // template: the latter carries framework placeholders only (LB-77), so a skill
+  // that read it would resolve to no database at all.
+  assert.match(source, /workers\/feedback\/wrangler\.generated\.toml/);
   assert.match(source, /\bdatabase_name\b/);
   assert.match(
     source,
@@ -146,8 +149,8 @@ test('skill documents dry-run, approved-write mode, and optional database argume
   );
   assert.match(
     source,
-    /(?:if|when)\s+(?:the\s+)?database(?:[- ]name)?\s+(?:argument\s+)?is\s+(?:omitted|absent|not supplied)[\s\S]{0,240}(?:wrangler\.toml|database_name)/i,
-    'an omitted database must be resolved from wrangler.toml database_name',
+    /(?:if|when)\s+(?:the\s+)?database(?:[- ]name)?\s+(?:argument\s+)?is\s+(?:omitted|absent|not supplied)[\s\S]{0,240}(?:generated[- ]config|wrangler\.generated\.toml|database_name)/i,
+    'an omitted database must be resolved from the generated config database_name',
   );
 });
 
