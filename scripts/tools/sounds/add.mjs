@@ -31,7 +31,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { MANIFEST_PATH } from '../../../src/lib/sounds.ts';
@@ -43,7 +43,7 @@ function parseArgs(argv) {
   const opts = { files: [], root: SCRIPT_ROOT };
 
   const named = [
-    'title', 'location', 'credit', 'category', 'description',
+    'title', 'location', 'credit', 'category', 'category-icon', 'description',
     'icon', 'contributor', 'contributor-url', 'date', 'slug', 'root',
   ];
 
@@ -62,6 +62,8 @@ function parseArgs(argv) {
       }
       if (key === 'contributor-url') {
         opts.contributorUrl = value;
+      } else if (key === 'category-icon') {
+        opts.categoryIcon = value;
       } else {
         opts[key] = value;
       }
@@ -91,29 +93,39 @@ function ffmpegAvailable() {
 }
 
 function convertToMp3(inputPath, outputPath) {
-  execSync(`ffmpeg -i "${inputPath}" -y -q:a 2 "${outputPath}"`, { stdio: 'pipe' });
+  execFileSync('ffmpeg', ['-i', inputPath, '-y', '-q:a', '2', outputPath], { stdio: 'pipe' });
+}
+
+function yamlQuote(value) {
+  if (/[:{}\[\],&*?|<>=!%@#'"`\n\\]/.test(value) ||
+      value !== value.trim() ||
+      value === '' ||
+      /^[\-?:]/.test(value)) {
+    return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+  return value;
 }
 
 function buildYamlEntry(opts) {
   const lines = [];
-  lines.push(`      - title: ${opts.title}`);
-  lines.push(`        location: ${opts.location}`);
-  lines.push(`        credit: ${opts.credit}`);
+  lines.push(`      - title: ${yamlQuote(opts.title)}`);
+  lines.push(`        location: ${yamlQuote(opts.location)}`);
+  lines.push(`        credit: ${yamlQuote(opts.credit)}`);
   lines.push(`        file: /media/sounds/${opts.outputFilename}`);
-  if (opts.description) lines.push(`        description: ${opts.description}`);
-  if (opts.icon) lines.push(`        icon: ${opts.icon}`);
-  if (opts.contributor) lines.push(`        contributor: ${opts.contributor}`);
-  if (opts.contributorUrl) lines.push(`        contributorUrl: ${opts.contributorUrl}`);
-  if (opts.date) lines.push(`        date: ${opts.date}`);
+  if (opts.description) lines.push(`        description: ${yamlQuote(opts.description)}`);
+  if (opts.icon) lines.push(`        icon: ${yamlQuote(opts.icon)}`);
+  if (opts.contributor) lines.push(`        contributor: ${yamlQuote(opts.contributor)}`);
+  if (opts.contributorUrl) lines.push(`        contributorUrl: ${yamlQuote(opts.contributorUrl)}`);
+  if (opts.date) lines.push(`        date: ${yamlQuote(opts.date)}`);
   return lines.join('\n');
 }
 
-function createEmptyManifest(categoryId) {
+function createEmptyManifest(categoryId, categoryIcon) {
   return `---
 categories:
-  - id: ${categoryId}
-    icon: ""
-    title: ${categoryId}
+  - id: ${yamlQuote(categoryId)}
+    icon: ${yamlQuote(categoryIcon)}
+    title: ${yamlQuote(categoryId)}
     sounds:
 ---
 
@@ -205,7 +217,25 @@ function findCategorySoundsInsertPoint(raw, categoryId) {
 }
 
 function spliceEntry(raw, categoryId, yamlEntry) {
-  const result = findCategorySoundsInsertPoint(raw, categoryId);
+  // B3 fix: replace inline empty list `sounds: []` with block form before splicing
+  const inlineEmptyRe = new RegExp(`^(\\s*sounds:\\s*)\\[\\]\\s*$`, 'gm');
+  let prepared = raw;
+  const lines0 = raw.split('\n');
+  // Only replace the `sounds: []` that belongs to the target category
+  let inCat = false;
+  for (let i = 0; i < lines0.length; i++) {
+    const catMatch = lines0[i].match(/^(\s*)- id:\s*(.+)$/);
+    if (catMatch) {
+      inCat = catMatch[2].trim() === categoryId;
+    }
+    if (inCat && /^\s*sounds:\s*\[\]\s*$/.test(lines0[i])) {
+      lines0[i] = lines0[i].replace(/\[\]\s*$/, '');
+      prepared = lines0.join('\n');
+      break;
+    }
+  }
+
+  const result = findCategorySoundsInsertPoint(prepared, categoryId);
 
   if (!result.found && !result.categoryFound) {
     return { success: false, error: `category "${categoryId}" not found in the manifest.` };
@@ -215,8 +245,7 @@ function spliceEntry(raw, categoryId, yamlEntry) {
     return { success: false, error: `category "${categoryId}" has no \`sounds:\` key.` };
   }
 
-  const lines = raw.split('\n');
-  // Insert the new entry just before insertIdx
+  const lines = prepared.split('\n');
   lines.splice(result.insertIdx, 0, yamlEntry);
   return { success: true, content: lines.join('\n') };
 }
@@ -252,10 +281,19 @@ for (const inputFile of opts.files) {
   }
 
   const slug = opts.slug || slugify(inputFile);
+
+  // B6 fix: validate slug contains no path traversal or separators
+  if (/[\/\\]/.test(slug) || slug.includes('..') || slug === '' || slug === '.') {
+    console.error(
+      `FAIL: slug "${slug}" is invalid (must not contain path separators or ".." segments).`,
+    );
+    process.exit(1);
+  }
+
   const outputFilename = `${slug}.mp3`;
   const outputPath = join(soundsDir, outputFilename);
 
-  // DoD 3: strictly additive -- refuse if slug already exists
+  // DoD 3: strictly additive -- refuse if slug already exists (file OR manifest)
   if (existsSync(outputPath)) {
     console.error(
       `FAIL: "${outputFilename}" already exists at ${outputPath}.\n` +
@@ -264,6 +302,20 @@ for (const inputFile of opts.files) {
         'To update, edit the manifest by hand.',
     );
     process.exit(1);
+  }
+
+  // B4 fix: also check the manifest for an existing reference to this file
+  const publicPath = `/media/sounds/${outputFilename}`;
+  if (existsSync(manifestPath)) {
+    const currentManifest = readFileSync(manifestPath, 'utf8');
+    if (currentManifest.includes(publicPath)) {
+      console.error(
+        `FAIL: the manifest at ${MANIFEST_PATH} already references "${publicPath}".\n` +
+          '  This script is strictly additive and will not create a duplicate entry. ' +
+          'To update, edit the manifest by hand.',
+      );
+      process.exit(1);
+    }
   }
 
   // DoD 5: conversion is conditional
@@ -290,8 +342,9 @@ for (const inputFile of opts.files) {
   if (existsSync(manifestPath)) {
     manifestRaw = readFileSync(manifestPath, 'utf8');
   } else {
+    const catIcon = opts.categoryIcon || opts.icon || '🎵';
     mkdirSync(join(root, 'knowledge', 'sounds'), { recursive: true });
-    manifestRaw = createEmptyManifest(opts.category);
+    manifestRaw = createEmptyManifest(opts.category, catIcon);
     console.log(`created: ${MANIFEST_PATH}`);
   }
 
