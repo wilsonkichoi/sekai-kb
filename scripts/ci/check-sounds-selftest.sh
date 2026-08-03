@@ -4,9 +4,9 @@
 # gate (scripts/ci/check-sounds.mjs).
 #
 # A guard that only ever asserts the green path proves nothing. This test plants
-# each of the gate's four failing classes into a temp copy and requires the gate
+# each of the gate's failing classes into a temp copy and requires the gate
 # to FAIL each time, then asserts the gate PASSES on the shipped tree, and
-# finally asserts the orphan case exits zero while naming the orphan on stdout.
+# asserts the orphan case exits zero while naming the orphan on stdout.
 #
 #   1. MISSING FIELD  -- a recording with a required field removed.
 #   2. UNRESOLVED FILE -- a `file` whose mp3 does not exist under public/.
@@ -14,6 +14,20 @@
 #   4. DUPLICATE ID   -- two categories sharing the same `id`.
 #   5. ORPHAN (pass)  -- an mp3 under public/media/sounds/ unreferenced; gate
 #                        must exit 0 but name the orphan on stdout.
+#
+# Classes 6-9 are the published-metadata class. The gate's rule is that a
+# published recording carries NO metadata tag of any kind, so proving it on one
+# tag form would leave the other forms as an untested claim; each container an
+# mp3 can carry a tag in gets its own planted case, and the wrong-container case
+# covers a recording renamed to .mp3 rather than converted.
+#
+#   6. ID3v2 TAG      -- the form every observed phone leak arrives in.
+#   7. ID3v1 TAG      -- a trailing 128-byte TAG block.
+#   8. APE TAG        -- an APETAGEX footer.
+#   9. WRONG CONTAINER -- bytes that are not an MPEG audio stream at all.
+#
+# Every planted tag is fabricated in this script; no real recording and no real
+# coordinate is ever committed as a fixture.
 #
 # Portable to macOS bash 3.2 and CI bash 5 (no mapfile; CDPATH unset). This
 # script's source is pure ASCII and carries no denylisted place term.
@@ -63,6 +77,115 @@ categories:
         file: /media/sounds/test-clip.mp3
 ---
 MANIFEST
+}
+
+# Overwrite a fixture's mp3 with one carrying a fabricated metadata tag.
+#
+# The builder is inline node rather than printf arithmetic because ID3 length
+# fields are syncsafe integers derived from the frame text: computing them here
+# keeps the fixture valid when someone edits the fabricated strings, and a
+# hand-miscounted length would weaken the case into a false pass. It shares no
+# code with the gate, so the fixture is independent of what it tests.
+plant_tag() {
+  node - "$1" "$2" <<'BUILDER'
+const { writeFileSync } = require('node:fs');
+
+const [form, target] = process.argv.slice(2);
+
+// A short run of plausible MPEG audio: frame sync, then padding.
+const audio = Buffer.alloc(512, 0);
+audio[0] = 0xff;
+audio[1] = 0xfb;
+audio[2] = 0x90;
+
+const syncsafe = (n) =>
+  Buffer.from([(n >> 21) & 0x7f, (n >> 14) & 0x7f, (n >> 7) & 0x7f, n & 0x7f]);
+
+const builders = {
+  // An ID3v2.4 tag with one TXXX frame, shaped like the capture-location frame a
+  // phone writes. The vendor key and the coordinates are both invented.
+  id3v2() {
+    const description = 'com.example.device.location.ISO6709';
+    const value = '+00.0000-000.0000+000.000/';
+    const payload = Buffer.concat([
+      Buffer.from([0x03]), // UTF-8
+      Buffer.from(description, 'latin1'),
+      Buffer.from([0x00]),
+      Buffer.from(value, 'latin1'),
+    ]);
+    const frame = Buffer.concat([
+      Buffer.from('TXXX', 'latin1'),
+      syncsafe(payload.length),
+      Buffer.from([0x00, 0x00]), // frame flags
+      payload,
+    ]);
+    const header = Buffer.concat([
+      Buffer.from('ID3', 'latin1'),
+      Buffer.from([0x04, 0x00, 0x00]), // version 2.4.0, no flags
+      syncsafe(frame.length),
+    ]);
+    return Buffer.concat([header, frame, audio]);
+  },
+
+  id3v1() {
+    const tag = Buffer.alloc(128, 0);
+    tag.write('TAG', 0, 'latin1');
+    tag.write('Fabricated title', 3, 'latin1');
+    return Buffer.concat([audio, tag]);
+  },
+
+  ape() {
+    const footer = Buffer.alloc(32, 0);
+    footer.write('APETAGEX', 0, 'latin1');
+    footer.writeUInt32LE(2000, 8); // APEv2
+    return Buffer.concat([audio, footer]);
+  },
+
+  // What a .wav renamed to .mp3 actually looks like: a RIFF header, no frame sync.
+  container() {
+    const riff = Buffer.alloc(64, 0);
+    riff.write('RIFF', 0, 'latin1');
+    riff.write('WAVE', 8, 'latin1');
+    return riff;
+  },
+};
+
+if (!builders[form]) {
+  console.error(`plant_tag: unknown form "${form}"`);
+  process.exit(2);
+}
+writeFileSync(target, builders[form]());
+BUILDER
+}
+
+# Plant one metadata form and require the gate to fail while naming it.
+# $1 = form, $2 = case label, $3 = grep pattern the failure must contain.
+check_metadata_class() {
+  local form="$1" label="$2" pattern="$3"
+  echo -n "$label: "
+  local fixture="$WORK_DIR/metadata-$form"
+  build_fixture "$fixture"
+  plant_tag "$form" "$fixture/public/media/sounds/test-clip.mp3"
+  if run_guard "$fixture"; then
+    echo "FAILED -- gate did not catch the planted $form tag"
+    cat "$OUT"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  if ! grep -q "test-clip.mp3" "$OUT"; then
+    echo "FAILED -- gate exited nonzero but did not name the offending file"
+    cat "$OUT"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  if grep -qi "$pattern" "$OUT"; then
+    echo "OK (caught)"
+    PASS=$((PASS + 1))
+  else
+    echo "FAILED -- gate exited nonzero but did not name the finding ($pattern)"
+    cat "$OUT"
+    FAIL=$((FAIL + 1))
+  fi
 }
 
 # -- Baseline: the shipped tree must pass --
@@ -195,6 +318,16 @@ else
   cat "$OUT"
   FAIL=$((FAIL + 1))
 fi
+
+# -- Classes 6-9: published metadata, one case per tag container --
+#
+# The ID3v2 pattern is the planted frame's own description rather than the tag
+# form, because the gate must name the offending field and not merely report that
+# something was found.
+check_metadata_class id3v2 "class 6 (ID3v2 tag)" "com.example.device.location.ISO6709"
+check_metadata_class id3v1 "class 7 (ID3v1 tag)" "ID3v1"
+check_metadata_class ape "class 8 (APE tag)" "APEv2"
+check_metadata_class container "class 9 (wrong container)" "not an mp3"
 
 # -- Summary --
 echo ""

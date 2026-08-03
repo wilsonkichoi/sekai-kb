@@ -97,17 +97,28 @@ jobs:
       # CI gate rather than a suite someone may remember to run.
       - name: Snippet queue contract
         run: npm run test:snippet
+      # The soundscape ingest writes every published file through ffmpeg so the
+      # recording's capture metadata (coordinates, timestamp, device, OS) never
+      # reaches public/. Proving that requires actually running the conversion, so
+      # the writer suite below needs ffmpeg here. The validation gate deliberately
+      # does NOT: it reads the container in JavaScript, so it still runs in the
+      # build job and in an adopter's postbuild chain, neither of which has ffmpeg.
+      - name: Install ffmpeg for the soundscape ingest suite
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # Soundscape manifest contract: the three absent-safe cases the page's DoD
       # names (no manifest at all, an empty list, an entry whose audio file is
       # missing) plus the gray-matter date normalization. The page has no server
       # and no player library, so src/lib/sounds.ts is where every one of those
       # degradations happens; a suite CI does not run would not keep it true.
+      # The same npm script runs the ingest writer's suite, which asserts that both
+      # the conversion and the mp3 re-mux path publish a file with no tag.
       - name: Soundscape manifest contract
         run: npm run test:soundscape
       # Soundscape manifest validation: imports field arrays from src/lib/sounds.ts
       # and exits nonzero on missing required fields, unresolved files, path escape,
-      # or duplicate category ids. The postbuild chain also runs it, but CI runs it
-      # independently so a broken manifest is caught before the build job.
+      # duplicate category ids, or a published file that still carries a metadata
+      # tag. The postbuild chain also runs it, but CI runs it independently so a
+      # broken manifest is caught before the build job.
       - name: Soundscape manifest validation gate
         run: npm run sounds:check
       - name: Self-test — the soundscape gate fails on every planted defect class

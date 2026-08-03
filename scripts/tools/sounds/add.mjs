@@ -8,6 +8,14 @@
 // reserializes the whole document, so hand-edited YAML (comments, key order,
 // multi-line descriptions) is preserved byte-for-byte outside the inserted entry.
 //
+// Every published file is written through ffmpeg with the strip arguments from
+// scripts/lib/mp3-tags.mjs, including mp3 input -- a phone recording carries its
+// capture coordinates, timestamp, and device identity in the container, and a
+// byte-for-byte copy would publish all of it. mp3 input is therefore re-muxed
+// (`-c:a copy`, so the audio frames are unchanged) rather than copied, which makes
+// ffmpeg an unconditional prerequisite of this script. `npm run sounds:check`
+// enforces the same rule on files that arrive by hand.
+//
 // Usage:
 //   node scripts/tools/sounds/add.mjs <audio-path> [<audio-path>...]
 //     --title <title>
@@ -29,12 +37,13 @@
 // This file lives under scripts/, which both machine gates scan: its source is
 // pure ASCII and carries no denylisted place term.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { MANIFEST_PATH } from '../../../src/lib/sounds.ts';
+import { FFMPEG_STRIP_ARGS } from '../../lib/mp3-tags.mjs';
 
 const SCRIPT_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 
@@ -92,8 +101,24 @@ function ffmpegAvailable() {
   }
 }
 
+// Re-encode non-mp3 input. FFMPEG_STRIP_ARGS is what keeps the input's capture
+// metadata out of the output; without it ffmpeg copies every input tag across.
 function convertToMp3(inputPath, outputPath) {
-  execFileSync('ffmpeg', ['-i', inputPath, '-y', '-q:a', '2', outputPath], { stdio: 'pipe' });
+  execFileSync(
+    'ffmpeg',
+    ['-i', inputPath, '-y', ...FFMPEG_STRIP_ARGS, '-q:a', '2', outputPath],
+    { stdio: 'pipe' },
+  );
+}
+
+// Re-mux mp3 input. `-c:a copy` passes the audio frames through untouched, so this
+// is lossless; only the container's tags are dropped.
+function remuxMp3(inputPath, outputPath) {
+  execFileSync(
+    'ffmpeg',
+    ['-i', inputPath, '-y', ...FFMPEG_STRIP_ARGS, '-c:a', 'copy', outputPath],
+    { stdio: 'pipe' },
+  );
 }
 
 function yamlQuote(value) {
@@ -265,6 +290,23 @@ const root = resolve(opts.root);
 const manifestPath = join(root, MANIFEST_PATH);
 const soundsDir = join(root, 'public', 'media', 'sounds');
 
+// ffmpeg is an unconditional prerequisite: mp3 input is re-muxed rather than
+// copied, because copying would publish the recording's capture metadata. Checked
+// once, before anything is written, so a missing ffmpeg cannot leave a half-done
+// ingest behind.
+if (!ffmpegAvailable()) {
+  console.error(
+    'FAIL: ffmpeg is not on PATH.\n' +
+      '  Every recording is written through ffmpeg so its capture metadata (GPS,\n' +
+      '  timestamp, device make and model, OS version) is stripped before publishing.\n' +
+      '  mp3 input is re-muxed losslessly rather than copied, so this applies to it too.\n' +
+      '  Install ffmpeg:\n' +
+      '    macOS:  brew install ffmpeg\n' +
+      '    Ubuntu: sudo apt install ffmpeg',
+  );
+  process.exit(1);
+}
+
 mkdirSync(soundsDir, { recursive: true });
 
 for (const inputFile of opts.files) {
@@ -312,23 +354,31 @@ for (const inputFile of opts.files) {
     }
   }
 
-  // DoD 5: conversion is conditional
+  // Re-encoding is conditional on the extension; stripping metadata is not. mp3
+  // input takes the lossless re-mux path, everything else is converted, and both
+  // carry FFMPEG_STRIP_ARGS.
   const ext = extname(inputFile).toLowerCase();
-  if (ext === '.mp3') {
-    copyFileSync(inputPath, outputPath);
-    console.log(`placed: ${inputFile} -> ${outputPath}`);
-  } else {
-    if (!ffmpegAvailable()) {
-      console.error(
-        `FAIL: "${inputFile}" is not an mp3 and ffmpeg is not on PATH.\n` +
-          '  Install ffmpeg to convert non-mp3 audio:\n' +
-          '    macOS:  brew install ffmpeg\n' +
-          '    Ubuntu: sudo apt install ffmpeg',
-      );
-      process.exit(1);
+  try {
+    if (ext === '.mp3') {
+      remuxMp3(inputPath, outputPath);
+      console.log(`re-muxed, metadata stripped: ${inputFile} -> ${outputPath}`);
+    } else {
+      convertToMp3(inputPath, outputPath);
+      console.log(`converted, metadata stripped: ${inputFile} -> ${outputPath}`);
     }
-    convertToMp3(inputPath, outputPath);
-    console.log(`converted: ${inputFile} -> ${outputPath}`);
+  } catch (err) {
+    // ffmpeg may have created the output before failing. Remove it: leaving a
+    // partial file behind would make the next run refuse the slug as an existing
+    // recording, and the strictly-additive rule is about entries that were really
+    // published, not about wreckage from a failed one.
+    rmSync(outputPath, { force: true });
+    const detail = (err.stderr || '').toString().trim().split('\n').slice(-3).join('\n  ');
+    console.error(
+      `FAIL: ffmpeg could not process "${inputFile}".\n` +
+        (detail ? `  ${detail}\n` : '') +
+        '  Nothing was published and nothing was appended to the manifest.',
+    );
+    process.exit(1);
   }
 
   // Read or create manifest

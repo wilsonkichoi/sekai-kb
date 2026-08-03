@@ -9,12 +9,24 @@
 //   - a `file` that does not resolve under public/
 //   - a `file` escaping public/ (leading-slash violation or `..` segment)
 //   - a duplicate category `id`
+//   - a published mp3 that still carries a metadata tag, or is not an mp3 at all
 //
 // An mp3 under public/media/sounds/ that no entry references is REPORTED on
 // stdout and does NOT fail -- an adopter mid-session legitimately has one.
 //
 // The field lists are IMPORTED from the reader, never restated here. If the
 // reader adds a field, this gate demands it without a second edit.
+//
+// The metadata scan is the half of the strip that covers hand-placed files.
+// `npm run sounds:add` strips capture metadata on the way in, but the playbook
+// blesses hand-placing a file into public/media/sounds/ and hand-writing its
+// manifest entry, so the writer alone cannot close the class. The rule and the
+// container reader both live in scripts/lib/mp3-tags.mjs, which the writer imports
+// too -- the gate and the tool it judges cannot drift apart.
+//
+// This scan is pure JavaScript on purpose. CI has no ffmpeg, and this gate also
+// runs from `postbuild:sounds` in every adopter's build, so it must never shell
+// out to ffprobe to read a container.
 //
 // Usage: node scripts/ci/check-sounds.mjs [--root <path>]
 //
@@ -33,6 +45,8 @@ import {
   WISHLIST_REQUIRED_FIELDS,
   MANIFEST_PATH,
 } from '../../src/lib/sounds.ts';
+
+import { scanMp3Tags, FFMPEG_STRIP_ARGS } from '../lib/mp3-tags.mjs';
 
 import matter from 'gray-matter';
 
@@ -173,19 +187,63 @@ if (Array.isArray(categories)) {
   }
 }
 
-// Orphan detection: mp3 files under public/media/sounds/ not referenced.
-if (existsSync(SOUNDS_DIR)) {
-  let files;
+// Every mp3 under public/media/sounds/, at any depth. One walk feeds both the
+// orphan report and the metadata scan, so a clip in a subdirectory cannot be
+// visible to one and invisible to the other.
+function listMp3s(dir, prefix = '') {
+  const found = [];
+  let entries;
   try {
-    files = readdirSync(SOUNDS_DIR);
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
-    files = [];
+    return found;
   }
-  for (const file of files) {
-    if (!file.endsWith('.mp3')) continue;
-    const publicPath = `/media/sounds/${file}`;
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      found.push(...listMp3s(join(dir, entry.name), `${prefix}${entry.name}/`));
+    } else if (entry.name.endsWith('.mp3')) {
+      found.push(`${prefix}${entry.name}`);
+    }
+  }
+  return found;
+}
+
+let metadataFindings = 0;
+let scannedFiles = 0;
+
+if (existsSync(SOUNDS_DIR)) {
+  for (const relative of listMp3s(SOUNDS_DIR)) {
+    const publicPath = `/media/sounds/${relative}`;
+
+    // Orphan detection: an mp3 no manifest entry references.
     if (!referencedFiles.has(publicPath)) {
       warnings.push(`orphan: ${publicPath} exists under public/ but no manifest entry references it.`);
+    }
+
+    // Metadata scan: a published recording carries no tag of any kind.
+    let bytes;
+    try {
+      bytes = readFileSync(join(SOUNDS_DIR, relative));
+    } catch (err) {
+      errors.push(`public/media/sounds/${relative}: cannot read the file: ${err.message}`);
+      continue;
+    }
+    scannedFiles += 1;
+    for (const finding of scanMp3Tags(bytes)) {
+      metadataFindings += 1;
+      if (finding.form === 'container') {
+        errors.push(
+          `public/media/sounds/${relative}: ${finding.detail}. Renaming a recording to ` +
+            '.mp3 does not convert it; run it through `npm run sounds:add`.',
+        );
+      } else {
+        errors.push(
+          `public/media/sounds/${relative}: carries an ${finding.form} metadata tag ` +
+            `(${finding.detail}). A published recording carries no tag: phone containers ` +
+            'hold capture coordinates, timestamp, and device identity, and the page reads ' +
+            'every displayed field from the manifest instead.',
+        );
+      }
     }
   }
 }
@@ -195,13 +253,27 @@ if (warnings.length > 0) {
 }
 
 if (errors.length > 0) {
-  console.error(`FAIL: ${MANIFEST_PATH} has ${errors.length} error(s):`);
+  console.error(
+    `FAIL: soundscape check found ${errors.length} error(s) in ${MANIFEST_PATH} ` +
+      'and public/media/sounds/:',
+  );
   for (const e of errors) console.error(`  ${e}`);
+  if (metadataFindings > 0) {
+    // The remedy is derived from the same arguments the writer uses, so the
+    // advice cannot drift from what `npm run sounds:add` actually does.
+    console.error('');
+    console.error('  To strip a file in place without re-encoding it:');
+    console.error(
+      `    ffmpeg -i <file>.mp3 ${FFMPEG_STRIP_ARGS.join(' ')} -c:a copy <stripped>.mp3`,
+    );
+    console.error('  Or re-run `npm run sounds:add` on the original recording.');
+  }
   process.exit(1);
 }
 
 const entryCount = referencedFiles.size;
 console.log(
-  `OK: ${MANIFEST_PATH} is valid -- ${entryCount} recording(s) checked` +
+  `OK: ${MANIFEST_PATH} is valid -- ${entryCount} recording(s) checked; ` +
+    `${scannedFiles} published file(s) carry no metadata tag` +
     `${warnings.length > 0 ? `; ${warnings.length} orphan(s) reported` : ''}.`,
 );

@@ -21,7 +21,7 @@ so task ids (`LB-*`) are continuous across the split.
 
 | # | Milestone | Outcome | Scope (tasks) | Exit gate | Est |
 |---|---|---|---|---|---|
-| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.4 | Live submission → D1 → GitHub issue; three real recordings and the tag adoption in 6.4; phase confirm | AI 18.5h \| Human 3h |
+| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.3d · 6.4 | Live submission → D1 → GitHub issue; three real recordings and the tag adoption in 6.4; phase confirm | AI 20.25h \| Human 3h |
 | 7 | Differentiators | On-demand OG worker, RAG chat (bge-m3 + Workers AI + Claude API), QR flow | 7.1 · 7.2a-c · 7.3 | Eval set answered with citations, no hallucinated places (7.2c); phase confirm | AI 12.25h \| Human 1.75h |
 | 8 | Semiont plugin layer | Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 | Site builds with `semiont/` deleted; organs toggle via config only; phase confirm | AI 4.25h \| Human 0h |
 | 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook proven on the first real post-cut feature release | 9.1 · 9.2 · 9.3 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; phase shipped as a sekai-kb tag → instance `/sekai-upgrade` clean (9.3); maintainer phase confirm | AI 6h \| Human 0.75h |
@@ -185,6 +185,34 @@ block below carries the decision inline, this section is the rationale.
 
 ---
 
+## Phase 6 planning amendment — approved 2026-08-03
+
+Records the one block added after 6.3c shipped. Same form as the amendment above: the block
+carries the decision inline, this section is the rationale.
+
+- **6.3d is a new block, inserted between 6.3c and 6.4.** 6.3c shipped the ingest writer and
+  the manifest validation gate, but the writer published the recording verbatim. Consumer
+  phones write capture coordinates, capture timestamp, device make and model, and OS version
+  into the container; ffmpeg copies input metadata to its output by default and Astro copies
+  `public/` into `dist/` byte-for-byte, so nothing between the recording and the published
+  asset removed any of it. Found by `/dev:review-pr` on the instance's exit-gate PR, where
+  three of the four committed recordings carried GPS to roughly ten metres. This is a
+  framework defect: every adopter running `sounds:add` publishes the same data, and one
+  recording near home publishes their home coordinates.
+- **The writer fix alone does not close it.** Hand-placing a file into
+  `public/media/sounds/` and hand-writing the manifest entry is a documented, supported path,
+  so `sounds:check` gains the matching gate. Same asymmetry 6.3c closed for the manifest,
+  applied to the published bytes.
+- **It blocks 6.4 rather than following it.** 6.4 DoD 6 commits the instance's real
+  recordings through `npm run sounds:add`. Shipping the exit gate before the strip publishes
+  the coordinates first and scrubs them second, which is not a state a public site should
+  pass through. Ordering the fix before 6.4 costs this block's estimate; 6.4 then adopts the
+  tag and re-ingests or scrubs the four already-committed assets.
+- **Estimates:** Phase 6 becomes AI ≈ 20.25h | Human ≈ 3h (was AI ≈ 18.5h | Human ≈ 3h),
+  from 6.3d alone.
+
+---
+
 ## Detailed task blocks: Phases 6-8
 
 These are the active source blocks for `/dev:plan`. Model names are advisory and
@@ -295,10 +323,34 @@ names the instance in its own `Execution repo:` line.
     4. Wire sounds:check into postbuild and CI; add sounds:selftest to CI.
   Acceptance: npm run sounds:add on a fixture produces a valid manifest that passes
     sounds:check; the self-test proves every failure class; genericity passes
+  Downstream: 6.3d, 6.4
+
+[6.3d] Soundscape ingest strips recording metadata: strip on write, gate on check
+  Effort: M | Model: Opus | Depends: 6.3c
+  Est: AI 1.5h + 0.25h review
+  Decision: stripping is unconditional, with no opt-out flag. The manifest asks for a
+    human-written location string precisely so the place is described in the instance's own
+    words; shipping exact coordinates underneath it contradicts that field's purpose.
+  Steps:
+    1. Write every published file through ffmpeg with metadata, chapter, and ID3 writing
+       disabled, on the conversion path and on the mp3 path alike. mp3 input is re-muxed
+       (-c:a copy, lossless) rather than copied, which makes ffmpeg an unconditional
+       prerequisite of npm run sounds:add.
+    2. Extend sounds:check to scan every published mp3 and fail on any metadata tag or a
+       wrong container. CI has no ffmpeg, and the gate also runs from an adopter's postbuild,
+       so the container read is JavaScript and never shells out to ffprobe.
+    3. Share the strip arguments and the container reader between writer and gate so the
+       tool and the gate that judges it cannot drift.
+    4. Extend sounds:selftest with one planted case per tag container; document the strip,
+       the gate, and the non-retroactive remedy in the soundscape playbook.
+  Acceptance: a tagged fixture converts and re-muxes to a file with no tag; the gate fails on
+    each planted tag form naming the file and the field, and passes on the shipped tree; the
+    release entry carries an upgrade note, because the fix is not retroactive to assets an
+    adopter has already committed
   Downstream: 6.4
 
 [6.4] Phase 6 exit gate: ship the tag, adopt it in the instance, go live
-  Effort: M | Model: Opus | Depends: 6.1b, 6.1c, 6.2, 6.3, 6.3b, 6.3c
+  Effort: M | Model: Opus | Depends: 6.1b, 6.1c, 6.2, 6.3, 6.3b, 6.3c, 6.3d
   Est: AI 1h + 0.25h review | Human 2.5h (Cloudflare setup, three recordings, confirm)
   Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
     last framework task.

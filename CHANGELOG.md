@@ -41,6 +41,53 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **Soundscape ingest no longer publishes the recording's capture metadata.**
+  Consumer phones write capture coordinates (to roughly ten metres), capture
+  timestamp, device make and model, and OS version into the audio container.
+  `ffmpeg` copies input metadata to its output by default and Astro copies
+  `public/` into `dist/` byte-for-byte, so every clip added with
+  `npm run sounds:add` was publishing all of it, and an adopter recording near
+  home was publishing their home coordinates. `npm run sounds:add` now writes
+  every published file through ffmpeg with metadata, chapter, and ID3 writing
+  disabled. mp3 input is re-muxed (`-c:a copy`, so the audio frames are unchanged
+  and nothing is re-encoded) rather than copied byte-for-byte, which makes ffmpeg
+  an **unconditional prerequisite** of the script rather than one only non-mp3
+  input needed. There is no opt-out flag: the manifest's `location` field is the
+  place description readers see, and shipping exact coordinates underneath it
+  contradicts that field's purpose.
+- **`npm run sounds:check` rejects a published file that carries a metadata tag.**
+  Hand-placing a file into `public/media/sounds/` and hand-writing its manifest
+  entry is a supported path that bypasses the script, so fixing only the writer
+  would have left the class open. The gate now scans every mp3 under
+  `public/media/sounds/` at any depth and fails on an ID3v2 tag, an ID3v1 trailer,
+  an APE footer, or bytes that are not an MPEG audio stream at all (a recording
+  renamed to `.mp3` rather than converted), naming the file, the tag form, and the
+  offending frame. The rule is absolute rather than a denylist of sensitive
+  fields, because the page reads every displayed field from the manifest and never
+  from the audio file. The scan reads the container in JavaScript
+  (`scripts/lib/mp3-tags.mjs`, shared with the writer so the two cannot drift), so
+  it still runs in `postbuild` and in CI, neither of which has ffmpeg. Self-test
+  coverage at `npm run sounds:selftest` grew from five planted defect classes to
+  nine, one per tag container.
+- The three synthesized demo clips under `public/media/sounds/` were re-muxed to
+  drop the encoder tag ffmpeg had written into them. Their audio is unchanged.
+
+**Upgrade note.** The fix is not retroactive: recordings ingested before this
+release keep whatever their capture device wrote, and `npm run sounds:check` will
+now fail on them. For each affected file, either re-run `npm run sounds:add` on
+the original recording, or strip the committed file in place with
+
+```
+ffmpeg -i <file>.mp3 -map_metadata -1 -map_chapters -1 -id3v2_version 0 -c:a copy <stripped>.mp3
+```
+
+and commit the result. Run `npm run sounds:check` to list the affected files.
+Instances with no soundscape recordings need no action. ffmpeg is now required
+for `npm run sounds:add` with any input format, including mp3; it is not required
+to build or to run the gate.
+
 ## [1.0.19] — 2026-08-03
 
 Soundscape ingest tooling: npm run sounds:add converts and places audio, npm run sounds:check validates manifest entries, and docs/playbook/SOUNDSCAPE-PLAYBOOK.md documents the workflow.
