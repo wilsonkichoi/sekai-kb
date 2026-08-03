@@ -47,7 +47,7 @@
 #
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
 # exit 1 when the guard fails to catch a planted defect, exit 0 when it catches
-# all four)
+# all five)
 
 set -euo pipefail
 

@@ -383,6 +383,17 @@ Then regenerate so the id reaches the config wrangler reads:
 npm run worker-config
 ```
 
+> **Why `place.config.ts` and not a gitignored sidecar.** The other candidate was a
+> gitignored `workers/feedback/.deploy.json` holding the id beside the worker,
+> recoverable with `npx wrangler d1 list` if it were ever lost. It was rejected:
+> gitignored state does not survive a fresh clone, so every clone would need that
+> recovery step before it could deploy, and it would split instance identity across
+> two files. A D1 database id is an account-scoped identifier, not a credential —
+> useless without account authentication — so there is nothing to protect by keeping
+> it out of your repository, and `place.config.ts` is already the one place your
+> instance's identity lives. `npx wrangler d1 list` remains how you recover the id if
+> you lose it, whichever file it was in.
+
 **4. Apply the schema.** This creates the `feedback` and `submission_window`
 tables. Re-running it is safe; only unapplied migrations run.
 
