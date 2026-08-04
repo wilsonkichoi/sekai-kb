@@ -76,14 +76,45 @@ the really-stripped tree contains no occurrence of any stripped path, with a pla
 proving the assertion can fail. Moving `diagrams/` is what would have exercised this hole
 (the wizard's `AGENTS.md` template named it), which is why the fix ships with the move.
 
-**(g) Upgrading across this relocation is move-then-merge.** An instance holding its own
-documents at the old paths must `git mv` them to `dev_docs/` and declare
-`dev_docs/** merge=ours` **in the same branch, before** merging the tag. Done in that order,
-the old paths delete cleanly on both sides and the new tree is an add/add that the `ours`
-driver resolves in the instance's favour; `reconcile` then recognises the relocated tree as
-owned because it existed at the pre-merge revision. Merging first and relocating afterwards
-produces modify/delete conflicts the driver does not resolve. The release carries this as an
-Upgrade note, and `check-upgrade-state.sh` case 9 is the fixture for it.
+**(g) Upgrading across this relocation is move-then-merge, and it conflicts.** An instance
+holding its own documents at the old paths must `git mv` them to `dev_docs/` and declare
+`dev_docs/** merge=ours` **in the same branch, before** merging the tag. That ordering is
+what makes `reconcile` recognise the relocated tree as owned — it asks whether the path
+existed at the pre-merge revision, and only a committed relocation answers yes.
+
+**It does not make the merge clean, and `merge=ours` cannot make it clean.** Against a
+merge base that carries the *framework's* document at the old path, the framework's move is
+a high-similarity **rename**, while the instance's move is a **delete plus an unrelated
+add** — because the instance's document shares almost no text with the framework's. Rename
+on one side and delete on the other is a rename/delete conflict, and **git applies no merge
+driver to those**. The attribute is never consulted.
+
+This asymmetry is structural, not incidental: ADR 008's premise is that the two
+repositories hold *different* documents at the *same* paths, which is exactly the condition
+that makes rename detection fire on one side only. Every instance that owns maintainer docs
+will hit it.
+
+**The resolution is mechanical and must be stated, because the wrong one loses data:** take
+**ours** for every conflicted path under `dev_docs/` that this instance owns, and `git rm`
+the paths that are conflicted only because the framework carried a record this instance
+never had. Taking `--theirs` replaces the instance's own PRD, SPEC, and ROADMAP with the
+framework's — the precise loss ADR 008(f) exists to prevent. `/sekai-upgrade` walks these
+conflicts with the user; a manual upgrade must follow the same rule.
+
+**A second class does not conflict at all, and is easy to miss for exactly that reason.** A
+framework file at a path the instance has never had — a newly numbered ADR, a new research
+document — is a one-sided add. Git takes it silently; it appears in no conflict list.
+`reconcile` reports each one (that is what its `added` notes are for) and deliberately does
+not delete it, because deciding whether an instance wants a framework document is not the
+upgrade's call. Removing the unwanted ones is part of the adoption commit.
+
+`check-upgrade-state.sh` case 9 is the fixture, and it now **asserts that the conflict
+occurs** rather than assuming it does not. An earlier form of that fixture wrote one-line
+documents whose similarity profile made git pair both sides as renames, producing a tidy
+add/add the driver resolved — so the case passed while modelling a merge shape that cannot
+happen in production, and this ADR shipped the resulting false claim in v1.1.0. The bodies
+are now long and side-specific so the asymmetry is real, and the case fails if a future git
+ever makes the relocation merge cleanly, since that would make this paragraph wrong.
 
 ## Consequences
 

@@ -448,20 +448,13 @@ write_legacy_wizard() { # dir
 }
 
 # A file path gets a file; a directory path gets one record inside it.
+# Documents at the CURRENTLY declared paths. Delegates to write_docs_at so every
+# fixture document has the same body shape wherever it sits: rename detection compares
+# a file at the old path with one at the new path, so a one-line body here and a full
+# one there would make the framework's own relocation look like a delete plus an add and
+# quietly remove the asymmetry the relocation case exists to reproduce.
 write_maintainer_docs() { # dir marker
-  local rel
-  for rel in $MAINTAINER_DOCS; do
-    case "$rel" in
-      *.md)
-        mkdir -p "$1/$(dirname "$rel")"
-        printf '# Maintainer doc: %s (%s)\n' "$rel" "$2" > "$1/$rel"
-        ;;
-      *)
-        mkdir -p "$1/$rel"
-        printf '# Decision record 001 (%s)\n' "$2" > "$1/$rel/001-example.md"
-        ;;
-    esac
-  done
+  write_docs_at "$1" "$MAINTAINER_DOCS" "$2"
 }
 
 # The init wizard's strip, as an adopter's tree really looks afterwards.
@@ -1303,17 +1296,56 @@ write_wizard_declaring() { # dir path-list
 
 # Seed/strip at an explicit path list, so the fixture can hold documents at the paths
 # a previous release declared as well as at the current ones.
+#
+# The BODY matters, and this is the whole reason the relocation case is realistic.
+# Git decides rename-versus-delete-plus-add by CONTENT SIMILARITY against the merge
+# base. The framework and the instance hold entirely different documents at the same
+# maintainer-doc paths -- that is ADR 008's whole premise -- so when both relocate:
+#
+#   framework side: base doc -> new path, high similarity  => detected as a RENAME
+#   instance side:  base doc deleted, unrelated doc added  => delete + add
+#
+# and rename-on-one-side plus delete-on-the-other is a rename/delete conflict, which
+# git never routes through a merge driver. `merge=ours` therefore cannot protect these
+# paths through a relocation, by construction rather than by misconfiguration.
+#
+# An earlier form of this helper wrote one-line bodies differing only by a marker word.
+# Those are similar enough that git paired them across BOTH sides, so the fixture saw a
+# tidy add/add that `merge=ours` resolved -- and the case passed while asserting a merge
+# shape that cannot occur in production. The bodies below are long and side-specific so
+# the similarity asymmetry is real.
 write_docs_at() { # dir path-list marker
-  local rel
+  local rel body
+  case "$3" in
+    instance-owned)
+      body="This document belongs to the adopting instance. It records that instance's own
+product decisions, its own delivery order, and the constraints its operators chose.
+None of this text appears in the framework's document at the same path: the two
+repositories deliberately hold different content there, which is what makes a
+relocation produce asymmetric rename detection.
+Instance-side body line six.
+Instance-side body line seven.
+Instance-side body line eight."
+      ;;
+    *)
+      body="This document belongs to the framework. It records the framework's architecture
+contracts, its negative requirements, and the phases its maintainers execute.
+It is stripped from an adopter clone at init, and an instance that keeps its own
+document at this path owns that path instead.
+Framework-side body line six ($3).
+Framework-side body line seven.
+Framework-side body line eight."
+      ;;
+  esac
   for rel in $2; do
     case "$rel" in
       *.md)
         mkdir -p "$1/$(dirname "$rel")"
-        printf '# Maintainer doc: %s (%s)\n' "$rel" "$3" > "$1/$rel"
+        printf '# Maintainer doc: %s (%s)\n\n%s\n' "$rel" "$3" "$body" > "$1/$rel"
         ;;
       *)
         mkdir -p "$1/$rel"
-        printf '# Decision record 001 (%s)\n' "$3" > "$1/$rel/001-example.md"
+        printf '# Decision record 001 (%s)\n\n%s\n' "$3" "$body" > "$1/$rel/001-example.md"
         ;;
     esac
   done
@@ -1330,6 +1362,16 @@ build_framework_relocating() { # dir
   printf -- '---\ntier: doctrine\n---\n# Example rule (framework-owned, fw-v1)\n' \
     > "$fw/.agent-toolkit/rules/example-rule.md"
   write_gitattributes "$fw"
+  # fw-v1 ships the legacy maintainer-doc attributes, exactly as the pre-relocation
+  # framework did. fw-v2 replaces them with the single new-directory line, so
+  # `.gitattributes` itself is a conflicting file across this upgrade -- which is what
+  # happens in production and is part of why the relocation is not a clean merge.
+  for rel in $LEGACY_MAINTAINER_DOCS; do
+    case "$rel" in
+      *.md) printf '%s merge=ours\n' "$rel" >> "$fw/.gitattributes" ;;
+      *)    printf '%s/** merge=ours\n' "$rel" >> "$fw/.gitattributes" ;;
+    esac
+  done
   write_wizard_declaring "$fw" "$LEGACY_MAINTAINER_DOCS"
   write_docs_at "$fw" "$LEGACY_MAINTAINER_DOCS" "fw-v1"
   mkdir -p "$fw/docs/playbook"
@@ -1357,6 +1399,13 @@ build_framework_relocating() { # dir
     git -C "$fw" rm -r -q -- "$rel"
   done
   write_docs_at "$fw" "$LEGACY_SURVIVING_DOC" "fw-v2"
+  write_gitattributes "$fw"
+  for rel in $MAINTAINER_DOCS; do
+    case "$rel" in
+      *.md) printf '%s merge=ours\n' "$rel" >> "$fw/.gitattributes" ;;
+      *)    printf '%s/** merge=ours\n' "$rel" >> "$fw/.gitattributes" ;;
+    esac
+  done
   write_wizard_declaring "$fw" "$MAINTAINER_DOCS"
   write_maintainer_docs "$fw" "fw-v2"
   for rel in $MAINTAINER_DOCS; do
@@ -1409,10 +1458,46 @@ case_mdocs_declaration_relocated() { # workdir
   assert_mdocs_classify "$inst" "case 9" "" "$LEGACY_MAINTAINER_DOCS"
 
   git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
-  # A mixed set is a normal state: the run must not stop.
+
+  # THE RELOCATION CONFLICTS, AND THAT IS THE CONTRACT.
+  #
+  # Both sides moved their maintainer docs to the same new path. Against the merge base
+  # -- which carries the FRAMEWORK's document at the old path -- the framework's move is
+  # a high-similarity rename, while the instance's move is a delete plus an unrelated
+  # add, because the instance's document shares almost no text with the framework's.
+  # Rename on one side and delete on the other is a rename/delete conflict, and git
+  # applies no merge driver to those. `merge=ours` cannot reach them.
+  #
+  # This is asserted, not tolerated. If a future git or a future doc layout made the
+  # relocation merge cleanly, the upgrade documentation would be describing a shape that
+  # no longer happens, and this assertion is what would catch that.
+  owned_file="$(first_doc_file)"
+  if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
+    git -C "$inst" ls-files -u -- "$owned_file" | grep -q . \
+      || fail "case 9: the relocation merged without conflict on $owned_file.
+  The upgrade documentation tells adopters to expect a rename/delete conflict on every
+  maintainer-doc path and to resolve each one to OURS. If the merge is now clean, that
+  guidance is wrong and must be rewritten in the same commit that relaxes this check."
+    ok "case 9: the relocation conflicts on the maintainer-doc paths (rename/delete; no merge driver applies)"
+  fi
+
+  # The documented resolution: take OURS for every conflicted maintainer-doc path. This
+  # is the step an adopter performs by hand (or /sekai-upgrade walks with them), and
+  # taking --theirs here is the data-loss mistake the upgrade note exists to prevent.
+  for rel in $(git -C "$inst" diff --name-only --diff-filter=U -- $MAINTAINER_DOCS); do
+    if git -C "$inst" cat-file -e ":2:$rel" 2>/dev/null; then
+      git -C "$inst" checkout --ours -- "$rel" 2>/dev/null || true
+      git -C "$inst" add -- "$rel"
+    else
+      # Ours deleted it (the framework's own record, which this instance never had).
+      git -C "$inst" rm -q -f -- "$rel" 2>/dev/null || true
+    fi
+  done
+
+  # Only now is reconcile meaningful: it runs on a resolved tree, and a mixed set of
+  # owned and superseded paths must not stop it.
   assert_mdocs_reconcile_ok "$inst" "case 9"
 
-  owned_file="$(first_doc_file)"
   if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
     grep -Fq "instance-owned" "$inst/$owned_file" \
       || fail "case 9: the relocated $owned_file lost the instance's content to the framework's"

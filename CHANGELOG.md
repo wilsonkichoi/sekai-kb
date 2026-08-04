@@ -40,6 +40,61 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **Corrected the v1.1.0 upgrade note, which described a merge that does not happen.**
+  v1.1.0 told instances that relocating their own maintainer documents to `dev_docs/`
+  before merging the tag would make the old paths "a clean two-sided delete" and the new
+  tree "an add/add that the `ours` driver resolves". Both halves are wrong.
+
+  Against a merge base carrying the *framework's* document at the old path, the framework's
+  move is a high-similarity **rename** while the instance's move is a **delete plus an
+  unrelated add** — the two documents share almost no text, which is ADR 008's whole
+  premise. Rename on one side and delete on the other is a **rename/delete conflict**, and
+  git applies **no merge driver** to those, so `merge=ours` is never consulted. The real
+  upgrade produces one conflict per owned maintainer-doc path plus `.gitattributes`.
+
+  This mattered beyond accuracy: an instance told to expect a clean merge, then facing a
+  dozen conflicts, may resolve with `--theirs` and silently replace its own PRD, SPEC, and
+  ROADMAP with the framework's — the exact loss ADR 008(f) exists to prevent.
+
+  ADR 009(g) is rewritten to describe the real shape and to state the resolution: **take
+  `ours` for every conflicted path under `dev_docs/`**, and `git rm` the paths conflicted
+  only because the framework carried a record the instance never had.
+
+- **`check-upgrade-state.sh` case 9 now asserts that the relocation conflicts.** The
+  fixture wrote one-line documents whose similarity profile made git pair *both* sides as
+  renames, yielding a tidy add/add that the driver resolved. The case passed while
+  modelling a merge that cannot occur, which is how the false claim above reached a
+  release. Fixture documents now carry long, side-specific bodies so the rename-detection
+  asymmetry is real, and the case fails if the relocation ever merges cleanly — because
+  that would make the upgrade documentation wrong again.
+
+### Upgrade note
+
+Supersedes the v1.1.0 note. The relocation steps are unchanged — `git mv` to `dev_docs/`,
+declare `dev_docs/** merge=ours`, commit, *then* merge the tag — but **expect conflicts**,
+and expect two distinct classes of framework file to deal with.
+
+**1. Conflicted paths** — one per maintainer doc you own, plus `.gitattributes` and the
+package manifests. Take yours:
+
+```
+git checkout --ours -- <each conflicted path you own under dev_docs/>
+```
+
+For a conflicted path you never owned (a framework record that lived at the old path),
+`git rm` it. **Never `--theirs` on a path you own** — that is how an instance loses its own
+PRD, SPEC, and ROADMAP to the framework's.
+
+**2. Silent additions** — a framework file whose path is *new* (this release's ADR 009 and
+the four `dev_docs/research/` files) does not conflict at all. It arrives as a one-sided
+add and will not appear in the conflict list. `/sekai-upgrade`'s reconcile pass reports
+every one; delete the ones you do not want as part of the adoption commit.
+
+Verified end to end against a real instance holding its own documents at all four legacy
+paths: 9 conflicts under `dev_docs/` plus 3 outside it, and 5 silent additions.
+
 ## [1.1.0] — 2026-08-04
 
 This release relocates the framework maintainer documents to dev_docs/, adds the ported platform research and the constraints promoted from it, and makes every phase exit gate state its instance-adoption step.
