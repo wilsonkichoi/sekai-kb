@@ -39,11 +39,11 @@ are always the same repository:
   feature flags, or `/sekai-upgrade` adoption names that instance and runs there.
 - **`/dev:plan`** runs in the repository whose ROADMAP carries the phase being
   decomposed, and amends that ROADMAP there. Phases 6-11 are framework phases: plan them
-  here against `docs/ROADMAP.md`. A constraint that lands on the other repository is
+  here against `dev_docs/ROADMAP.md`. A constraint that lands on the other repository is
   recorded in the packet and surfaced to the maintainer, never written into the other
   repository's ROADMAP from this side.
 - **`/dev:backlog`** runs where the change lands. A stub that becomes framework work is
-  triaged here against `docs/SPEC.md` + `docs/ROADMAP.md`; a stub about an instance's
+  triaged here against `dev_docs/SPEC.md` + `dev_docs/ROADMAP.md`; a stub about an instance's
   content, config, or adoption is triaged there. The Linear stub itself is repo-neutral —
   triage picks the side, and the resulting packet's `Execution repo:` field records it.
 - **`/dev:status` and `/dev:retro`** read the tracker, which spans both repositories, so
@@ -60,15 +60,21 @@ governs its own — and the disagreement is a defect to report, not a choice to 
 
 ## Binding docs
 
-- **Product SSOT:** `docs/PRD.md` — what the framework is for, who adopts it, north
+- **Product SSOT:** `dev_docs/PRD.md` — what the framework is for, who adopts it, north
   star, non-goals.
-- **Engineering SSOT:** `docs/SPEC.md` + `docs/adr/` — architecture, contracts, risk
+- **Engineering SSOT:** `dev_docs/SPEC.md` + `dev_docs/adr/` — architecture, contracts, risk
   controls, negative requirements, and accepted decisions.
-- **Delivery SSOT:** `docs/ROADMAP.md` — phases 6-11 task blocks, amendments, ordering
+- **Delivery SSOT:** `dev_docs/ROADMAP.md` — phases 6-11 task blocks, amendments, ordering
   rules, and exit gates. `/dev:plan` converts packets from those blocks and amends this
   file, not a sibling checkout.
-- These four paths are **framework maintainer docs**: the init wizard strips them from
-  adopter clones and `npm run framework-docs` gates the contract (ADR 008). Phases 0-5,
+- **Research provenance:** `dev_docs/research/` — the platform research the phase 7-11
+  contracts were derived from, ported de-placed from the pre-cut instance. Reference,
+  not contract: a constraint that binds implementation is promoted into `dev_docs/SPEC.md`,
+  and time-sensitive claims there carry an as-of date and must be re-verified before use.
+- `dev_docs/` is the **framework maintainer doc** tree: the init wizard strips it from
+  adopter clones and `npm run framework-docs` gates the contract (ADR 008, relocated by
+  ADR 009 — the boundary is the directory, so a document added here later needs no
+  edit to any strip list). Phases 0-5,
   the extraction map, the inherited-fork disposition, and ADRs 001-002 stay in instance
   #1's repository as its rebuild history. A conflict among these documents goes to the
   maintainer, never silently resolved.

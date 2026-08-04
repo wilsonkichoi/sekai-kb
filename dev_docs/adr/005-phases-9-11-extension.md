@@ -25,8 +25,8 @@ that these be scheduled, not tabled.
 Extend the operative docs with **Phases 9 (MCP + AI delivery), 10 (analytics perception),
 and 11 (autonomous routines)**. Sub-decisions:
 
-1. **Governance.** `docs/ROADMAP.md` owns milestone rows and detailed task blocks;
-   `/dev:plan` converts packets from those blocks. `docs/SPEC.md` and `docs/PRD.md` own
+1. **Governance.** `dev_docs/ROADMAP.md` owns milestone rows and detailed task blocks;
+   `/dev:plan` converts packets from those blocks. `dev_docs/SPEC.md` and `dev_docs/PRD.md` own
    the corresponding engineering and product contracts. Since ADR 008 those three
    documents live in this repository for the framework's own phases.
 2. **Scheduler substrate: hybrid.** Deterministic pipelines (embeddings/index refresh,

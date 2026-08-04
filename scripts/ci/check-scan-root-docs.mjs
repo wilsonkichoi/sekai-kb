@@ -180,14 +180,14 @@ const REGISTRY = [
   {
     // Framework maintainer doc (ADR 008): authored here, removed at adoption, so it
     // is required in template mode and skipped once the wizard has run.
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Negative requirements, denylist gate roots',
     gate: 'genericity',
     scope: 'instance',
     anchor: /the\s+place-name\s+denylist\s+gate\s+scans\s+([^;]+);/,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Negative requirements, English-only gate roots',
     gate: 'english-only',
     scope: 'instance',

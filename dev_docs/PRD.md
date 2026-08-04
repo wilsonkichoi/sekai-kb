@@ -2,11 +2,11 @@
 
 **Framework maintainer document.** This is the product-intent SSOT for **sekai-kb**, the
 knowledge-base framework. Architecture and implementation contracts live in
-`docs/SPEC.md` and `docs/adr/`; phase order and task blocks live in `docs/ROADMAP.md`.
+`dev_docs/SPEC.md` and `dev_docs/adr/`; phase order and task blocks live in `dev_docs/ROADMAP.md`.
 Conflicts resolve per the precedence rule in `.agent-toolkit/dev.md`.
 
-> **Stripped at adoption.** `npm run init` removes this file along with `docs/SPEC.md`,
-> `docs/ROADMAP.md`, and `docs/adr/`. It describes the framework's own product intent,
+> **Stripped at adoption.** `npm run init` removes this file along with `dev_docs/SPEC.md`,
+> `dev_docs/ROADMAP.md`, and `dev_docs/adr/`. It describes the framework's own product intent,
 > not an adopted instance's. Adopters keep `docs/playbook/` and `docs/runbook/`, and
 > write their own product docs if they want them (ADR 008).
 

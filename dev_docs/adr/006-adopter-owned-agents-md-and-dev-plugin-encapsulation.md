@@ -80,10 +80,9 @@ are the authoritative record; `.gitattributes` in each repository is the operati
 - Every framework release's starter improvements to `AGENTS.md` are surfaced at
   upgrade time instead of being silently dropped by `merge=ours`.
 - The `merge=ours` list is now: `place.config.ts`, `knowledge/**`, `public/media/**`,
-  `CNAME`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
-  `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `docs/PRD.md`,
-  `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/**`.
-  (The last four were added by ADR 008's ownership split: an instance that keeps its
+  `CNAME`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`,
+  `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `dev_docs/**`.
+  (The last was added by ADR 008's ownership split and relocated by ADR 009: an instance that keeps its
   own documents at the framework's maintainer-doc paths owns them, and the attribute
   ships with the framework so that instance is protected from its first merge onward.
   They are inert for a wizard-adopted instance, which has nothing at those paths.)

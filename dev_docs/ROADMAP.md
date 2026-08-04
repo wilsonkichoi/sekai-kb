@@ -7,8 +7,8 @@ their Steps/Acceptance text governs packet detail.
 Every phase transition is a maintainer gate — `/dev:plan` for phase n+1 runs only after
 the maintainer confirms phase n closed. Estimates use `AI implement+review | Human`.
 
-> **Stripped at adoption.** `npm run init` removes this file along with `docs/PRD.md`,
-> `docs/SPEC.md`, and `docs/adr/`. It plans the framework's own development, not an
+> **Stripped at adoption.** `npm run init` removes this file along with `dev_docs/PRD.md`,
+> `dev_docs/SPEC.md`, and `dev_docs/adr/`. It plans the framework's own development, not an
 > adopted instance's work (ADR 008).
 
 **Scope of this document (2026-07-28, ADR 008).** Phases 0-5 built the first instance and
@@ -21,18 +21,38 @@ so task ids (`LB-*`) are continuous across the split.
 
 | # | Milestone | Outcome | Scope (tasks) | Exit gate | Est |
 |---|---|---|---|---|---|
-| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.3d · 6.4 | Live submission → D1 → GitHub issue; three real recordings and the tag adoption in 6.4; phase confirm | AI 20.25h \| Human 3h |
-| 7 | Differentiators | On-demand OG worker, RAG chat (bge-m3 + Workers AI + Claude API), QR flow | 7.1 · 7.2a-c · 7.3 | Eval set answered with citations, no hallucinated places (7.2c); phase confirm | AI 12.25h \| Human 1.75h |
-| 8 | Semiont plugin layer | Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 | Site builds with `semiont/` deleted; organs toggle via config only; phase confirm | AI 4.25h \| Human 0h |
-| 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook proven on the first real post-cut feature release | 9.1 · 9.2 · 9.3 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; phase shipped as a sekai-kb tag → instance `/sekai-upgrade` clean (9.3); maintainer phase confirm | AI 6h \| Human 0.75h |
-| 10 | Perception (analytics) | GA4 + Search Console + Cloudflare Web Analytics live behind `features.analytics`; signal fetchers ported; dashboard analytics panels | 10.1 · 10.2 | Dashboard renders real traffic/search data from a fetch run; zero analytics IDs in `src/` outside place.config; sekai-kb tag → instance `/sekai-upgrade` clean; maintainer phase confirm | AI 4.25h \| Human 1h |
-| 11 | Autonomous routines | ROUTINE organ activated: routine contract + `/schedule` skill; embeddings/index refresh (CI); maintainer (content PR review + link/health audits); feedback-triage; data-refresh; trend-discovery; social-publish; rewrite | 11.1-11.8 | Two routines live >= 1 week shipping only via PRs, zero direct pushes to main; sekai-kb tag → instance `/sekai-upgrade` clean; maintainer phase confirm | AI 16.5h \| Human 0.75h |
+| 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.3d · 6.4 | Live submission → D1 → GitHub issue, and three real recordings; tag released; instance #1 adopts clean (6.4); maintainer phase confirm | AI 20.25h \| Human 3h |
+| 7 | Differentiators | On-demand OG worker, RAG chat (bge-m3 + Workers AI + Claude API), QR flow | 7.1 · 7.2a-c · 7.3 · 7.4 | Eval set answered with citations, no hallucinated places (7.2c); tag released; instance #1 adopts clean (7.4); maintainer phase confirm | AI 13.25h \| Human 3.25h |
+| 8 | Semiont plugin layer | Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 · 8.3 | Site builds with `semiont/` deleted and organs toggle via config only; tag released; instance #1 adopts clean (8.3); maintainer phase confirm | AI 5h \| Human 0.5h |
+| 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook proven on the first real post-cut feature release | 9.1 · 9.2 · 9.3 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; tag released; instance #1 adopts clean (9.3); maintainer phase confirm | AI 6h \| Human 0.75h |
+| 10 | Perception (analytics) | GA4 + Search Console + Cloudflare Web Analytics live behind `features.analytics`; signal fetchers ported; dashboard analytics panels | 10.1 · 10.2 · 10.3 | Dashboard renders real traffic/search data from a fetch run, zero analytics IDs in `src/` outside place.config; tag released; instance #1 adopts clean (10.3); maintainer phase confirm | AI 5h \| Human 1.5h |
+| 11 | Autonomous routines | ROUTINE organ activated: routine contract + `/schedule` skill; embeddings/index refresh (CI); maintainer (content PR review + link/health audits); feedback-triage; data-refresh; trend-discovery; social-publish; rewrite | 11.1-11.9 | Two routines live >= 1 week shipping only via PRs, zero direct pushes to main; tag released; instance #1 adopts clean (11.9); maintainer phase confirm | AI 17.25h \| Human 1.25h |
 
-**Totals for these phases:** AI ≈ 59.25h | Human ≈ 7.25h. Phases 6-8 close the original
-plan (AI ≈ 32.5h | Human ≈ 3h); the extension phases 9-11 add AI ≈ 26.75h | Human ≈ 2.5h
+**Exit-gate shape (uniform for phases 6-11).** Every `Exit gate` cell above states the same
+four things in the same order, and a phase is not closed until all four hold:
+
+1. **The feature proof** — the phase-specific demonstration, run against something real.
+2. **The tag** — `sekai-kb-vX.Y.Z` released, with a CHANGELOG entry and an **Upgrade note**
+   for any config-schema addition.
+3. **Instance #1 adopts it clean** — the adoption sequence in that repository's ROADMAP
+   §"Phases 6-11": `/sekai-upgrade` against the tag, merged with a real merge commit and
+   never a squash, instance-owned files untouched, the instance's own CI green on the
+   merged tree, and `FRAMEWORK-VERSION` bumped only after that verification. Tracked as the
+   phase's terminal packet, named in the cell.
+4. **Maintainer phase confirm** — the gate `/dev:plan` for phase n+1 waits on.
+
+Part 3 is why every phase has a terminal packet (6.4, 7.4, 8.3, 9.3, 10.3, 11.9): adoption
+is real work with human steps, so it is tracked as a task rather than asserted as a
+property. Those packets execute in the instance repository; the tag they adopt is cut in
+`sekai-kb` at verify of the phase's last framework task.
+
+**Totals for these phases:** AI ≈ 62.5h | Human ≈ 10.25h. Phases 6-8 close the original
+plan (AI ≈ 34.25h | Human ≈ 5.5h); the extension phases 9-11 add AI ≈ 28.25h | Human ≈ 4.75h
 and roughly 1.5-2 weeks elapsed. Phase 6's numbers are the 2026-07-29 planning amendment's,
-not the original block estimates. Phases 0-5, and therefore the grand totals for the whole
-programme, are recorded in instance #1's roadmap.
+not the original block estimates; phases 7, 8, 10, and 11 gained a terminal adoption packet
+in the 2026-08-04 exit-gate amendment, which is the whole of the increase over the previous
+totals (AI ≈ 59.25h | Human ≈ 7.25h). Phases 0-5, and therefore the grand totals for the
+whole programme, are recorded in instance #1's roadmap.
 
 **Language policy:** every phase ships English-only. The framework carries no
 CJK/multi-language code path, language profile, or gate — in ANY code tree (`src/`,
@@ -58,11 +78,18 @@ explicit call.
 **Execution repo flow (post-cut ownership rule, ADR 004/005):** every
 code task in these phases executes in the `sekai-kb` repository; each phase closes with a
 tagged sekai-kb release (CHANGELOG entry + upgrade note for any config-schema addition),
-and instance #1 adopts it via `/sekai-upgrade` — that pull is part of each phase's exit
-gate. The only instance-side commits are instance-owned: feature flags in
-`place.config.ts`, analytics IDs, ROUTINE.md entries, wrangler secrets. New
-`place.config` keys must be absent-safe (missing key = feature off) so existing adopter
-instances upgrade without config surgery.
+and instance #1 adopts it via `/sekai-upgrade` — that pull is part 3 of each phase's exit
+gate above, tracked as the phase's terminal packet (6.4, 7.4, 8.3, 9.3, 10.3, 11.9). The
+only instance-side commits are instance-owned: feature flags in `place.config.ts`,
+analytics IDs, ROUTINE.md entries, wrangler secrets. New `place.config` keys must be
+absent-safe (missing key = feature off) so existing adopter instances upgrade without
+config surgery.
+
+The instance side of every one of those packets is the same four-step sequence, defined
+once in instance #1's ROADMAP under "Phases 6-11" along with a per-phase table of the flags
+it flips and the inputs only it has. The packets here reference that sequence rather than
+restating it, so the two documents cannot drift into disagreement about what "adopts it
+clean" means.
 
 ---
 
@@ -128,7 +155,7 @@ inline; this section is the rationale, and the packet bodies cite it.
   so the lifecycle contract would ship with an unreachable state and 11.7 would inherit both
   the runner and the first adapter. The shipped sink is not a platform client: it prints the
   post text for the operator to paste and records the resulting URL, which is what happens
-  before any account automation exists. `docs/PRD.md`'s "no framework features for
+  before any account automation exists. `dev_docs/PRD.md`'s "no framework features for
   hypothetical adopters" is satisfied — no platform API client is built.
 - **Estimates:** Phase 6 becomes AI ≈ 11.75h | Human ≈ 3h (was AI 9.5h | Human 2.5h), from
   the split, 6.4, D2, and D3.
@@ -144,7 +171,7 @@ block below carries the decision inline, this section is the rationale.
   single-column list. The reference implementation of this page on the first instance's live
   site carries ordered categories, a card grid, per-category wishlists of sounds still wanted,
   and a contribute block; that shape is what makes the page a collection rather than a file
-  listing. `docs/PRD.md`'s "no framework features for hypothetical adopters" is satisfied by
+  listing. `dev_docs/PRD.md`'s "no framework features for hypothetical adopters" is satisfied by
   the same test 6.2's decision D3 used: a real instance runs this page shape in production, so
   the need is demonstrated rather than speculative.
 - **It blocks 6.4 rather than following it.** 6.4 step 3 commits the instance's three real
@@ -210,6 +237,46 @@ carries the decision inline, this section is the rationale.
   tag and re-ingests or scrubs the four already-committed assets.
 - **Estimates:** Phase 6 becomes AI ≈ 20.25h | Human ≈ 3h (was AI ≈ 18.5h | Human ≈ 3h),
   from 6.3d alone.
+
+---
+
+## Exit-gate amendment — approved 2026-08-04
+
+Makes the adoption half of every phase gate explicit and uniform. Nothing about phase scope
+or ordering changes; what changes is that a rule already stated in prose is now stated in
+each phase's own `Exit gate` cell and tracked by a packet.
+
+**What was wrong.** The `Execution repo flow` paragraph has always said that each phase
+closes with a tagged release which instance #1 adopts, and that the pull is part of the exit
+gate. The milestone table only carried that clause for phases 9, 10, and 11. Phase 6
+deferred it to packet 6.4; phases 7 and 8 stated neither. Only 6.4 and 9.3 existed as
+terminal packets, so for phases 7, 8, 10, and 11 the adoption step was work nobody had
+estimated and no task tracked — the shape that lets a phase be declared closed while the
+instance is still on the previous release.
+
+**The rulings:**
+
+- **Every phase 6-11 `Exit gate` cell states the same four parts in the same order** —
+  feature proof, tag released, instance #1 adopts clean, maintainer confirm. The shape is
+  written out once under the milestone table.
+- **Every phase gets a terminal adoption packet:** 6.4 and 9.3 already existed; **7.4, 8.3,
+  10.3, and 11.9 are new.** Each is modelled on 6.4, including its `Execution repo:` line —
+  the packet's commits land in the instance, and the tag it adopts is cut in `sekai-kb` at
+  verify of that phase's last framework task.
+- **The instance side is referenced, never restated.** The four-step adoption sequence and
+  the per-phase table of flags and instance-only inputs live in instance #1's ROADMAP under
+  "Phases 6-11". These packets cite it. Two documents restating one sequence is exactly the
+  drift `check-scan-root-docs.mjs` exists to prevent elsewhere.
+- **`/dev:plan` converts the new packets like any other block.** They are ordinary tasks
+  with human steps, not a ceremony appended after a phase closes.
+- **Estimates:** the four new packets add AI ≈ 3.25h | Human ≈ 3h across phases 7, 8, 10,
+  and 11. Totals above are updated; no existing block's estimate changed.
+
+**Enforcement.** `npm run roadmap-gates` (`scripts/ci/check-roadmap-exit-gates.mjs`) fails
+CI when a milestone row's exit gate omits the adoption clause or names a packet that no task
+block defines. Prose has not held this rule — it was unenforced in four of six rows since it
+was written — and the standing doctrine when a rule keeps being missed is to add a check
+rather than another paragraph (`dev_docs/research/origin-decisions.md §3`).
 
 ---
 
@@ -421,10 +488,28 @@ _Phase 6 subtotal: AI 16.25h | Human 2.5h_
     1. Add a ctx-param map from location slug to location-aware greeting and retrieval hint.
     2. Add a printable QR sheet that generates codes for physical locations.
   Acceptance: scanning a location code opens /chat with a location-aware greeting
-  Downstream: none
+  Downstream: 7.4
+
+[7.4] Phase 7 exit gate: ship the tag, adopt it in the instance, go live
+  Effort: S | Model: Opus | Depends: 7.1, 7.2c, 7.3
+  Est: AI 1h + 0.25h review | Human 1.5h (Claude API key, Workers AI binding, eval review,
+    printed QR placements)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 7.1-7.3, with an upgrade note for the chat and OG
+       config keys; adopt it with /sekai-upgrade (real merge commit, instance-owned files
+       untouched, instance CI green, FRAMEWORK-VERSION bumped after verification).
+    2. Enable features.chat and the OG worker flag; deploy the instance's own chat and og
+       workers, the Claude API key, and the Workers AI binding.
+    3. Choose the instance's QR locations and their ctx slugs, and print the sheet.
+  Acceptance: the deployed instance answers the evaluation set from its own articles with
+    citations; og:image renders per-article cards in a real social preview; a scanned
+    location code opens /chat with that location's greeting; maintainer phase confirm
+  Downstream: Phase 8 entry
 ```
 
-_Phase 7 subtotal: AI 12.25h | Human 1.75h_
+_Phase 7 subtotal: AI 13.25h | Human 3.25h_
 
 **Phase 8: Semiont plugin layer**
 
@@ -454,10 +539,27 @@ and supersedes the original `CLAUDE.md` loader wording.
     1. Enable memory, reflexes, and manifesto in the instance's semiont/config.json.
     2. Salvage MANIFESTO prose by hand from the v1 archive; the organ shell is new.
   Acceptance: the AGENTS.md boot hook reads <150 lines; organs toggle through config only
-  Downstream: 11.1
+  Downstream: 8.3
+
+[8.3] Phase 8 exit gate: ship the tag, adopt it in the instance
+  Effort: S | Model: Sonnet | Depends: 8.1, 8.2
+  Est: AI 0.5h + 0.25h review | Human 0.5h (MANIFESTO prose, confirm)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 8.1, with an upgrade note for the semiont/
+       config.json manifest and the AGENTS.md boot hook (a starter-diff change, surfaced
+       conversationally by /sekai-upgrade rather than merged silently).
+    2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
+       instance CI green, FRAMEWORK-VERSION bumped after verification).
+    3. Turn on memory, reflexes, and manifesto in the instance's semiont/config.json;
+       leave diary and routine off.
+  Acceptance: the instance builds with semiont/ deleted and with it present; its enabled
+    organ set matches its config and nothing else loads; maintainer phase confirm
+  Downstream: Phase 9 entry
 ```
 
-_Phase 8 subtotal: AI 4.25h | Human 0h_
+_Phase 8 subtotal: AI 5h | Human 0.5h_
 
 ---
 
@@ -553,10 +655,27 @@ _Phase 9 subtotal: AI 6h | Human 0.75h_
     3. Credentials via local env / Actions secrets, documented in the runbook.
   Acceptance: `npm run fetch:analytics` refreshes the JSONs and the dashboard renders
     them; clean build without credentials
-  Downstream: 11.5, 11.6
+  Downstream: 10.3, 11.5, 11.6
+
+[10.3] Phase 10 exit gate: ship the tag, adopt it in the instance, go live
+  Effort: S | Model: Sonnet | Depends: 10.1, 10.2
+  Est: AI 0.5h + 0.25h review | Human 0.5h (GA4 property, Search Console verification,
+    CF Web Analytics token, fetcher credentials as Actions secrets)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 10.1-10.2, with an upgrade note for the
+       place.config analytics IDs (absent-safe: a missing key means analytics stays off).
+    2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
+       instance CI green, FRAMEWORK-VERSION bumped after verification).
+    3. Enable features.analytics, add the instance's own IDs, and register the fetcher
+       credentials as Actions secrets.
+  Acceptance: beacons fire on the live instance with the flag on and are absent with it
+    off; a real fetch run populates the dashboard panels; maintainer phase confirm
+  Downstream: Phase 11 entry
 ```
 
-_Phase 10 subtotal: AI 4.25h | Human 1h_
+_Phase 10 subtotal: AI 5h | Human 1.5h_
 
 **Phase 11: Autonomous routines**
 ```
@@ -652,7 +771,27 @@ _Phase 10 subtotal: AI 4.25h | Human 1h_
        reviews.
   Acceptance: a run produces a rewrite PR whose article-health score exceeds the prior
     score; the PR carries the automated review
-  Downstream: none
+  Downstream: 11.9
+
+[11.9] Phase 11 exit gate: ship the tag, adopt it in the instance, run the routines live
+  Effort: S | Model: Opus | Depends: 11.1-11.8
+  Est: AI 0.5h + 0.25h review | Human 0.5h (ROUTINE.md entries, first scheduled-task
+    registration, merge approval on the first rewrite PR)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 11.1-11.8, with an upgrade note for the routine
+       organ and the /schedule skill.
+    2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
+       instance CI green, FRAMEWORK-VERSION bumped after verification).
+    3. Turn the routine organ on in the instance's semiont/config.json, write the
+       instance's own ROUTINE.md entries, and register the first scheduled tasks. Which
+       routines the instance runs, on what schedule, and in which ship-mode is
+       instance-owned work, not an adoption step.
+  Acceptance: two routines have run for >= 1 week on the live instance shipping only via
+    PRs, with zero direct pushes to main over that window (git log on main is the
+    evidence); maintainer phase confirm
+  Downstream: none — this closes the roadmap
 ```
 
-_Phase 11 subtotal: AI 16.5h | Human 0.75h_
+_Phase 11 subtotal: AI 17.25h | Human 1.25h_

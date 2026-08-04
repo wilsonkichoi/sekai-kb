@@ -45,7 +45,6 @@ the semiont probe, and the content working set.
 - **Versions:** this template has only `FRAMEWORK-VERSION`, the Sekai release SSOT.
   Init creates adopter `VERSION`. In each repository, `package.json.version`
   mirrors its own release SSOT without the leading `v`.
-- **Architecture diagrams (engineering SSOT):** `docs/diagrams/*.drawio`.
 - **Engineering rules:** `.agent-toolkit/rules/` — framework-owned lessons that keep
   the build green (Astro/Vite gotchas, prebuild ordering, shell portability,
   lockfile). Dev-plugin state, indexed in `.agent-toolkit/dev.md`; stripped from
@@ -176,15 +175,22 @@ task/PR/CI/review/verify lifecycle). Adopters do not need any of this — the in
 wizard strips the `.agent-toolkit/` tree and the reference line below when you
 adopt the template, so a fresh instance ships zero dev-plugin state.
 
-**Framework maintainer docs** (ADR 008) live beside the code they govern and are
-stripped at adoption in the same pass:
+**Framework maintainer docs** (ADR 008) live beside the code they govern, in
+`dev_docs/`, and the whole directory is stripped at adoption in the same pass
+(ADR 009 — one directory, so a document added later is on the correct side by
+default):
 
-- [`docs/PRD.md`](docs/PRD.md) — product SSOT: what the framework is for, who adopts
-  it, north star, non-goals.
-- [`docs/SPEC.md`](docs/SPEC.md) + [`docs/adr/`](docs/adr/) — engineering SSOT:
-  architecture, contracts, risk controls, negative requirements, accepted decisions.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — delivery SSOT: the phase 6-11 task blocks
-  `/dev:plan` converts packets from.
+- [`dev_docs/PRD.md`](dev_docs/PRD.md) — product SSOT: what the framework is for, who
+  adopts it, north star, non-goals.
+- [`dev_docs/SPEC.md`](dev_docs/SPEC.md) + [`dev_docs/adr/`](dev_docs/adr/) —
+  engineering SSOT: architecture, contracts, risk controls, negative requirements,
+  accepted decisions.
+- [`dev_docs/ROADMAP.md`](dev_docs/ROADMAP.md) — delivery SSOT: the phase 6-11 task
+  blocks `/dev:plan` converts packets from.
+- [`dev_docs/diagrams/`](dev_docs/diagrams/) — architecture diagrams (draw.io), the
+  engineering source of truth.
+- [`dev_docs/research/`](dev_docs/research/) — the platform research the phase 7-11
+  contracts were derived from, ported de-placed from the pre-cut instance.
 
 `docs/playbook/` and `docs/runbook/` are adopter-facing and deliberately survive
 adoption. `npm run framework-docs` gates the whole contract: the strip list is derived

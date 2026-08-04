@@ -72,7 +72,6 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
   (`scripts/tools/snippet/`): `/sekai-snippet` drafts a short-form post from an
   article into `knowledge/SNIPPET-INBOX.md`, you approve it by hand, and
   `npm run snippet:publish` posts it through an adapter.
-- **`docs/diagrams/`** — architecture diagrams (draw.io), the engineering source of truth.
 - **`workers/`** — Cloudflare Workers, one directory per worker (`workers/feedback/`
   backs the feedback endpoint). Deployed by hand with `wrangler`, never by CI.
 - **`scripts/visual/`** — visual regression tooling (`npm run visual:baseline` to

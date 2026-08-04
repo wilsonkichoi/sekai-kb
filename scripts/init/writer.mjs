@@ -21,9 +21,9 @@
  *   .sekai-template                            removed (template → instance)
  *   .agent-toolkit/                            removed (dev-plugin state, not
  *                                              shipped to adopters)
- *   docs/PRD.md, docs/SPEC.md,                 removed (framework maintainer docs,
- *   docs/ROADMAP.md, docs/adr/                 ADR 008). docs/playbook/ and
- *                                              docs/runbook/ stay.
+ *   dev_docs/                                  removed (framework maintainer docs,
+ *                                              ADR 008 + ADR 009). docs/playbook/
+ *                                              and docs/runbook/ stay.
  *
  * Writing is a pure function of the resolved config, with no timestamps or
  * environment reads, so the same answers always produce byte-identical output.
@@ -299,7 +299,6 @@ Code reaches it through a one-line \`@AGENTS.md\` shim in \`CLAUDE.md\`.
 - **Versions:** \`VERSION\` is this instance's release SSOT. \`FRAMEWORK-VERSION\`
   records the adopted Sekai release. \`package.json.version\` mirrors \`VERSION\`
   without the leading \`v\`.
-- **Architecture diagrams (engineering SSOT):** \`docs/diagrams/*.drawio\`.
 
 ## How the site builds
 
@@ -456,25 +455,28 @@ const DENYLIST_LOCAL_HEADER = `# genericity-denylist.local.txt — INSTANCE-OWNE
 `;
 
 /**
- * Framework maintainer docs, removed at adoption (ADR 008).
+ * Framework maintainer docs, removed at adoption (ADR 008, relocated by ADR 009).
  *
- * These are the framework's own product, architecture, and delivery SSOTs: they
- * describe how sekai-kb is built, never how an instance is operated. Same class as
- * `.agent-toolkit/` below — framework-development state that a fresh instance ships
- * none of. `docs/playbook/` and `docs/runbook/` deliberately do NOT appear here:
- * those are how an adopter writes articles and runs the site.
+ * These are the framework's own product, architecture, and delivery SSOTs plus the
+ * research they were derived from: they describe how sekai-kb is built, never how an
+ * instance is operated. Same class as `.agent-toolkit/` below — framework-development
+ * state that a fresh instance ships none of. `docs/playbook/` and `docs/runbook/`
+ * deliberately do NOT appear here: those are how an adopter writes articles and runs
+ * the site.
+ *
+ * ONE DIRECTORY, NOT AN ENUMERATION (ADR 009). The previous form listed four paths
+ * inside `docs/`, which put the boundary in a list rather than in the tree: a new
+ * maintainer document landed on the adopter side unless someone remembered to extend
+ * the array, and `docs/diagrams/` shipped to adopters for exactly that reason. A
+ * directory makes the default correct — anything a maintainer adds under `dev_docs/`
+ * is stripped without touching this file.
  *
  * This array is the single declaration of what adoption removes.
  * `scripts/ci/check-framework-docs.mjs` derives the list from this source rather
  * than restating it, and proves no file an adopter keeps links into a removed path;
  * `scripts/init/check-init.sh` asserts both halves against a really stripped tree.
  */
-export const MAINTAINER_DOCS = [
-  'docs/PRD.md',
-  'docs/SPEC.md',
-  'docs/ROADMAP.md',
-  'docs/adr',
-];
+export const MAINTAINER_DOCS = ['dev_docs'];
 
 /**
  * Demo media removed at adoption, the same class as the demo articles below.

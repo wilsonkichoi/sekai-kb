@@ -194,8 +194,8 @@ git merge --no-ff sekai-kb-vX.Y.Z -m "chore: upgrade framework to sekai-kb-vX.Y.
 
 `.gitattributes merge=ours` keeps the instance's **existing** copy of every
 instance-owned file (`place.config.ts`, `knowledge/**`, `public/media/**`,
-`CNAME`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
-`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/**`) — those do not
+`CNAME`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`,
+`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `dev_docs/**`) — those do not
 conflict. It says nothing about a path the instance **deleted** (`.agent-toolkit/`
 on a wizard-adopted instance) or never had: git applies no merge driver there, so
 step 5 owns that case. It also says nothing about a path the instance has not

@@ -288,20 +288,18 @@ merges keep the instance's version:
 | `CHANGELOG.md` | instance work history; framework notes are read from the target tag |
 | `VERSION` | the instance's own release version; framework upgrades never change it |
 | `FRAMEWORK-VERSION` | adopted framework tag; bumped explicitly after upgrade verification |
-| `docs/baselines/**` | instance-captured health/visual baselines |
 | `scripts/ci/genericity-denylist.local.txt` | the place's own denylisted terms |
 | `.agent-toolkit/**` | dev-plugin state (config + promoted rules) — each repo owns its own |
-| `docs/PRD.md` | your own product doc, if you keep one at the framework's maintainer-doc path |
-| `docs/SPEC.md` | your own architecture doc, same path, same rule |
-| `docs/ROADMAP.md` | your own delivery doc, same path, same rule |
-| `docs/adr/**` | your own decision records, same path, same rule |
+| `dev_docs/**` | your own product, architecture, delivery, or decision records, plus any captured baselines, at the framework's maintainer-doc path |
 
-The last four are inert for most instances: the wizard strips the framework's
-copies, so there is nothing at those paths to protect. They matter for an instance
-that writes its **own** documents there, which the maintainer-doc split explicitly
-allows — the attribute ships with the framework so such an instance is protected
-from its first merge onward rather than having to remember. Their *absence* is a
-different problem the attribute cannot solve; see "Maintainer-doc state" below.
+The last entry is inert for most instances: the wizard strips the framework's
+copy, so there is nothing at that path to protect. It matters for an instance that
+writes its **own** product, architecture, delivery, or decision records there, which
+the maintainer-doc split explicitly allows — the attribute ships with the framework
+so such an instance is protected from its first merge onward rather than having to
+remember. It is one directory rather than a list of files, so a document you add
+later is protected without an edit here. Its *absence* is a different problem the
+attribute cannot solve; see "Maintainer-doc state" below.
 
 Adopters add their own instance-specific files to `.gitattributes` the same way.
 The list is append-only from the framework baseline; the framework never removes a

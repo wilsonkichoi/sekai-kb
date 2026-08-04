@@ -2,7 +2,7 @@
 // check-soundscape-schema-docs.mjs -- the soundscape manifest schema documentation gate.
 //
 // `src/lib/sounds.ts` is the only implementation of the `knowledge/sounds/_manifest.md`
-// schema, and two documents restate that schema in prose: docs/SPEC.md (New builds, 4)
+// schema, and two documents restate that schema in prose: dev_docs/SPEC.md (New builds, 4)
 // and the manifest's own body, which is what an adopter reads before editing the file.
 // Prose that drifts from the reader is worse than absent prose, because it gets believed
 // rather than looked up, and this repository is a template -- a wrong field list
@@ -27,7 +27,7 @@
 // Registry scopes, matching scripts/ci/check-scan-root-docs.mjs:
 //   - `framework` -- framework-owned file, present in every checkout. A missing file or
 //     anchor fails in both modes.
-//   - `instance`  -- a file the adopter owns or that adoption removes (docs/SPEC.md is a
+//   - `instance`  -- a file the adopter owns or that adoption removes (dev_docs/SPEC.md is a
 //     maintainer doc stripped at adoption, ADR 008; the demo manifest is content the init
 //     wizard deletes and the adopter rewrites). Required in TEMPLATE mode, where this
 //     repository authors the text. In an adopted instance an absent file or a reworded
@@ -78,7 +78,7 @@ const GROUPS = {
 // never field names, so they stay valid when the reader changes and fail loudly when the
 // prose changes.
 
-const SPEC = 'docs/SPEC.md';
+const SPEC = 'dev_docs/SPEC.md';
 const MANIFEST = 'knowledge/sounds/_manifest.md';
 
 const REGISTRY = [

@@ -2,13 +2,13 @@
 
 **Framework maintainer document.** This is the engineering SSOT for the framework's
 architecture, contracts, negative requirements, and risk controls. Product intent lives
-in `docs/PRD.md`; delivery detail lives in `docs/ROADMAP.md`; accepted decisions live in
-`docs/adr/`. Conflicts go to the maintainer (see `.agent-toolkit/dev.md`). Engineering
-diagrams (SSOT): `docs/diagrams/architecture.drawio`, `data-flow.drawio`,
+in `dev_docs/PRD.md`; delivery detail lives in `dev_docs/ROADMAP.md`; accepted decisions live in
+`dev_docs/adr/`. Conflicts go to the maintainer (see `.agent-toolkit/dev.md`). Engineering
+diagrams (SSOT): `dev_docs/diagrams/architecture.drawio`, `data-flow.drawio`,
 `repo-topology.drawio` — updated in the same PR as any architecture change they depict.
 
-> **Stripped at adoption.** `npm run init` removes this file along with `docs/PRD.md`,
-> `docs/ROADMAP.md`, and `docs/adr/`. Adopters keep `docs/playbook/` and
+> **Stripped at adoption.** `npm run init` removes this file along with `dev_docs/PRD.md`,
+> `dev_docs/ROADMAP.md`, and `dev_docs/adr/`. Adopters keep `docs/playbook/` and
 > `docs/runbook/` (ADR 008).
 >
 > **Sections that did not move.** This document was split out of instance #1's SPEC. The
@@ -36,6 +36,21 @@ diagrams (SSOT): `docs/diagrams/architecture.drawio`, `data-flow.drawio`,
   mandatory, since an offline GPU is unreachable at request time). At single-instance
   scale, retrieval is in-worker cosine over static JSON vectors; Vectorize is the
   documented path at roughly 4k+ vectors.
+- **Workers are TypeScript, never Python.** Python Workers run Pyodide inside the V8
+  isolate, costing memory overhead and cold-start latency the CPU budget below has no room
+  for, and adding tens of seconds to deployment.
+- **No native hybrid search on this platform.** Workers AI's `@cf/baai/bge-m3` runner
+  returns only the 1024-dimensional **dense** vector, and Vectorize indexes neither sparse
+  dictionaries nor multi-vector matrices — so bge-m3's sparse and multi-vector
+  representations are unreachable here at any scale. Keyword and vector fusion, if it is
+  ever built, is Reciprocal Rank Fusion merged in-worker over the existing MiniSearch
+  index. Evidence and the measurements behind this:
+  `dev_docs/research/platform-notes.md §2.3`, `§2.5`.
+- **Chat generation calls the Claude API** with citation-required prompting. The model is
+  selected at packet time against the current lineup and is deliberately **not pinned
+  here**: the quality/cost escalation path and its per-token figures are recorded in
+  `dev_docs/research/platform-notes.md §2.10`, dated, and must be re-verified before use.
+  Pinning a model identifier from archived research would ship a stale contract.
 
 ## Repo topology
 
@@ -45,8 +60,7 @@ framework main**; determinism is guaranteed by (a) immutable semver tags + CHANG
 upgrade notes, (b) zero place content in the template, (c) `merge=ours` on instance-owned
 files (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
 `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`,
-`docs/baselines/**`, `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`,
-`docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/**`),
+`scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `dev_docs/**`),
 (d) the **ownership rule**: an instance's `src/` and `scripts/` are framework-owned —
 customization flows through config/content/media; anything more is upstreamed to sekai-kb
 first and pulled back as a release. `.gitattributes` in each repository is the operative
@@ -85,10 +99,10 @@ sekai-kb/
 ├── .agents/skills/            # framework-owned skills
 ├── docs/playbook/             # adopter-facing editorial canon
 ├── docs/runbook/              # adopter-facing operations
-├── docs/PRD.md                # framework maintainer doc; removed by init
-├── docs/SPEC.md               # framework maintainer doc; removed by init
-├── docs/ROADMAP.md            # framework maintainer doc; removed by init
-├── docs/adr/                  # framework maintainer docs; removed by init
+├── dev_docs/PRD.md                # framework maintainer doc; removed by init
+├── dev_docs/SPEC.md               # framework maintainer doc; removed by init
+├── dev_docs/ROADMAP.md            # framework maintainer doc; removed by init
+├── dev_docs/adr/                  # framework maintainer docs; removed by init
 ├── CHANGELOG.md               # framework release log; init replaces it with instance history
 ├── VERSION                    # adopter only: instance release; merge=ours
 ├── FRAMEWORK-VERSION          # adopted tag; captured/restored across the merge, then bumped
@@ -107,8 +121,8 @@ sekai-kb/
 > upgrade with a diagnostic. Framework dev-plugin state is never reacquired implicitly;
 > `dev:setup` is the only opt-in path.
 
-> **Maintainer-doc ownership (2026-07-28, ADR 008):** `docs/PRD.md`, `docs/SPEC.md`,
-> `docs/ROADMAP.md`, and `docs/adr/` are framework-development state in the same class as
+> **Maintainer-doc ownership (2026-07-28, ADR 008):** `dev_docs/PRD.md`, `dev_docs/SPEC.md`,
+> `dev_docs/ROADMAP.md`, and `dev_docs/adr/` are framework-development state in the same class as
 > `.agent-toolkit/`. The init wizard removes them; `docs/playbook/` and `docs/runbook/`
 > stay, because they are what an adopter operates the site with. No file that ships to an
 > adopter may carry a link into a removed path —
@@ -397,7 +411,15 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   and so is
   agent-executed skill prose. `scripts/ci/check-scan-root-docs.mjs` keeps every statement
   of those root sets, including this one, synchronized with the gates.
-- **No build-time OG generation ever**; static default until the Phase 7 worker.
+- **No build-time OG generation ever**; static default until the Phase 7 worker. The
+  evidence is build-time and pipeline complexity, never dollars: upstream it cost a 12 GB
+  Node heap and a ~120-minute build to render images for articles that are ~80-90% never
+  shared (`dev_docs/research/platform-notes.md §1`). An argument that reaches for a cost
+  saving finds none and concludes wrongly.
+- **Corpus vectors and the search index are parsed once into worker global scope.** The
+  free Workers plan caps V8 CPU per request, and parsing a corpus-sized JSON index consumes
+  most of that budget on its own, so a per-request `JSON.parse` of the corpus is a defect,
+  not a style preference. Measurements: `dev_docs/research/platform-notes.md §2.6`.
 - **Site builds with `semiont/` deleted**; no organ reads another organ's files (ADR 003).
 - **CI must run on pull requests**: gate + build jobs trigger on `pull_request`
   (the deploy job only on push to `main`), so every task PR gets CI.
@@ -410,7 +432,7 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
 - **New `place.config` keys must be absent-safe**: a missing key means the feature is
   off; framework upgrades never require config surgery on existing instances.
 - **Framework maintainer docs never ship to an adopter**: `npm run init` removes
-  `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, and `docs/adr/`, and no file that
+  `dev_docs/PRD.md`, `dev_docs/SPEC.md`, `dev_docs/ROADMAP.md`, and `dev_docs/adr/`, and no file that
   survives adoption may link into them (ADR 008;
   `scripts/ci/check-framework-docs.mjs`).
 
@@ -418,7 +440,7 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
 
 - **2026-07-28, ADR 008 docs ownership split:** this document was created by moving the
   framework sections of instance #1's SPEC into the framework repository, alongside a
-  framework `docs/PRD.md`, `docs/ROADMAP.md`, and ADRs 003-007. The extraction map and
+  framework `dev_docs/PRD.md`, `dev_docs/ROADMAP.md`, and ADRs 003-007. The extraction map and
   inherited-fork disposition sections did not move. `npm run init` strips all four
   maintainer paths, `scripts/init/check-init.sh` asserts the strip on a really stripped
   tree, and `scripts/ci/check-framework-docs.mjs` gates dangling references plus the

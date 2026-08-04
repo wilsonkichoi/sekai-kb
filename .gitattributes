@@ -18,7 +18,6 @@ place.config.ts merge=ours
 knowledge/** merge=ours
 public/media/** merge=ours
 CNAME merge=ours
-docs/baselines/** merge=ours
 scripts/ci/genericity-denylist.local.txt merge=ours
 
 # Dev-plugin state (agent-toolkit): the config + promoted rules are committed and
@@ -28,14 +27,16 @@ scripts/ci/genericity-denylist.local.txt merge=ours
 # stripped at adoption by the init wizard.)
 .agent-toolkit/** merge=ours
 
-# Maintainer-doc paths (ADR 008). The init wizard strips the framework's own copies,
-# so most instances have nothing here and these lines are inert. An instance that
-# keeps its OWN product, architecture, delivery, or decision records at these paths
-# is a legitimate state, and its documents are never the framework's to overwrite —
-# shipping the attribute means such an instance is protected by default instead of
-# having to remember to add it before its next merge. Absence is a different problem
-# that no attribute can solve; scripts/upgrade/maintainer-docs-state.mjs owns it.
-docs/PRD.md merge=ours
-docs/SPEC.md merge=ours
-docs/ROADMAP.md merge=ours
-docs/adr/** merge=ours
+# Maintainer-doc tree (ADR 008, relocated to dev_docs/ by ADR 009). The init wizard
+# strips the framework's own copy, so most instances have nothing here and this line is
+# inert. An instance that keeps its OWN product, architecture, delivery, or decision
+# records here is a legitimate state, and its documents are never the framework's to
+# overwrite — shipping the attribute means such an instance is protected by default
+# instead of having to remember to add it before its next merge. Absence is a different
+# problem that no attribute can solve; scripts/upgrade/maintainer-docs-state.mjs owns it.
+#
+# One directory, not an enumeration. The pre-ADR-009 form listed four paths inside
+# docs/, so an instance's fifth maintainer document was unprotected until someone
+# remembered to add a line. Captured baselines (formerly docs/baselines/**) are covered
+# by this line for the same reason.
+dev_docs/** merge=ours

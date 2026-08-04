@@ -74,6 +74,13 @@ jobs:
       - name: Self-test — the maintainer-doc guard fails on every planted defect class
         run: npm run framework-docs:selftest
 
+      # ADR 004/005: every phase closes with a tagged release that instance #1 adopts.
+      # Template mode only — an adopted instance has no framework ROADMAP to check.
+      - name: ROADMAP exit-gate contract (tag, instance adoption, confirm, packet defined)
+        run: npm run roadmap-gates
+      - name: Self-test — the exit-gate guard fails on every planted defect class
+        run: npm run roadmap-gates:selftest
+
   test:
     name: Test
     needs: genericity

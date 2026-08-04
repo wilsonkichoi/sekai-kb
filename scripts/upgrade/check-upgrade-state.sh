@@ -470,12 +470,20 @@ strip_maintainer_docs() { # dir
   for rel in $MAINTAINER_DOCS; do rm -rf "$1/$rel"; done
 }
 
-first_doc_file() { # — the first file-shaped maintainer-doc path
+# A concrete FILE inside the maintainer-doc set, for the conflict fixtures below.
+# Mirrors seed_maintainer_docs: a `*.md` entry is itself a file, and any other entry
+# is a directory the seeder fills with 001-example.md. Deriving the file from the
+# entry shape rather than requiring a `*.md` entry is what lets the declaration be a
+# single directory (ADR 009) without this fixture losing its conflict target.
+first_doc_file() { # — a concrete file path the seeder writes
   local rel
   for rel in $MAINTAINER_DOCS; do
-    case "$rel" in *.md) printf '%s' "$rel"; return ;; esac
+    case "$rel" in
+      *.md) printf '%s' "$rel"; return ;;
+      *)    printf '%s/001-example.md' "$rel"; return ;;
+    esac
   done
-  fail "fixture: the derived maintainer-doc set contains no file-shaped path"
+  fail "fixture: the derived maintainer-doc set is empty"
 }
 
 assert_maintainer_docs_absent() { # dir label
@@ -1257,58 +1265,175 @@ case_mdocs_owned_preserved() { # workdir
 }
 
 # ---------------------------------------------------------------------------
-# Case 9 — maintainer docs: PARTIALLY owned instance (per-path, never a stop)
+# Case 9 — maintainer docs: the DECLARATION RELOCATES across the upgrade
+# (per-path, never a stop)
 # ---------------------------------------------------------------------------
-case_mdocs_partially_owned() { # workdir
-  local work="$1" fw inst owned rest rel
+#
+# This is the mixed-ownership case, and ADR 009 is what makes it the realistic one.
+# `classify` runs BEFORE the merge and derives from the working tree's wizard, which
+# still names the OLD paths. `reconcile` runs after and re-derives from the MERGED
+# tree, which names the new one. Their union is a set where some entries are owned
+# and some are stripped, which is the branch under test — and it is no longer
+# constructible by owning one declared path and not another, because the declaration
+# is now a single directory.
+#
+# The instance models the documented upgrade order: relocate its own documents and
+# commit that FIRST, then merge the tag. Done that way the old paths are already gone
+# at the pre-merge revision, so they classify as stripped, and the new directory is
+# present, so it classifies as owned. Merging without relocating first is the
+# modify/delete shape cases 6 and 7 already cover.
+#
+# LEGACY_MAINTAINER_DOCS is fixture history: a declaration a previous release carried.
+# A past contract is not derivable from the current source, so it is written here —
+# unlike the live set, which is always derived.
+LEGACY_MAINTAINER_DOCS="docs/PLAN.md docs/decisions"
+# The one superseded path fw-v2 still ships a file at (see build_framework_relocating).
+LEGACY_SURVIVING_DOC="docs/PLAN.md"
+
+# The wizard as a NAMED release declared it, rather than as this repository does now.
+write_wizard_declaring() { # dir path-list
+  local rel
+  mkdir -p "$1/scripts/init"
+  {
+    printf 'export const MAINTAINER_DOCS = [\n'
+    for rel in $2; do printf "  '%s',\n" "$rel"; done
+    printf '];\n'
+  } > "$1/scripts/init/writer.mjs"
+}
+
+# Seed/strip at an explicit path list, so the fixture can hold documents at the paths
+# a previous release declared as well as at the current ones.
+write_docs_at() { # dir path-list marker
+  local rel
+  for rel in $2; do
+    case "$rel" in
+      *.md)
+        mkdir -p "$1/$(dirname "$rel")"
+        printf '# Maintainer doc: %s (%s)\n' "$rel" "$3" > "$1/$rel"
+        ;;
+      *)
+        mkdir -p "$1/$rel"
+        printf '# Decision record 001 (%s)\n' "$3" > "$1/$rel/001-example.md"
+        ;;
+    esac
+  done
+}
+
+# A framework whose fw-v1 declares the legacy paths and whose fw-v2 relocates the
+# declaration to the current one — the release shape this suite's own repository ships.
+build_framework_relocating() { # dir
+  local fw="$1"
+  init_repo "$fw"
+  mkdir -p "$fw/.agent-toolkit/rules" "$fw/src" "$fw/scripts/upgrade"
+  write_framework_agents_md "$fw/AGENTS.md"
+  write_dev_config "$fw/.agent-toolkit/dev.md" "fw-v1"
+  printf -- '---\ntier: doctrine\n---\n# Example rule (framework-owned, fw-v1)\n' \
+    > "$fw/.agent-toolkit/rules/example-rule.md"
+  write_gitattributes "$fw"
+  write_wizard_declaring "$fw" "$LEGACY_MAINTAINER_DOCS"
+  write_docs_at "$fw" "$LEGACY_MAINTAINER_DOCS" "fw-v1"
+  mkdir -p "$fw/docs/playbook"
+  printf '# Editorial canon (adopter-facing, survives adoption)\n' > "$fw/docs/playbook/keep.md"
+  printf '# Framework changelog\n\nFramework release fw-v1.\n' > "$fw/CHANGELOG.md"
+  printf 'template-v1\n' > "$fw/VERSION"
+  printf 'framework-v1\n' > "$fw/FRAMEWORK-VERSION"
+  printf 'export const place = { name: "Example", tagline: "The framework demo place." };\n' > "$fw/place.config.ts"
+  printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  cp "$HELPER_SRC" "$fw/scripts/upgrade/dev-plugin-state.mjs"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v1 (legacy maintainer-doc declaration)"
+  git -C "$fw" tag fw-v1
+
+  # fw-v2 relocates the DECLARATION to the current path set. One superseded path is
+  # deliberately left behind in the framework tree, still carrying content: a release
+  # that moves a declaration does not necessarily delete every file the old one named.
+  # That lingering path is what gives reconcile something only it can do here — the
+  # merge re-adds the framework's copy to an instance that owns nothing there, and
+  # removing it is the `!owned` branch under test. Without it this case would pass on
+  # the merge alone and prove nothing (the selftest asserts exactly that).
+  local rel first=1
+  for rel in $LEGACY_MAINTAINER_DOCS; do
+    if [ "$first" = 1 ]; then first=0; continue; fi
+    git -C "$fw" rm -r -q -- "$rel"
+  done
+  write_docs_at "$fw" "$LEGACY_SURVIVING_DOC" "fw-v2"
+  write_wizard_declaring "$fw" "$MAINTAINER_DOCS"
+  write_maintainer_docs "$fw" "fw-v2"
+  for rel in $MAINTAINER_DOCS; do
+    case "$rel" in
+      *.md) ;;
+      *) printf '# Decision record 002 (added in fw-v2)\n' > "$fw/$rel/002-added-in-fw-v2.md" ;;
+    esac
+  done
+  printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
+  printf '# Framework changelog\n\nFramework release fw-v2.\n' > "$fw/CHANGELOG.md"
+  rm "$fw/VERSION"
+  printf 'framework-v2\n' > "$fw/FRAMEWORK-VERSION"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v2 (maintainer-doc declaration relocated)"
+  git -C "$fw" tag fw-v2
+}
+
+case_mdocs_declaration_relocated() { # workdir
+  local work="$1" fw inst rel owned_file
   fw="$work/fw"
   inst="$work/instance"
   mkdir -p "$work"
-  build_framework "$fw"
+  build_framework_relocating "$fw"
   clone_at_v1 "$fw" "$inst"
 
-  owned="$(first_doc_file)"
-  rest=""
-  for rel in $MAINTAINER_DOCS; do
-    if [ "$rel" != "$owned" ]; then
-      rest="$rest $rel"
-      rm -rf "$inst/$rel"
-    fi
-  done
-  # The one path the instance keeps is its own document, and only it is protected.
-  printf '# Instance document at %s\n' "$owned" > "$inst/$owned"
-  case "$owned" in
-    *.md) printf '%s merge=ours\n' "$owned" >> "$inst/.gitattributes" ;;
-  esac
+  # The instance's own documents, at the paths fw-v1 declared.
+  write_docs_at "$inst" "$LEGACY_MAINTAINER_DOCS" "instance-owned"
   write_instance_agents_md "$inst/AGENTS.md" no-reference
   git -C "$inst" add -A
-  git -C "$inst" commit -q -m "Instance owns one maintainer-doc path and no others"
+  git -C "$inst" commit -q -m "Instance writes its own documents at the legacy paths"
 
-  assert_mdocs_classify "$inst" "case 9" "$owned" "$rest"
+  # Step 1 of the documented upgrade: relocate, protect, COMMIT — before any merge.
+  for rel in $LEGACY_MAINTAINER_DOCS; do git -C "$inst" rm -r -q -- "$rel"; done
+  write_docs_at "$inst" "$MAINTAINER_DOCS" "instance-owned"
+  append_maintainer_doc_attributes "$inst"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Relocate this instance's own documents to the new path"
+
+  # Pre-merge, classify can only speak about what the pre-merge wizard DECLARES, which
+  # is the legacy set — and the instance has relocated away from all of it, so every
+  # legacy path is stripped and nothing is owned. The new path is not yet declared
+  # anywhere, so it appears in neither list.
+  #
+  # This is the load-bearing detail of the whole relocation: what makes the instance's
+  # relocated documents survive is NOT the captured state. It is reconcile re-deriving
+  # the declaration from the MERGED tree and then asking `existedAt(pre-merge revision)`
+  # for anything the capture did not classify. Because the relocation was committed
+  # before the merge, that question answers yes and the tree is treated as owned. An
+  # instance that merged first and relocated afterwards would be answered no.
+  assert_mdocs_classify "$inst" "case 9" "" "$LEGACY_MAINTAINER_DOCS"
 
   git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
-  # A partial set is a normal state: the run must not stop.
+  # A mixed set is a normal state: the run must not stop.
   assert_mdocs_reconcile_ok "$inst" "case 9"
 
+  owned_file="$(first_doc_file)"
   if [ "${SKIP_RECONCILE:-0}" != "1" ]; then
-    grep -Fq "Instance document at $owned" "$inst/$owned" \
-      || fail "case 9: the instance's own $owned was overwritten or deleted"
-    ok "case 9: the one owned path kept the instance's content"
-    for rel in $rest; do
-      [ ! -e "$inst/$rel" ] || fail "case 9: stripped path $rel survives in the working tree"
-      [ -z "$(git -C "$inst" ls-files -- "$rel")" ] || fail "case 9: stripped path $rel is still tracked"
+    grep -Fq "instance-owned" "$inst/$owned_file" \
+      || fail "case 9: the relocated $owned_file lost the instance's content to the framework's"
+    ok "case 9: the relocated documents kept the instance's content"
+    for rel in $LEGACY_MAINTAINER_DOCS; do
+      [ ! -e "$inst/$rel" ] || fail "case 9: legacy path $rel came back into the working tree"
+      [ -z "$(git -C "$inst" ls-files -- "$rel")" ] || fail "case 9: legacy path $rel is still tracked"
+      [ -z "$(git -C "$inst" ls-files -u -- "$rel")" ] \
+        || fail "case 9: legacy path $rel still has unmerged entries"
     done
-    ok "case 9: every path the instance did not own was removed"
+    ok "case 9: no path from the superseded declaration survived the upgrade, including the one the framework still ships"
   fi
 
   finalize_merge "$inst" "case 9"
   assert_is_merge_commit "$inst" "case 9"
-  for rel in $rest; do
+  for rel in $LEGACY_MAINTAINER_DOCS; do
     [ -z "$(git -C "$inst" ls-tree -r --name-only HEAD -- "$rel")" ] \
-      || fail "case 9: the finalized merge commit carries stripped path $rel"
+      || fail "case 9: the finalized merge commit carries superseded path $rel"
   done
-  git -C "$inst" ls-tree -r --name-only HEAD -- "$owned" | grep -q . \
-    || fail "case 9: the finalized merge commit dropped the instance's own $owned"
+  git -C "$inst" ls-tree -r --name-only HEAD -- "$owned_file" | grep -q . \
+    || fail "case 9: the finalized merge commit dropped the instance's own $owned_file"
   ok "case 9: per-path outcome survives into the merge commit"
 }
 
@@ -2099,8 +2224,8 @@ run_all_cases() {
   echo "── case 8: maintainer docs — fully owned instance, protected ──"
   case_mdocs_owned_preserved "$TMP/case8"
   echo ""
-  echo "── case 9: maintainer docs — partially owned instance (per path, no stop) ──"
-  case_mdocs_partially_owned "$TMP/case9"
+  echo "── case 9: maintainer docs — declaration relocated across the upgrade (per path, no stop) ──"
+  case_mdocs_declaration_relocated "$TMP/case9"
   echo ""
   echo "── case 10: maintainer docs — owned but unprotected (must stop) ──"
   case_mdocs_owned_unprotected "$TMP/case10"
@@ -2149,7 +2274,7 @@ run_selftest() {
   expect_case_to_fail case_mdocs_stripped_shared_history "$TMP/selftest-case6" "case 6 (maintainer docs, stripped, shared history)"
   expect_case_to_fail case_mdocs_stripped_unrelated_history "$TMP/selftest-case7" "case 7 (maintainer docs, stripped, unrelated history)"
   expect_case_to_fail case_mdocs_owned_preserved "$TMP/selftest-case8" "case 8 (maintainer docs, fully owned)"
-  expect_case_to_fail case_mdocs_partially_owned "$TMP/selftest-case9" "case 9 (maintainer docs, partially owned)"
+  expect_case_to_fail case_mdocs_declaration_relocated "$TMP/selftest-case9" "case 9 (maintainer docs, declaration relocated)"
   expect_case_to_fail case_mdocs_owned_unprotected "$TMP/selftest-case10" "case 10 (maintainer docs, owned but unprotected)"
   expect_case_to_fail case_mdocs_first_upgrade_from_tag "$TMP/selftest-case11" "case 11 (maintainer docs, first upgrade from tag)"
   expect_case_to_fail case_framework_version_survives_merge "$TMP/selftest-case12" "case 12 (FRAMEWORK-VERSION survives the merge)"

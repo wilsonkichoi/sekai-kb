@@ -27,10 +27,9 @@ tags, never framework `main`** (ADR 004, SPEC
    flow in `docs/runbook/UPGRADE.md`), which merges the tag, never `main`.
 4. **Instance-owned files are never overwritten.** Files an instance owns
    (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
-   `AGENTS.md`, `README.md`, `CHANGELOG.md`, adopter-only `VERSION`, `FRAMEWORK-VERSION`, `docs/baselines/**`,
+   `AGENTS.md`, `README.md`, `CHANGELOG.md`, adopter-only `VERSION`, `FRAMEWORK-VERSION`,
    `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, and the
-   maintainer-doc paths `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`,
-   `docs/adr/**`) carry
+   maintainer-doc tree `dev_docs/**`) carry
    `.gitattributes merge=ours` on the instance, so a tag merge keeps the
    instance's copy. Framework changes to those paths are therefore inert on
    instances by design — do not rely on them propagating. The attribute protects
@@ -40,6 +39,110 @@ tags, never framework `main`** (ADR 004, SPEC
    merge base (which is why `FRAMEWORK-VERSION` is captured and restored instead).
 
 ## [Unreleased]
+
+This release moves the framework's own maintainer documents out of `docs/` into a
+dedicated `dev_docs/` tree, ports the phase-7-through-11 platform research in beside them,
+promotes the hard platform constraints into the SPEC, and makes each phase's exit gate
+state its adoption step explicitly.
+
+### Changed
+
+- **Framework maintainer docs moved to `dev_docs/` (ADR 009).** `docs/PRD.md`,
+  `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/`, and `docs/diagrams/` are now
+  `dev_docs/PRD.md`, `dev_docs/SPEC.md`, `dev_docs/ROADMAP.md`, `dev_docs/adr/`, and
+  `dev_docs/diagrams/`. `docs/` now holds only `playbook/` and `runbook/` — the two
+  adopter-facing trees — so `docs/` is adopter-facing by definition and `dev_docs/` is
+  maintainer-only by definition.
+
+  The strip declaration in `scripts/init/writer.mjs` collapses from four enumerated paths
+  to the single directory `dev_docs`, which is the point: a maintainer document added
+  later lands on the correct side of adoption without editing any list. The previous shape
+  had already failed once silently — `docs/diagrams/` was never on the list, so every
+  adopted instance received `.drawio` sources for the framework's own architecture.
+
+- **`docs/diagrams/` is no longer shipped to adopters.** The three `.drawio` files document
+  the framework's repo topology, build pipeline, and instance/framework split. They are
+  maintainer state and are now stripped at adoption with the rest of `dev_docs/`. Existing
+  instances keep whatever they already have; nothing is deleted from an instance by this
+  release.
+
+- **`merge=ours` collapses to `dev_docs/** merge=ours`.** One attribute line replaces the
+  four maintainer-doc lines plus the separate `docs/baselines/**` line. It protects an
+  instance's own planning documents, decision records, and captured baselines — including
+  ones added after the line was written.
+
+### Added
+
+- **`dev_docs/research/`** — the platform research behind phases 7 through 11, ported
+  de-placed at full fidelity from the pre-cut instance's archives: `platform-notes.md`
+  (Workers, RAG, OG, delivery, and the autonomous-layer audit), `upstream-reference.md`
+  (the prebuild pipeline, graph force parameters, routine cadence and lifecycle,
+  article-health dimensions), `origin-decisions.md` (the reasoning behind the framework's
+  shape), and `OMISSIONS.md`, which records every dropped passage against the non-goal that
+  excludes it.
+
+- **Hard platform constraints promoted into `dev_docs/SPEC.md`.** §Stack now records that
+  Workers AI's `bge-m3` runner returns only the dense vector and Vectorize indexes neither
+  sparse nor multi-vector representations — so native hybrid search is unavailable on this
+  platform at any scale — that Workers are TypeScript and never Python, and that the chat
+  generation model is chosen at packet time rather than pinned from archived research.
+  §Negative requirements now requires corpus vectors and the search index to be parsed once
+  into worker global scope, because parsing per request consumes most of the free plan's
+  CPU budget.
+
+- **`npm run roadmap-gates`** (`scripts/ci/check-roadmap-exit-gates.mjs`) — asserts that
+  every ROADMAP milestone row's exit gate states the release tag, the instance adoption,
+  and the maintainer confirm, and that every packet it cites is defined by a real task
+  block. Template mode only; an adopted instance skips it. Ships with
+  `npm run roadmap-gates:selftest`, which requires the guard to reject seven planted defect
+  classes.
+
+- **Every phase 6-11 now has a terminal adoption packet.** 6.4 and 9.3 already existed;
+  7.4, 8.3, 10.3, and 11.9 are new. Adoption into instance #1 was always part of the exit
+  gate in prose, but four of six rows never said so and four phases tracked no adoption
+  work at all.
+
+### Fixed
+
+- **The wizard's own emitted text is now scanned for dangling paths.**
+  `check-framework-docs.mjs` exempts `scripts/init/writer.mjs` from its dangling-reference
+  scan, because a strip mechanism must name what it strips — which meant the `AGENTS.md`
+  and `README.md` bodies the wizard *emits* were never checked. `scripts/init/check-init.sh`
+  now asserts that the really-stripped tree contains no occurrence of any stripped path,
+  with a planted inverse proving the assertion can fail.
+
+- **`check-upgrade-state.sh` case 9 now models a relocated declaration.** Its previous form
+  constructed mixed ownership by owning one declared path and not another, which a
+  single-directory declaration cannot express. It now models the upgrade this release
+  performs: the pre-merge wizard declares the old paths, the merged tree declares the new
+  one, and the union is the mixed set. `first_doc_file` derives a concrete file from a
+  directory entry rather than requiring a `*.md` entry.
+
+### Upgrade note
+
+**An instance that keeps its own documents at the old maintainer-doc paths must relocate
+them before merging this tag, in the same branch.**
+
+```
+git mv docs/PRD.md docs/SPEC.md docs/ROADMAP.md docs/adr docs/diagrams docs/baselines dev_docs/
+```
+
+Then replace the `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, `docs/adr/**`, and
+`docs/baselines/**` lines in `.gitattributes` with a single `dev_docs/** merge=ours`, commit
+that, and only then run `/sekai-upgrade`.
+
+**The order matters.** Relocating first makes the old paths a clean two-sided delete and the
+new tree an add/add that the `ours` driver resolves in your favour; the reconcile pass then
+recognises your relocated tree as owned because it existed at the pre-merge revision.
+Merging first and relocating afterwards produces modify/delete conflicts that `merge=ours`
+does not resolve, because git applies no merge driver to them.
+
+An instance adopted by the wizard has none of these paths and needs no action: its
+maintainer-doc state is absent before and after.
+
+Note that the merge adds the framework's own `dev_docs/` files alongside yours wherever the
+filenames differ (the framework's ADRs, its research port). `/sekai-upgrade` reports every
+such addition; delete the ones you do not want as part of the adoption PR.
 
 ## [1.0.20] — 2026-08-03
 

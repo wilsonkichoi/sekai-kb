@@ -104,6 +104,7 @@ const STRIP_MECHANISM_FILES = [
   'scripts/ci/check-framework-docs.mjs',
   'scripts/ci/check-scan-root-docs.mjs',
   'scripts/ci/check-soundscape-schema-docs.mjs',
+  'scripts/ci/check-roadmap-exit-gates.mjs',
 ];
 
 // The ownership source. `.gitattributes` must name a maintainer-doc path in order to
@@ -341,13 +342,13 @@ const SOURCE_FILES = {
 
 const REGISTRY = [
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Repo topology, instance-owned merge=ours list',
     source: 'merge-ours',
     anchor: /`merge=ours`\s+on\s+instance-owned\s*\n?\s*files\s+\(([^)]+)\)/,
   },
   {
-    file: 'docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
+    file: 'dev_docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
     label: 'Consequences, instance-owned merge=ours list',
     source: 'merge-ours',
     anchor: /The\s+`merge=ours`\s+list\s+is\s+now:\s*([\s\S]*?)\.\n/,
@@ -368,32 +369,32 @@ const REGISTRY = [
     instanceSubset: true,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Build pipeline, parallel prebuild jobs',
     source: 'prebuild',
     anchor: /parallel\s+prebuild\s+\(`run-p`:\s*([^)]+)\)/,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Build pipeline, post-build contract checks',
     source: 'postbuild',
     anchor: /contract\s+checks\s+\(`run-s`:\s*([^)]+)\)/,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'place.config.ts schema, top-level sections',
     source: 'place-config-sections',
     anchor: /Schema:\s*([\s\S]*?)\.\s*\n?Init-time:/,
     parse: parseSchemaSections,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'place.config.ts schema, features flags',
     source: 'place-config-features',
     anchor: /`features\s*\{([^}]+)\}`/,
   },
   {
-    file: 'docs/SPEC.md',
+    file: 'dev_docs/SPEC.md',
     label: 'Pages, routes under src/pages/',
     source: 'pages',
     anchor: /Routes\s+under\s+`src\/pages\/`:\s*([\s\S]*?)\.\s*\n?Non-route\s+build\s+outputs:/,
@@ -430,7 +431,7 @@ function maskSpan(text, start, end) {
  * Where each registered enumeration sits in its file. The dangling-reference scan
  * masks those spans: a registered list is derived data, checked against its source
  * a few lines below, not a link a reader would follow. Without this a document that
- * an adopter keeps could not record that `docs/PRD.md` is a path they may own --
+ * an adopter keeps could not record that `dev_docs/PRD.md` is a path they may own --
  * the very statement ADR 008 requires it to make.
  */
 function registeredSpans(root) {
@@ -705,9 +706,9 @@ function selftest() {
     rmSync(fixture, { recursive: true, force: true });
     mkdirSync(fixture, { recursive: true });
     write('.sekai-template', 'marker\n');
-    write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/adr'];\n");
-    write('docs/PRD.md', 'framework product doc\n');
-    write('docs/adr/001-x.md', 'a decision\n');
+    write(WIZARD, "export const MAINTAINER_DOCS = ['dev_docs/PRD.md', 'dev_docs/adr'];\n");
+    write('dev_docs/PRD.md', 'framework product doc\n');
+    write('dev_docs/adr/001-x.md', 'a decision\n');
     write('docs/playbook/ARTICLE-PLAYBOOK.md', 'editorial canon\n');
     write('docs/runbook/DEPLOY.md', 'operations\n');
     write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\n');
@@ -733,7 +734,7 @@ function selftest() {
     write(`${PAGES_DIR}/feed.xml.ts`, 'export const GET = () => new Response();\n');
     write(`${PAGES_DIR}/[category]/[slug].astro`, '<p>article</p>\n');
     write(
-      'docs/SPEC.md',
+      'dev_docs/SPEC.md',
       'Determinism comes from `merge=ours` on instance-owned files (`CLAUDE.md`,\n' +
         '`knowledge/**`), plus the ownership rule.\n\n' +
         '`sync.sh` -> parallel prebuild (`run-p`: related, search) -> `astro build` ->\n' +
@@ -746,7 +747,7 @@ function selftest() {
         'Non-route build outputs: none in this fixture.\n',
     );
     write(
-      'docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
+      'dev_docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
       'The `merge=ours` list is now: `CLAUDE.md`, `knowledge/**`.\n',
     );
     write(
@@ -768,12 +769,12 @@ function selftest() {
   const cases = [
     {
       what: 'a surviving file that links into a stripped path',
-      plant: () => write('docs/runbook/DEPLOY.md', 'See docs/PRD.md for intent.\n'),
-      expect: /links into "docs\/PRD\.md"/,
+      plant: () => write('docs/runbook/DEPLOY.md', 'See dev_docs/PRD.md for intent.\n'),
+      expect: /links into "dev_docs\/PRD\.md"/,
     },
     {
       what: 'a stripped path the template no longer has',
-      plant: () => rmSync(join(fixture, 'docs/PRD.md')),
+      plant: () => rmSync(join(fixture, 'dev_docs/PRD.md')),
       expect: /absent from this template checkout/,
     },
     {
@@ -808,7 +809,7 @@ function selftest() {
       what: 'a reworded (unfindable) registered statement',
       plant: () =>
         write(
-          'docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
+          'dev_docs/adr/006-adopter-owned-agents-md-and-dev-plugin-encapsulation.md',
           'The `merge=ours` set currently covers: `CLAUDE.md`, `knowledge/**`.\n',
         ),
       expect: /anchor NOT FOUND/,
@@ -851,7 +852,7 @@ function selftest() {
       what: 'a schema prose section the interface does not declare',
       plant: () =>
         write(
-          'docs/SPEC.md',
+          'dev_docs/SPEC.md',
           'Determinism comes from `merge=ours` on instance-owned files (`CLAUDE.md`,\n' +
             '`knowledge/**`), plus the ownership rule.\n\n' +
             '`sync.sh` -> parallel prebuild (`run-p`: related, search) -> `astro build` ->\n' +
@@ -934,10 +935,10 @@ function selftest() {
           'docs/runbook/UPGRADE.md',
           '| Path | Why instance-owned |\n| ---- | ------------------ |\n' +
             '| `CLAUDE.md` | the shim |\n| `knowledge/**` | the content |\n' +
-            '| `docs/PRD.md` | never declared anywhere |\n',
+            '| `dev_docs/PRD.md` | never declared anywhere |\n',
         );
       },
-      expect: /documented but not declared: docs\/PRD\.md/,
+      expect: /documented but not declared: dev_docs\/PRD\.md/,
     },
     {
       // Non-regression for the registered-span mask: masking the table must not
@@ -951,9 +952,9 @@ function selftest() {
             '| ---- | ------------------ |\n' +
             '| `CLAUDE.md` | the shim |\n' +
             '| `knowledge/**` | the content |\n\n' +
-            'Background reading: docs/PRD.md explains the intent.\n',
+            'Background reading: dev_docs/PRD.md explains the intent.\n',
         ),
-      expect: /links into "docs\/PRD\.md"/,
+      expect: /links into "dev_docs\/PRD\.md"/,
     },
     {
       // Non-regression for the instance-owned cases below: dropping the template
@@ -963,11 +964,11 @@ function selftest() {
       what: 'a dangling reference in a wizard-adopted instance (paths really absent)',
       plant: () => {
         rmSync(join(fixture, '.sekai-template'));
-        rmSync(join(fixture, 'docs/PRD.md'));
-        rmSync(join(fixture, 'docs/adr'), { recursive: true });
-        write('docs/runbook/DEPLOY.md', 'See docs/PRD.md for intent.\n');
+        rmSync(join(fixture, 'dev_docs/PRD.md'));
+        rmSync(join(fixture, 'dev_docs/adr'), { recursive: true });
+        write('docs/runbook/DEPLOY.md', 'See dev_docs/PRD.md for intent.\n');
       },
-      expect: /links into "docs\/PRD\.md"/,
+      expect: /links into "dev_docs\/PRD\.md"/,
     },
   ];
 
@@ -981,8 +982,8 @@ function selftest() {
       what: 'an instance that owns a maintainer-doc path, referenced from a file it keeps',
       plant: () => {
         rmSync(join(fixture, '.sekai-template'));
-        // docs/PRD.md and docs/adr/ stay: this instance wrote its own.
-        write('docs/runbook/DEPLOY.md', 'Intent for this instance lives in docs/PRD.md.\n');
+        // dev_docs/PRD.md and dev_docs/adr/ stay: this instance wrote its own.
+        write('docs/runbook/DEPLOY.md', 'Intent for this instance lives in dev_docs/PRD.md.\n');
       },
     },
     {
@@ -993,7 +994,7 @@ function selftest() {
         rmSync(join(fixture, '.sekai-template'));
         // The framework's own SPEC/ADR restatements live in removed documents, so
         // only the two surviving sites are in play here -- which is the real shape.
-        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
+        write(WIZARD, "export const MAINTAINER_DOCS = ['dev_docs/PRD.md', 'dev_docs/SPEC.md', 'dev_docs/adr'];\n");
         write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\nmy-notes.md merge=ours\n');
       },
     },
@@ -1004,15 +1005,15 @@ function selftest() {
       what: 'a maintainer-doc path documented as instance-ownable in a surviving document',
       plant: () => {
         rmSync(join(fixture, '.sekai-template'));
-        rmSync(join(fixture, 'docs/PRD.md'));
-        rmSync(join(fixture, 'docs/adr'), { recursive: true });
-        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
-        write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\ndocs/PRD.md merge=ours\n');
+        rmSync(join(fixture, 'dev_docs/PRD.md'));
+        rmSync(join(fixture, 'dev_docs/adr'), { recursive: true });
+        write(WIZARD, "export const MAINTAINER_DOCS = ['dev_docs/PRD.md', 'dev_docs/SPEC.md', 'dev_docs/adr'];\n");
+        write(GITATTRIBUTES, 'CLAUDE.md merge=ours\nknowledge/** merge=ours\ndev_docs/PRD.md merge=ours\n');
         write(
           'docs/runbook/UPGRADE.md',
           '| Path | Why instance-owned |\n| ---- | ------------------ |\n' +
             '| `CLAUDE.md` | the shim |\n| `knowledge/**` | the content |\n' +
-            '| `docs/PRD.md` | your own product doc, if you keep one |\n',
+            '| `dev_docs/PRD.md` | your own product doc, if you keep one |\n',
         );
       },
     },
@@ -1031,10 +1032,10 @@ function selftest() {
       what: "an instance-owned SPEC that does not carry the framework's registered statements",
       plant: () => {
         rmSync(join(fixture, '.sekai-template'));
-        write(WIZARD, "export const MAINTAINER_DOCS = ['docs/PRD.md', 'docs/SPEC.md', 'docs/adr'];\n");
+        write(WIZARD, "export const MAINTAINER_DOCS = ['dev_docs/PRD.md', 'dev_docs/SPEC.md', 'dev_docs/adr'];\n");
         // The instance's SPEC is its own document, with none of the framework
         // anchors in it. That is the split working, not drift.
-        write('docs/SPEC.md', 'This instance deploys to Pages behind a CDN. Categories live in config.\n');
+        write('dev_docs/SPEC.md', 'This instance deploys to Pages behind a CDN. Categories live in config.\n');
       },
     },
   ];

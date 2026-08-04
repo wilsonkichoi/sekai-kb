@@ -14,7 +14,7 @@ framework was built before it was cut out (ADR 002, held there as its own histor
 The result was a repository that owns the code but not the documents governing it:
 
 1. **Every framework session read its contracts from a sibling checkout.** An agent
-   working in `sekai-kb` had no `docs/SPEC.md` to cite and no ADR directory to check. The
+   working in `sekai-kb` had no `dev_docs/SPEC.md` to cite and no ADR directory to check. The
    dev config's binding-docs list pointed across a repository boundary, so the contract a
    task must satisfy was only reachable if the other clone happened to exist locally.
 2. **`/dev:plan` amended documents in a repository the work does not happen in.** A phase
@@ -34,7 +34,7 @@ which ADR 006 ruling (c) already strips at adoption.
 ## Decision
 
 **(a) The framework's own PRD, SPEC, ROADMAP, and ADRs live in `sekai-kb`, under
-`docs/`.** `docs/PRD.md`, `docs/SPEC.md`, `docs/ROADMAP.md`, and `docs/adr/` are the
+`docs/`.** `dev_docs/PRD.md`, `dev_docs/SPEC.md`, `dev_docs/ROADMAP.md`, and `dev_docs/adr/` are the
 framework's product, engineering, and delivery SSOTs, beside the code they govern.
 
 **(b) The split is by section, not wholesale.** The framework receives the sections that
@@ -51,8 +51,8 @@ and non-goals are not the first instance's with the place name removed. It is wr
 the generic half of the source document, not copied.
 
 **(d) The init wizard strips the maintainer docs, exactly as it strips
-`.agent-toolkit/`.** `npm run init` removes `docs/PRD.md`, `docs/SPEC.md`,
-`docs/ROADMAP.md`, and `docs/adr/` from an adopter clone. `docs/playbook/` and
+`.agent-toolkit/`.** `npm run init` removes `dev_docs/PRD.md`, `dev_docs/SPEC.md`,
+`dev_docs/ROADMAP.md`, and `dev_docs/adr/` from an adopter clone. `docs/playbook/` and
 `docs/runbook/` stay: those are how an adopter writes articles and operates the site.
 `scripts/init/check-init.sh` asserts the strip on a tree the wizard really stripped, with
 planted inverse fixtures proving the assertion can fail.
@@ -81,7 +81,7 @@ lands, which is the only routing information a session needs.
 ## Consequences
 
 - A framework session resolves its contracts from its own checkout. `/dev:plan` for
-  phases 6-11 reads and amends `sekai-kb/docs/ROADMAP.md`.
+  phases 6-11 reads and amends `sekai-kb/dev_docs/ROADMAP.md`.
 - The two repositories hold the same four paths with different content and different
   owners. That is intended, and `merge=ours` on the instance side is what keeps it
   stable. Until LB-62 lands, both repositories carry copies; that intermediate state is
