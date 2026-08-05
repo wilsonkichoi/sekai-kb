@@ -298,11 +298,13 @@ INPUT="$TMP/interactive-input.txt"
   printf '\n\n'                                                    # feedback/chat -> defaults
   printf 'y\n'                                                     # social (explicit, as in JSON)
   printf '\n'                                                      # analytics -> default
+  printf '\n'                                                      # og -> default
   printf 'https://github.com/example/kb\n'                         # links.repo
   printf 'kb@example.org\n'                                        # links.email
   printf '@example\n'                                              # twitter
   printf '\n\n'                                                    # threads/instagram -> none
   printf '\n'                                                      # workers.feedback -> blank
+  printf '\n'                                                      # workers.og -> blank
 } > "$INPUT"
 snapshot "$TMP/run3"
 node "$TMP/run3/scripts/init/index.mjs" < "$INPUT" >/dev/null
