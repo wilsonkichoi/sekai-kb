@@ -48,6 +48,7 @@ export interface PlaceConfig {
     chat: boolean;
     social: boolean;
     analytics: boolean;
+    og: boolean;
   };
   /**
    * Outbound identity links. `repo` + `email` are always rendered (footer,
@@ -82,6 +83,8 @@ export interface PlaceConfig {
      * auth. `npm run worker-config` reads it; unset generates an empty id and says so.
      */
     feedbackDatabaseId?: string;
+    /** URL of this instance's deployed `workers/og/` worker. */
+    og?: string;
   };
   seo: {
     defaultOgImage: string;
@@ -225,6 +228,7 @@ const config: PlaceConfig = {
     chat: false,
     social: false,
     analytics: false,
+    og: false,
   },
   links: {
     repo: 'https://github.com/wilsonkichoi/sekai-kb',

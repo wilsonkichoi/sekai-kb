@@ -132,6 +132,22 @@ for (const dir of workerDirs) {
     overrides.push({ table: 'vars', key: 'ALLOWED_ORIGIN', value: origin, required: true });
   }
 
+  if (parsed.tables.vars && 'SITE_ORIGIN' in parsed.tables.vars) {
+    overrides.push({ table: 'vars', key: 'SITE_ORIGIN', value: origin, required: true });
+  }
+
+  if (parsed.tables.vars && 'SITE_NAME' in parsed.tables.vars) {
+    overrides.push({ table: 'vars', key: 'SITE_NAME', value: placeName, required: true });
+  }
+
+  if (parsed.tables.vars && 'CATEGORY_COLORS' in parsed.tables.vars) {
+    const colorMap = {};
+    for (const cat of place?.categories ?? []) {
+      if (cat.slug && cat.color) colorMap[cat.slug] = cat.color;
+    }
+    overrides.push({ table: 'vars', key: 'CATEGORY_COLORS', value: JSON.stringify(colorMap), required: true });
+  }
+
   if (parsed.arrays.d1_databases?.length) {
     // `workers.<worker>DatabaseId` in place.config.ts: instance-owned, outside every
     // gate scan root, and absent-safe -- an unset id generates an empty value and a
@@ -173,7 +189,7 @@ for (const dir of workerDirs) {
 
   writeFileSync(outPath, header + body, 'utf8');
   written += 1;
-  console.log(`  workers/${dir}/${GENERATED_BASENAME}  name=${name}  ALLOWED_ORIGIN=${origin || '(empty)'}`);
+  console.log(`  workers/${dir}/${GENERATED_BASENAME}  name=${name}`);
 }
 
 for (const note of notes) console.log(`  note: ${note}`);

@@ -279,10 +279,10 @@ curl -sI https://your-domain.example | head -5
 Dynamic capability runs on Cloudflare Workers, separate from the static site on
 GitHub Pages. Each worker lives in its own directory under `workers/` with its own
 `wrangler.toml`, and is deployed by hand — CI never deploys a worker, so nothing
-here runs on a push. The first one is `workers/feedback/`, the endpoint the
-feedback widget posts to.
+here runs on a push. `workers/feedback/` is the endpoint the feedback widget posts
+to; `workers/og/` renders per-article social-preview images on demand.
 
-Everything below stays inside the **free tier**: one Worker and one D1 database.
+Everything below stays inside the **free tier**: Workers and one D1 database.
 
 ### The config you deploy is generated, not committed
 
@@ -502,6 +502,72 @@ request; run it locally with:
 ```bash
 npm run test:workers
 ```
+
+### Deploying the OG image worker
+
+`workers/og/` renders per-article social-preview cards on demand. No database,
+no secrets, no state: it fetches `topics.json` from the deployed site on first
+request, renders a PNG with Satori and resvg-wasm, and caches the result at the
+edge for a year. Everything stays inside the free tier.
+
+**1. Generate the config.** Same command as the feedback worker; it writes all
+workers:
+
+```bash
+npm run worker-config
+```
+
+**2. Deploy.**
+
+```bash
+npx wrangler deploy --config workers/og/wrangler.generated.toml
+```
+
+**3. Register the route in the Cloudflare dashboard.** Workers on the free tier
+use `workers.dev` subdomains by default. If you want the OG endpoint on your own
+domain (e.g. `og.example.com/og/...`), add a route pattern in the Cloudflare
+dashboard under Workers > Routes. The route is a custom-domain setup, not a
+wrangler config entry.
+
+**4. Point the site at it and turn the feature on.**
+
+```ts
+features: { og: true, /* ... */ },
+workers: {
+  og: 'https://<worker-name>.<subdomain>.workers.dev',
+  /* ... */
+},
+```
+
+Rebuild and redeploy the site. `SEO.astro` reads `features.og` and `workers.og`
+at build time; with either missing the OG meta tag points to the static
+`og-default.png` as before.
+
+**5. Purge the edge cache on redeploy.** Each OG image is cached with
+`max-age=31536000, immutable`. After an article title changes or you update the
+card style, purge the cached URLs so the next request renders fresh:
+
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/zones/ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer CF_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"prefixes":["og.example.com/og/"]}'
+```
+
+Or purge everything via the Cloudflare dashboard under Caching > Purge Cache.
+
+### OG worker configuration
+
+| Name | Required | Source | Meaning |
+|---|---|---|---|
+| `name` | yes | derived: `<place-slug>-og` | The Worker script name, account-scoped. |
+| `SITE_ORIGIN` | yes | `place.domain` | Origin to fetch `topics.json` from (e.g. `https://example.com`). |
+| `SITE_NAME` | yes | `place.name` | Site name rendered on the card footer. |
+| `CATEGORY_COLORS` | yes | `categories[].color` | JSON map of slug to hex color for the category badge. Empty entries omitted. |
+
+No D1, no secrets, no rate limit. The worker is stateless: its only external
+dependency is the site's own `topics.json`, which it fetches once on cold start
+and caches in global scope.
 
 ---
 

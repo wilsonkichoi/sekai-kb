@@ -12,6 +12,7 @@
 import { ENABLED_LANGUAGE_CODES, DEFAULT_LANGUAGE } from '../config/languages';
 import type { Lang } from '../config/languages';
 import placeConfig from '../../place.config';
+import { resolveOgImage } from '../utils/og-image';
 
 interface Props {
   title: string;
@@ -29,8 +30,9 @@ interface Props {
   categorySlug?: string;
 }
 
+
 const { name, tagline, domain } = placeConfig.place;
-const { categories, links, seo } = placeConfig;
+const { categories, links, seo, features, workers } = placeConfig;
 const domainDot = `.${domain.split('.').pop()}`;
 const siteName = `${name}${domainDot}`;
 const siteUrl = `https://${domain}`;
@@ -39,7 +41,6 @@ const {
   lang = 'en',
   title,
   description = tagline,
-  image = seo.defaultOgImage,
   url = Astro.url.href,
   type = 'website',
   datePublished,
@@ -48,6 +49,15 @@ const {
   tags,
   category,
 } = Astro.props;
+
+const image = resolveOgImage({
+  featureOg: features?.og,
+  workerOgUrl: workers?.og,
+  categorySlug: Astro.props.categorySlug,
+  slug: Astro.props.slug,
+  explicitImage: Astro.props.image,
+  defaultOgImage: seo.defaultOgImage,
+});
 
 const fullTitle = `${title} | ${siteName}`;
 const fullImageUrl = new URL(image, siteUrl).href;

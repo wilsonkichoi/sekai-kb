@@ -170,9 +170,9 @@ sekai-kb/
 
 Schema: `place {name, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
-`features {graph, map, dashboard, soundscape, feedback, chat, social, analytics}`,
+`features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`workers? {feedback?, feedbackDatabaseId?}`,
+`workers? {feedback?, feedbackDatabaseId?, og?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
 Init-time: written only by the `npm run init`

@@ -79,6 +79,14 @@ const EXPECTED = {
     },
     d1Bindings: ['DB'],
   },
+  og: {
+    vars: {
+      SITE_ORIGIN: '',
+      SITE_NAME: '',
+      CATEGORY_COLORS: '',
+    },
+    d1Bindings: [],
+  },
 };
 
 const DEFAULT_ROOT = fileURLToPath(new URL('../..', import.meta.url));

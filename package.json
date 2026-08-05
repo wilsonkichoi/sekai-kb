@@ -65,6 +65,7 @@
     "sounds:check": "node --experimental-strip-types scripts/ci/check-sounds.mjs",
     "sounds:selftest": "bash scripts/ci/check-sounds-selftest.sh",
     "snippet:publish": "node scripts/tools/snippet/publish.mjs",
+    "test:og": "node --experimental-strip-types --test tests/og-image-resolve.test.mjs",
     "test:workers": "node scripts/ci/run-worker-tests.mjs",
     "test:theme": "node scripts/visual/theme-surfaces.test.mjs",
     "visual:baseline": "node scripts/visual/capture-baseline.mjs --baseline",
@@ -87,10 +88,12 @@
     "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "husky": "^9.1.7",
     "npm-run-all2": "^8.0.4",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.61.1",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "satori": "^0.29.0"
   }
 }

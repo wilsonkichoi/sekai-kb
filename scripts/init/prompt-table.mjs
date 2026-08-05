@@ -398,6 +398,7 @@ export const PROMPTS = [
   { id: 'features.chat', question: 'Enable chat (needs a worker)?', kind: 'boolean', default: false },
   { id: 'features.social', question: 'Show social links (footer + SEO)?', kind: 'boolean', default: false },
   { id: 'features.analytics', question: 'Enable analytics?', kind: 'boolean', default: false },
+  { id: 'features.og', question: 'Enable per-article OG images (needs a worker)?', kind: 'boolean', default: false },
   {
     id: 'links.repo',
     question: 'GitHub repository URL of this instance',
@@ -422,6 +423,14 @@ export const PROMPTS = [
     // non-empty endpoint — so the emitted config is valid either way.
     id: 'workers.feedback',
     question: 'Feedback worker URL (blank until you deploy workers/feedback)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^https?:\/\/\S+$/.test(v) ? null : `"${v}" is not a URL`,
+  },
+  {
+    id: 'workers.og',
+    question: 'OG image worker URL (blank until you deploy workers/og)',
     kind: 'text',
     default: '',
     validate: (v) =>

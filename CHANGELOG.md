@@ -40,6 +40,27 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **On-demand OG image worker (`workers/og/`).** Per-article social-preview cards
+  rendered with Satori and resvg-wasm, cached at the Cloudflare edge. The worker
+  fetches article metadata from the site's own `topics.json` and renders title,
+  category, and site name with each category's accent color. A bundled Latin-subset
+  Inter font keeps the deployed bundle inside the free-tier limit without R2.
+- **`place.config.ts` gains `features.og` and `workers.og`.** `SEO.astro` emits the
+  worker URL as the `og:image` when both are set; every other combination falls back
+  to the static `og-default.png`.
+- **`gen-worker-config.mjs` derives per-worker `[vars]`** for `SITE_ORIGIN`,
+  `SITE_NAME`, and `CATEGORY_COLORS`, extending the feedback worker's `ALLOWED_ORIGIN`
+  pattern to a second worker.
+- **Runbook:** `docs/runbook/DEPLOY.md` gains an OG worker subsection with the deploy
+  command, vars table, route registration, and cache-purge instructions.
+
+> **Upgrade note:** `features.og` and `workers.og` are config-schema additions.
+> Both are absent-safe: missing keys leave OG on the static `og-default.png`
+> fallback, so no config edit is required on upgrade. To enable per-article OG
+> cards, deploy `workers/og/` per the runbook, then set both keys.
+
 ## [1.1.1] — 2026-08-04
 
 This patch corrects the v1.1.0 upgrade note, which described a maintainer-doc relocation merge that does not occur, and rebuilds the fixture that let the false claim ship.

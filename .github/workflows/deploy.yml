@@ -141,6 +141,8 @@ jobs:
       # native `node --test <glob>` form does not (a zero-match glob exits 0).
       - name: Worker unit suites
         run: npm run test:workers
+      - name: OG image resolve matrix
+        run: npm run test:og
       - run: npm run framework-release:selftest
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
