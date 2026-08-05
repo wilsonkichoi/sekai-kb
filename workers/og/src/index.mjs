@@ -13,7 +13,7 @@
 import satori from 'satori';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
 import resvgWasm from '@resvg/resvg-wasm/index_bg.wasm';
-import fontData from '../assets/inter-latin.woff2';
+import fontData from '../assets/inter-latin.ttf';
 
 import { handleRequest } from './handler.mjs';
 

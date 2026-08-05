@@ -100,9 +100,22 @@ export function originFromDomain(domain) {
 const HEADER_RE = /^\s*(\[\[?)([A-Za-z0-9_.-]+)(\]\]?)\s*$/;
 const ASSIGN_RE = /^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(.*)$/;
 
-/** Parse one scalar TOML value: "string", true/false, or an integer. */
+/** Parse one TOML value: "string", true/false, integer, or inline array. */
 function parseValue(raw, lineNo) {
   const text = raw.trim();
+  if (text.startsWith('[')) {
+    const end = text.indexOf(']');
+    if (end === -1) throw new Error(`line ${lineNo}: unterminated inline array`);
+    const inner = text.slice(1, end).trim();
+    const items = inner
+      ? inner.split(',').map((s) => {
+          const t = s.trim();
+          if (t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1);
+          throw new Error(`line ${lineNo}: inline array items must be strings`);
+        })
+      : [];
+    return { value: items, type: 'array' };
+  }
   if (text.startsWith('"')) {
     let out = '';
     for (let i = 1; i < text.length; i++) {
@@ -129,7 +142,7 @@ function parseValue(raw, lineNo) {
   if (/^-?\d+$/.test(bare)) return { value: Number(bare), type: 'integer' };
   throw new Error(
     `line ${lineNo}: unsupported value "${text}". This reader accepts strings, ` +
-      'booleans, and integers only; extend it rather than loosening the gate.',
+      'booleans, integers, and inline arrays only; extend it rather than loosening the gate.',
   );
 }
 
@@ -239,7 +252,11 @@ export function applyOverrides(text, overrides) {
       continue;
     }
     hits[idx] += 1;
-    out.push(`${indent}${key}${sep}${JSON.stringify(String(overrides[idx].value))}`);
+    const val = overrides[idx].value;
+    const formatted = Array.isArray(val)
+      ? `[${val.map((v) => JSON.stringify(v)).join(', ')}]`
+      : JSON.stringify(String(val));
+    out.push(`${indent}${key}${sep}${formatted}`);
   }
   overrides.forEach((o, i) => {
     if (o.required && hits[i] === 0) {

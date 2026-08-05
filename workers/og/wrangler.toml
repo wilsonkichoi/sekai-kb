@@ -25,6 +25,16 @@ name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"
 main = "src/index.mjs"
 compatibility_date = "2026-07-01"
 
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = false
+
+[[rules]]
+type = "Data"
+globs = ["**/*.ttf"]
+fallthrough = false
+
 [vars]
 SITE_ORIGIN = ""
 SITE_NAME = ""
