@@ -441,6 +441,85 @@ describe('DoD 1 (d): a section under MIN_TOKENS merges instead of emitting a stu
   });
 });
 
+/* ------------------------------------- DoD 2: heading is where the chunk STARTS */
+
+describe('DoD 2: heading is the section the chunk starts in, across a rule (d) merge', () => {
+  // A short section merged forward spans two sections in one unit. Splitting that unit on
+  // paragraphs puts later pieces well inside the SECOND section, so the unit's opening
+  // heading is only correct for the piece that actually opens it.
+  const merged = () =>
+    chunksOf(
+      paragraphs(
+        '## Intro',
+        tokens(30, 'intros'),
+        '## Details',
+        ...[1, 2, 3, 4].map((n) => tokens(200, `para${n}s`)),
+      ),
+    );
+
+  test('the chunk that opens the merged unit keeps the short section heading', () => {
+    const chunks = merged();
+    assert.ok(chunks.length >= 2, 'the fixture must split into several chunks');
+    assert.equal(chunks[0].heading, 'Intro');
+    assert.ok(chunks[0].text.includes('## Intro'), 'and it is the chunk that opens under it');
+  });
+
+  test('a later chunk that starts inside the following section is labelled with THAT section', () => {
+    for (const chunk of merged().slice(1)) {
+      assert.equal(
+        chunk.heading,
+        'Details',
+        `chunk ${chunk.chunkIndex} starts inside Details and must not be labelled Intro`,
+      );
+    }
+  });
+
+  test('a chunk whose own content opens on a heading takes that heading, not the inherited one', () => {
+    // Two full-size sections: the second chunk's content opens exactly on "## Second".
+    const chunks = chunksOf(
+      paragraphs('## First', tokens(200, 'alpha'), '## Second', tokens(200, 'beta')),
+    );
+    assert.deepEqual(headingsOf(chunks), ['First', 'Second']);
+    assert.ok(
+      chunks[1].text.includes('## Second'),
+      'the second chunk carries the heading line its section opens with',
+    );
+  });
+
+  test('a heading carried in only by the overlap prefix does not label the chunk', () => {
+    // The unit opens "## Intro"; chunk 0 ends inside Details, so chunk 1's prefix is
+    // Details prose. Make the prefix itself carry a heading line by keeping the section
+    // that precedes the split short enough that "## Details" lands in the overlap window.
+    const chunks = chunksOf(
+      paragraphs('## Alpha', tokens(470, 'alphas'), '## Beta', tokens(400, 'betas')),
+    );
+    const withPrefixedHeading = chunks.filter(
+      (chunk, i) => i > 0 && chunk.text.includes('## ') && !chunk.text.trimStart().startsWith('##'),
+    );
+    for (const chunk of withPrefixedHeading) {
+      const ownContentStart = chunk.text.indexOf('## ');
+      assert.ok(ownContentStart > 0, 'the heading appears inside the chunk, not at its start');
+    }
+    // Whatever the overlap dragged in, every chunk is labelled with a real section.
+    for (const chunk of chunks) {
+      assert.ok(
+        ['Alpha', 'Beta'].includes(chunk.heading),
+        `chunk ${chunk.chunkIndex} carries a heading that is not one of the body's sections: ${chunk.heading}`,
+      );
+    }
+  });
+
+  test('a ## line inside a fenced code block never becomes a chunk heading', () => {
+    const fenced = ['```', '## Not A Heading', tokens(180, 'codes'), '```'].join('\n');
+    const chunks = chunksOf(paragraphs('## Real Section', tokens(200, 'alpha'), fenced));
+    assert.ok(
+      chunks.every((chunk) => chunk.heading !== 'Not A Heading'),
+      'a fenced ## line is code, so it can label no chunk',
+    );
+    assert.deepEqual([...new Set(headingsOf(chunks))], ['Real Section']);
+  });
+});
+
 /* --------------------------- DoD 1 (e): a body with no h2, and pre-heading text */
 
 describe('DoD 1 (e): a body with no ## heading', () => {

@@ -85,6 +85,12 @@
  *  (e) An article with no `##` heading is one section with an empty heading.
  *  (f) An empty (or whitespace-only) body yields zero chunks. run() fails the build on
  *      one, naming the file — a silently unembedded article is invisible to retrieval.
+ *  (g) A chunk's `heading` is the heading of the section its OWN content starts in,
+ *      re-derived per chunk rather than inherited from the unit it came out of. (d) and
+ *      (b) compose into the case that makes this load-bearing: a merged unit spans two
+ *      sections, and once it splits on paragraphs a later piece starts inside the second
+ *      one. The overlap prefix from (c) never decides it — that text is context carried
+ *      in from the chunk before, not where this chunk begins.
  */
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, join, basename, relative } from 'node:path';
@@ -187,9 +193,11 @@ function splitOnParagraphs(text) {
 /**
  * (d) Merge any run under MIN_TOKENS forward into what follows: a stub retrieves on its
  * heading alone and answers nothing. The merged unit keeps the FIRST unit's heading,
- * because that is where the resulting chunk starts. A trailing short unit has nothing
- * to merge forward into, so it merges backward into the last unit instead — content is
- * never dropped, and a single short unit stands alone rather than vanishing.
+ * because that is where the merged unit starts — but a merged unit spans more than one
+ * section, so this heading is only where the unit OPENS, not the heading of every chunk
+ * it goes on to produce. headingsIn() re-derives that per chunk. A trailing short unit
+ * has nothing to merge forward into, so it merges backward into the last unit instead —
+ * content is never dropped, and a single short unit stands alone rather than vanishing.
  *
  * Applied twice: to sections, and then to the paragraph pieces of each section, since
  * splitting an over-long section can leave a short tail (or a heading-only head, when
@@ -220,8 +228,51 @@ function mergeShort(units) {
 }
 
 /**
+ * The h2 headings a piece of body text contains, under splitSections' rules (h2 exactly,
+ * and never inside a fenced code block). Returns `{leading, last}`, each null when absent:
+ *
+ *   leading — the heading on the piece's first non-blank line, when it opens with one.
+ *             Non-null means the piece starts a new section rather than continuing one.
+ *   last    — the final heading in the piece, which is the section any following piece
+ *             continues in.
+ *
+ * Both are needed because a merged unit's text spans sections: knowing only which
+ * headings a piece contains cannot say which section it STARTS in, and that is what the
+ * chunk's `heading` metadata means.
+ */
+function headingsIn(text) {
+  let inFence = false;
+  let seenContent = false;
+  let leading = null;
+  let last = null;
+  for (const line of text.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      seenContent = true;
+      continue;
+    }
+    if (!inFence && /^##(\s|$)/.test(line)) {
+      const heading = line.replace(/^##\s*/, '').trim();
+      if (!seenContent) leading = heading;
+      last = heading;
+      seenContent = true;
+      continue;
+    }
+    if (line.trim()) seenContent = true;
+  }
+  return { leading, last };
+}
+
+/**
  * Chunk one article. Pure: no filesystem, no network, no mutation of the argument.
  * Every chunk carries exactly {id, slug, title, url, category, heading, chunkIndex, text}.
+ *
+ * `heading` is the heading of the section the chunk STARTS in. Tracking it per chunk
+ * rather than per unit is what keeps that true after rule (d) merges a short section into
+ * the next one: the merged unit opens under the short section's heading, but once it
+ * splits on paragraphs, a later piece can start well inside the section that followed,
+ * and labelling it with the unit's opening heading would hand every consumer — retrieval
+ * ranking, the citation the chat worker renders — the wrong section.
  */
 export function chunkArticle({ slug, title, url, category, body }) {
   const sections = splitSections(body || '');
@@ -233,8 +284,15 @@ export function chunkArticle({ slug, title, url, category, body }) {
     const pieces = mergeShort(
       splitOnParagraphs(section.text).map((text) => ({ heading: section.heading, text })),
     );
+    // The section in effect at the start of the next piece: the unit's own heading until
+    // a piece carries a heading of its own, then the last one that piece opened.
+    let current = section.heading;
     for (const { text: piece } of pieces) {
+      const { leading, last } = headingsIn(piece);
+      const heading = leading === null ? current : leading;
       // (c) Overlap: prefix every chunk after the first with the previous chunk's tail.
+      // The prefix is context carried from the previous chunk, so it is deliberately not
+      // scanned for headings: the chunk's section is where its OWN content starts.
       const prefix = previousText ? overlapPrefix(previousText) : '';
       const text = prefix ? `${prefix}\n\n${piece}` : piece;
       chunks.push({
@@ -243,10 +301,11 @@ export function chunkArticle({ slug, title, url, category, body }) {
         title,
         url,
         category,
-        heading: section.heading,
+        heading,
         chunkIndex: chunks.length,
         text,
       });
+      if (last !== null) current = last;
       previousText = text;
     }
   }
