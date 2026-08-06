@@ -42,5 +42,15 @@ reports/visual/diff-summary.json
 # dev-plugin per-machine overrides (the committed config is .agent-toolkit/dev.md)
 .agent-toolkit/dev.local.md
 
+# local credentials. Nothing in this repository reads these files — every documented
+# operator flow takes credentials from the environment (`npm run embeddings:build`) or
+# puts them in Cloudflare (`wrangler secret put`). They are ignored because .dev.vars is
+# wrangler's conventional local-secret path and .env is everyone else's, so the moment
+# somebody parks a token in one for convenience it must not be stageable.
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
 # os / editor
 .DS_Store

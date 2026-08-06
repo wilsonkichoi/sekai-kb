@@ -594,16 +594,31 @@ Scope it to the single account you deploy from. That permission is all
 `ai/run/@cf/baai/bge-m3` needs — a token with Edit rights, or an Account-wide
 template token, grants more than this command can use.
 
-**2. Export the two variables and run the build.**
+**2. Export the two variables and run the build.** The account id is an identifier,
+not a credential — it appears in dashboard URLs, so typing it is fine. The token is a
+credential: read it from a prompt rather than typing it on the command line, because
+an inline `VAR=value command` prefix is written to your shell history verbatim.
 
 ```bash
-CF_ACCOUNT_ID=<your-account-id> CF_AI_TOKEN=<the-token> npm run embeddings:build
+export CF_ACCOUNT_ID=<your-account-id>
+printf 'Cloudflare AI token: ' && read -rs CF_AI_TOKEN && echo && export CF_AI_TOKEN
+npm run embeddings:build
 ```
 
-Both are required. A missing or blank value exits nonzero naming the variable
-rather than silently skipping the embedding step and writing a hollow index. Your
-account id is on the right-hand sidebar of any zone's overview page, and in the URL
-of the dashboard's account home.
+(`read -rs` is silent and works in both bash and zsh; `npx wrangler whoami` prints
+your account id if you do not have it to hand.)
+
+Both variables are required. A missing or blank value exits nonzero naming the
+variable rather than silently skipping the embedding step and writing a hollow index.
+
+**Where the credentials live: nowhere in this repository.** The build reads both from
+the environment at run time. Nothing writes them to a file, no log line prints the
+token or the request URL, and the emitted `vectors.json` carries only chunk text and
+vectors. Errors name the variable and the HTTP status, never the value. Keep it that
+way: if you park the token in a file for convenience, `.gitignore` already covers
+`.env` and `.dev.vars`, but a credential in the environment of the one shell that
+needs it is safer than a credential on disk. To revoke, roll the token in the
+Cloudflare dashboard — nothing in the repository has to change.
 
 **3. Re-run it after any `knowledge/` change.** The index is a snapshot: an article
 added, edited, or deleted since the last run is respectively missing, stale, or a

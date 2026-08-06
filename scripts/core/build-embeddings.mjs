@@ -14,7 +14,14 @@
  * Not wired into the prebuild chain, by design: the site build must stay green with no
  * Cloudflare credentials in the environment. Run it by hand after a knowledge/ change:
  *
- *   CF_ACCOUNT_ID=... CF_AI_TOKEN=... npm run embeddings:build
+ *   export CF_ACCOUNT_ID=...
+ *   printf 'token: ' && read -rs CF_AI_TOKEN && echo && export CF_AI_TOKEN
+ *   npm run embeddings:build
+ *
+ * Both are read from the environment and never persisted: no log line prints the token
+ * or the request URL, and errors name the variable and the HTTP status, never the value.
+ * An inline `CF_AI_TOKEN=... npm run ...` prefix would land in shell history, which is
+ * why the runbook leads with the prompt form.
  *
  * See docs/runbook/DEPLOY.md §Corpus embeddings for the token scope and neuron budget.
  *

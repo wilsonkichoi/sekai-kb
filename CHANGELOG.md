@@ -70,8 +70,13 @@ tags, never framework `main`** (ADR 004, SPEC
   quantization round-trip, the Workers AI request contract against a stubbed `fetch`, and
   the zero-chunk coverage failure. It runs in CI and needs neither network nor credentials.
 - **Runbook:** `docs/runbook/DEPLOY.md` gains a Corpus embeddings subsection with the two
-  environment variables, the minimum API-token scope, when to re-run, and the free-tier
-  neuron budget.
+  environment variables, the minimum API-token scope, when to re-run, the free-tier neuron
+  budget, and where the credentials live (the environment, never the repository).
+- **`.env` and `.dev.vars` are gitignored.** Nothing in the framework reads either file —
+  credentials reach Cloudflare through `wrangler secret put` and reach the embedding build
+  through the environment. They are ignored because `.dev.vars` is wrangler's conventional
+  local-secret path and `.env` is everyone else's, so a token parked in one for convenience
+  is never stageable.
 
 > **Upgrade note:** `features.og` and `workers.og` are config-schema additions.
 > Both are absent-safe: missing keys leave OG on the static `og-default.png`
