@@ -518,6 +518,34 @@ describe('DoD 2: heading is the section the chunk starts in, across a rule (d) m
     );
     assert.deepEqual([...new Set(headingsOf(chunks))], ['Real Section']);
   });
+
+  test('a fenced block split across paragraph pieces preserves fence state', () => {
+    // A code fence with a blank line inside it, in an over-MAX_TOKENS section.
+    // splitOnParagraphs splits at the blank line, putting the opening ``` in one
+    // piece and `## Not A Heading` in the next. Without fence-state propagation,
+    // headingsIn() starts fresh and misidentifies the code as a real heading.
+    const fencedWithBlank = [
+      '```',
+      tokens(50, 'code_before'),
+      '',
+      '## Not A Heading',
+      tokens(50, 'code_after'),
+      '```',
+    ].join('\n');
+    const body = paragraphs(
+      '## Real Section',
+      tokens(250, 'prose_a'),
+      fencedWithBlank,
+      tokens(250, 'prose_b'),
+    );
+    const chunks = chunksOf(body);
+    assert.ok(chunks.length >= 2, 'the fixture must split into multiple chunks');
+    assert.ok(
+      chunks.every((chunk) => chunk.heading !== 'Not A Heading'),
+      'a ## inside a fenced block split across pieces must never become a chunk heading',
+    );
+    assert.deepEqual([...new Set(headingsOf(chunks))], ['Real Section']);
+  });
 });
 
 /* --------------------------- DoD 1 (e): a body with no h2, and pre-heading text */

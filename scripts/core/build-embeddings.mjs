@@ -240,8 +240,8 @@ function mergeShort(units) {
  * headings a piece contains cannot say which section it STARTS in, and that is what the
  * chunk's `heading` metadata means.
  */
-function headingsIn(text) {
-  let inFence = false;
+function headingsIn(text, initialInFence = false) {
+  let inFence = initialInFence;
   let seenContent = false;
   let leading = null;
   let last = null;
@@ -260,7 +260,7 @@ function headingsIn(text) {
     }
     if (line.trim()) seenContent = true;
   }
-  return { leading, last };
+  return { leading, last, inFence };
 }
 
 /**
@@ -287,8 +287,10 @@ export function chunkArticle({ slug, title, url, category, body }) {
     // The section in effect at the start of the next piece: the unit's own heading until
     // a piece carries a heading of its own, then the last one that piece opened.
     let current = section.heading;
+    let fenceState = false;
     for (const { text: piece } of pieces) {
-      const { leading, last } = headingsIn(piece);
+      const { leading, last, inFence } = headingsIn(piece, fenceState);
+      fenceState = inFence;
       const heading = leading === null ? current : leading;
       // (c) Overlap: prefix every chunk after the first with the previous chunk's tail.
       // The prefix is context carried from the previous chunk, so it is deliberately not
