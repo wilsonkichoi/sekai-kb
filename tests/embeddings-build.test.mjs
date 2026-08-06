@@ -28,6 +28,8 @@ import {
   unpackVectors,
   readCredentials,
   embedBatch,
+  embedAllChunks,
+  embedInput,
   assertFullCoverage,
   buildArtifact,
 } from '../scripts/core/build-embeddings.mjs';
@@ -644,6 +646,150 @@ describe('DoD 3: embedBatch validates the response shape', () => {
         dim: SMALL_DIM,
       }),
     );
+  });
+});
+
+/* -------------------------------------------- DoD 3: the fail-soft embed loop */
+
+describe('DoD 3: embedAllChunks keeps going past a failed batch and counts the failures', () => {
+  /** `count` chunks, each identifiable by slug, spanning `Math.ceil(count / MAX_BATCH)` batches. */
+  const chunksFor = (count) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `alpha/article-${i}#0`,
+      slug: `alpha/article-${i}`,
+      title: `Article ${i}`,
+      heading: '',
+      text: `body of chunk ${i}`,
+    }));
+
+  /** A stub embedder that fails the batches whose zero-based index is in `failAt`. */
+  const embedderFailing = (failAt, calls = []) => {
+    let batchIndex = 0;
+    return async (texts) => {
+      const index = batchIndex++;
+      calls.push({ index, size: texts.length });
+      if (failAt.includes(index)) throw new Error(`HTTP 500 after 4 attempts (batch ${index})`);
+      return texts.map(() => Array.from({ length: DIM }, () => 0.5));
+    };
+  };
+
+  test('a happy run returns one int8 vector per chunk and no failures', async () => {
+    const chunks = chunksFor(5);
+    const { vectors, failures } = await embedAllChunks({
+      chunks,
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([]),
+    });
+    assert.equal(vectors.length, chunks.length);
+    assert.deepEqual(failures, []);
+    for (const vector of vectors) assert.ok(vector instanceof Int8Array);
+  });
+
+  test('a failed first batch does not stop the later batches from running', async () => {
+    const calls = [];
+    const chunks = chunksFor(MAX_BATCH * 3);
+    const { failures } = await embedAllChunks({
+      chunks,
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([0], calls),
+    });
+    assert.deepEqual(
+      calls.map((c) => c.index),
+      [0, 1, 2],
+      'every batch must be attempted, so one run reports the whole failure picture',
+    );
+    assert.equal(failures.length, 1);
+  });
+
+  test('the failure record names the affected articles and the underlying message', async () => {
+    const chunks = chunksFor(MAX_BATCH * 2);
+    const { failures } = await embedAllChunks({
+      chunks,
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([1]),
+    });
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].firstChunk, MAX_BATCH);
+    assert.equal(failures[0].chunkCount, MAX_BATCH);
+    assert.deepEqual(failures[0].slugs, chunks.slice(MAX_BATCH).map((c) => c.slug));
+    assert.match(failures[0].message, /HTTP 500/);
+  });
+
+  test('every failed batch is counted, not just the first', async () => {
+    const chunks = chunksFor(MAX_BATCH * 3);
+    const { vectors, failures } = await embedAllChunks({
+      chunks,
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([0, 2]),
+    });
+    assert.equal(failures.length, 2);
+    assert.equal(
+      failures.reduce((n, f) => n + f.chunkCount, 0),
+      MAX_BATCH * 2,
+    );
+    assert.equal(vectors.length, MAX_BATCH, 'only the surviving batch contributed vectors');
+  });
+
+  test('batches are exactly MAX_BATCH wide, with the remainder last', async () => {
+    const calls = [];
+    await embedAllChunks({
+      chunks: chunksFor(MAX_BATCH * 2 + 7),
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([], calls),
+    });
+    assert.deepEqual(
+      calls.map((c) => c.size),
+      [MAX_BATCH, MAX_BATCH, 7],
+    );
+  });
+
+  test('the credentials are handed to the embedder unchanged', async () => {
+    let seen = null;
+    await embedAllChunks({
+      chunks: chunksFor(1),
+      accountId: 'acct-1',
+      apiToken: 'tok-1',
+      embed: async (texts, options) => {
+        seen = options;
+        return texts.map(() => Array.from({ length: DIM }, () => 0.5));
+      },
+    });
+    assert.equal(seen.accountId, 'acct-1');
+    assert.equal(seen.apiToken, 'tok-1');
+  });
+
+  test('what is embedded is embedInput: title, heading and text', async () => {
+    let sent = null;
+    const chunk = { id: 'a#0', slug: 'a', title: 'Title', heading: 'Heading', text: 'Body text' };
+    await embedAllChunks({
+      chunks: [chunk],
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: async (texts) => {
+        sent = texts;
+        return texts.map(() => Array.from({ length: DIM }, () => 0.5));
+      },
+    });
+    assert.deepEqual(sent, [embedInput(chunk)]);
+    assert.equal(sent[0], 'Title\nHeading\nBody text');
+  });
+
+  test('no chunks means no request and no failure', async () => {
+    const calls = [];
+    const { vectors, failures } = await embedAllChunks({
+      chunks: [],
+      accountId: 'acct',
+      apiToken: 'tok',
+      embed: embedderFailing([], calls),
+    });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(vectors, []);
+    assert.deepEqual(failures, []);
   });
 });
 

@@ -35,6 +35,29 @@
  * branch for any script: the framework is English-only in every code tree, which
  * scripts/ci/check-english-only.mjs enforces (AGENTS.md, iron rule 2).
  *
+ * ── The corpus: what is embedded, and what is reported instead ───────────────────
+ * Articles are discovered from the filesystem — every `knowledge/<dir>/*.md` that does
+ * not start with `_` — which is the same definition the editorial gates use
+ * (scripts/core/test-frontmatter.mjs discovers categories "from filesystem (no config
+ * coupling)", and article-health's --all sweep walks the same shape). A directory whose
+ * name is not a configured category in place.config.ts still holds articles, and this
+ * script must see them: collecting only the configured folders would let an article go
+ * missing while assertFullCoverage, which only ever sees what was collected, reported
+ * full coverage.
+ *
+ * Only the articles the site publishes are embedded. The rest are EXCLUDED and named in
+ * the run output, one line each, never dropped silently. The reason is the citation
+ * contract: a chunk's `url` must resolve to a real page (it is what the chat worker
+ * cites), and only a configured category has one — scripts/core/sync.sh projects those
+ * folders into src/content/, and build-kb-index.mjs lists them in public/kb/topics.json.
+ * Embedding an unpublished article would let an answer cite a 404, which is worse than
+ * the answer not being available. Wiring a route for such a directory (its name becoming
+ * a configured category) moves its articles into the corpus with no change here.
+ *
+ * Root-level `knowledge/*.md` is not article-shaped in that definition and is neither
+ * embedded nor reported: those are the workflow queues a human edits in place
+ * (sync.sh carries the same skip set), not content.
+ *
  * ── The chunking rules ───────────────────────────────────────────────────────────
  *  (a) Sections split on `##` headings (h2 exactly; `###` and deeper stay inside their
  *      parent section, and a `##` line inside a fenced code block is not a heading).
@@ -46,6 +69,15 @@
  *      is prefixed with the trailing words of the previous chunk, across section
  *      boundaries as well as within a section, so a chunk never opens without the
  *      context that led into it.
+ *
+ *      Token accounting, since (b) and (c) compose: MAX_TOKENS is the ceiling on a
+ *      chunk's OWN body, and the overlap prefix is added on top of it. An emitted chunk
+ *      is therefore at most MAX_TOKENS + OVERLAP_TOKENS words (550, about 715 model
+ *      tokens at the ratio above), and larger only in rule (b)'s documented case, where
+ *      one paragraph exceeds the ceiling by itself and ships whole. Both stay far inside
+ *      bge-m3's 8192-token sequence limit, which is the constraint that matters; the
+ *      300-500 range is a retrieval-quality target for the body, not a hard cap on the
+ *      emitted string.
  *  (d) A section under MIN_TOKENS merges forward into the next chunk rather than
  *      emitting a stub that would retrieve on its heading alone. A trailing short
  *      section has no successor, so it merges backward into the last chunk instead;
@@ -347,24 +379,53 @@ export async function embedBatch(texts, options = {}) {
 
 /* ── corpus ───────────────────────────────────────────────────────────────────── */
 
+/** Why an article-shaped file under knowledge/ was not embedded. */
+export const UNPUBLISHED =
+  'the site publishes no page for it: its directory is not a category in place.config.ts';
+
 /**
- * Walk knowledge/ through the category list in place.config.ts — the same scan
- * build-kb-index.mjs performs, so `url` matches the topics.json entry for the article
- * one-for-one. Files starting with `_` are not articles (the soundscape manifest is one).
+ * Discover every article under knowledge/ from the filesystem, and split them into the
+ * ones this build embeds and the ones it does not. See the header comment for why the
+ * scan is filesystem-driven and why an unpublished article is reported rather than
+ * embedded.
+ *
+ * Returns `{articles, excluded}`:
+ *   articles — published, in a configured category, so `url` matches that article's
+ *              public/kb/topics.json entry one-for-one. Sorted by file path.
+ *   excluded — `{file, reason}` for every article-shaped file that is not published.
+ *              run() prints each one. Never silently empty of something it found.
+ *
+ * A `_`-prefixed file is not an article at all (the soundscape manifest is one), so it
+ * appears in neither list.
  */
 export async function collectArticles(root = process.cwd()) {
   const placeConfig = (await import(resolve(root, 'place.config.ts'))).default;
+  // Configured category folder title -> url slug. The folder names are the titles.
+  const categoryOf = new Map(placeConfig.categories.map((c) => [c.title, c.slug]));
+
+  const knowledge = resolve(root, 'knowledge');
+  let entries;
+  try {
+    entries = await readdir(knowledge, { withFileTypes: true });
+  } catch {
+    return { articles: [], excluded: [] }; // no knowledge/ tree yet
+  }
+
   const articles = [];
-  for (const { slug: category, title: folder } of placeConfig.categories) {
-    const dir = resolve(root, 'knowledge', folder);
-    let files;
-    try {
-      files = (await readdir(dir)).filter((f) => f.endsWith('.md') && !f.startsWith('_'));
-    } catch {
-      continue; // category folder not present yet
-    }
-    for (const file of files.sort()) {
+  const excluded = [];
+  for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+    const dir = join(knowledge, entry.name);
+    const files = (await readdir(dir))
+      .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
+      .sort();
+    const category = categoryOf.get(entry.name);
+
+    for (const file of files) {
       const abs = join(dir, file);
+      if (!category) {
+        excluded.push({ file: relative(root, abs), reason: UNPUBLISHED });
+        continue;
+      }
       const { data, content } = matter(await readFile(abs, 'utf-8'));
       const name = basename(file, '.md');
       articles.push({
@@ -377,7 +438,7 @@ export async function collectArticles(root = process.cwd()) {
       });
     }
   }
-  return articles;
+  return { articles, excluded };
 }
 
 /**
@@ -419,14 +480,56 @@ export function buildArtifact({ chunks, vectors, model = MODEL, builtAt }) {
 /* ── the run ──────────────────────────────────────────────────────────────────── */
 
 /** What gets embedded: title and heading give the chunk its retrieval context. */
-const embedInput = (chunk) =>
+export const embedInput = (chunk) =>
   [chunk.title, chunk.heading, chunk.text].filter(Boolean).join('\n');
+
+/**
+ * Embed every chunk, batch by batch, soft-failing within the run and hard-failing at the
+ * end. A batch that exhausts its retry budget is recorded and the loop CONTINUES: one
+ * bad batch must not hide the state of the rest of the corpus, so the operator gets the
+ * whole failure picture from one run instead of discovering it one batch per run.
+ *
+ * Returns `{vectors, failures}`. A non-empty `failures` means the run has no complete
+ * set of vectors, and run() fails on it without writing an artifact: a partial
+ * vectors.json is an index that is silently missing content, which is exactly what
+ * assertFullCoverage exists to prevent. Fail-soft is the loop, not the outcome.
+ */
+export async function embedAllChunks({ chunks, accountId, apiToken, embed = embedBatch, onProgress }) {
+  const vectors = [];
+  const failures = [];
+  for (let i = 0; i < chunks.length; i += MAX_BATCH) {
+    const batch = chunks.slice(i, i + MAX_BATCH);
+    try {
+      const raw = await embed(batch.map(embedInput), { accountId, apiToken });
+      for (const vec of raw) vectors.push(l2normInt8(vec));
+      onProgress?.({ embedded: vectors.length, total: chunks.length });
+    } catch (e) {
+      failures.push({
+        firstChunk: i,
+        chunkCount: batch.length,
+        slugs: [...new Set(batch.map((c) => c.slug))],
+        message: e.message,
+      });
+      onProgress?.({ embedded: vectors.length, total: chunks.length, failed: batch.length, message: e.message });
+    }
+  }
+  return { vectors, failures };
+}
 
 async function run() {
   const root = process.cwd();
   const { accountId, apiToken } = readCredentials(process.env);
 
-  const articles = await collectArticles(root);
+  const { articles, excluded } = await collectArticles(root);
+
+  // Every article-shaped file this scan found but will not embed, by name. Printed
+  // before the work starts and on every run: an article missing from the index is a
+  // question the chat worker cannot answer, and the operator has to be able to see it.
+  if (excluded.length) {
+    console.log(`[embeddings] ${excluded.length} article(s) NOT embedded — ${UNPUBLISHED}:`);
+    for (const { file } of excluded) console.log(`[embeddings]   ${file}`);
+  }
+
   const chunks = [];
   const perArticle = [];
   for (const article of articles) {
@@ -440,12 +543,23 @@ async function run() {
     `[embeddings] ${articles.length} articles in, ${chunks.length} chunks out — embedding with ${MODEL}`,
   );
 
-  const vectors = [];
-  for (let i = 0; i < chunks.length; i += MAX_BATCH) {
-    const batch = chunks.slice(i, i + MAX_BATCH);
-    const raw = await embedBatch(batch.map(embedInput), { accountId, apiToken });
-    for (const vec of raw) vectors.push(l2normInt8(vec));
-    console.log(`[embeddings]   ${vectors.length}/${chunks.length} embedded`);
+  const { vectors, failures } = await embedAllChunks({
+    chunks,
+    accountId,
+    apiToken,
+    onProgress: ({ embedded, total, failed, message }) => {
+      if (failed) console.error(`[embeddings]   ${failed} chunk(s) FAILED: ${message}`);
+      else console.log(`[embeddings]   ${embedded}/${total} embedded`);
+    },
+  });
+
+  if (failures.length) {
+    const failedChunks = failures.reduce((n, f) => n + f.chunkCount, 0);
+    throw new Error(
+      `${failedChunks} of ${chunks.length} chunk(s) in ${failures.length} batch(es) failed to embed; ` +
+        `no artifact was written. Affected articles:\n` +
+        failures.map((f) => f.slugs.map((s) => `  ${s} (${f.message})`).join('\n')).join('\n'),
+    );
   }
 
   const artifact = buildArtifact({ chunks, vectors });

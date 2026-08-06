@@ -21,9 +21,18 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
@@ -359,6 +368,35 @@ describe('DoD 1 (c): consecutive chunks overlap by roughly OVERLAP_TOKENS', () =
       `the first chunk must start at the body, got: ${chunks[0].text.slice(0, 80)}`,
     );
   });
+
+  // The overlap prefix is charged ON TOP of the MAX_TOKENS body budget, not inside it
+  // (see the module header's token accounting). These pin that stated ceiling so the
+  // emitted size cannot drift from what the header and the runbook promise.
+  test('(c) an emitted chunk is at most MAX_TOKENS + OVERLAP_TOKENS words', () => {
+    const chunks = chunksOf(
+      paragraphs(
+        '## Section One',
+        ...[1, 2, 3, 4].map((n) => tokens(200, `para${n}s`)),
+        '## Section Two',
+        ...[5, 6].map((n) => tokens(200, `para${n}s`)),
+      ),
+    );
+    assert.ok(chunks.length >= 3, 'the fixture must produce several overlapped chunks');
+    for (const chunk of chunks) {
+      assert.ok(
+        countTokens(chunk.text) <= MAX_TOKENS + OVERLAP_TOKENS,
+        `chunk ${chunk.chunkIndex} is ${countTokens(chunk.text)} words, ` +
+          `over the ${MAX_TOKENS} + ${OVERLAP_TOKENS} ceiling`,
+      );
+    }
+  });
+
+  test('(c) only rule (b) exceeds that ceiling: a single oversized paragraph ships whole', () => {
+    const chunks = chunksOf(paragraphs('## Section One', tokens(200, 'alpha'), '## Section Two', tokens(700, 'huge')));
+    const over = chunks.filter((chunk) => countTokens(chunk.text) > MAX_TOKENS + OVERLAP_TOKENS);
+    assert.equal(over.length, 1, 'exactly the chunk carrying the oversized paragraph may exceed the ceiling');
+    assert.ok(over[0].text.includes(tokens(700, 'huge')), 'and it exceeds it by carrying that paragraph whole');
+  });
 });
 
 /* ------------------------------ DoD 1 (d): sections under MIN_TOKENS are merged */
@@ -446,7 +484,7 @@ describe('DoD 1 (f): an empty body yields no chunks', () => {
 
 describe('DoD 2: collectArticles reads the real corpus', () => {
   test('resolves at least one article, each with the six contract fields', async () => {
-    const articles = await collectArticles(REPO_ROOT);
+    const { articles } = await collectArticles(REPO_ROOT);
     assert.ok(Array.isArray(articles));
     assert.ok(articles.length > 0, 'the corpus must not be empty');
     for (const article of articles) {
@@ -458,7 +496,8 @@ describe('DoD 2: collectArticles reads the real corpus', () => {
   });
 
   test('file is the repo-relative knowledge/ path, and no underscore-prefixed file is collected', async () => {
-    for (const article of await collectArticles(REPO_ROOT)) {
+    const { articles } = await collectArticles(REPO_ROOT);
+    for (const article of articles) {
       assert.ok(
         article.file.startsWith('knowledge/'),
         `expected a repo-relative knowledge/ path, got: ${article.file}`,
@@ -471,7 +510,8 @@ describe('DoD 2: collectArticles reads the real corpus', () => {
   });
 
   test('slug is <category>/<filename> and url is its leading-slash form', async () => {
-    for (const article of await collectArticles(REPO_ROOT)) {
+    const { articles } = await collectArticles(REPO_ROOT);
+    for (const article of articles) {
       const name = article.file.slice(article.file.lastIndexOf('/') + 1).replace(/\.md$/, '');
       assert.equal(article.slug, `${article.category}/${name}`);
       assert.equal(article.url, `/${article.category}/${name}`);
@@ -479,11 +519,88 @@ describe('DoD 2: collectArticles reads the real corpus', () => {
   });
 
   test('body is the Markdown body with frontmatter removed', async () => {
-    for (const article of await collectArticles(REPO_ROOT)) {
+    const { articles } = await collectArticles(REPO_ROOT);
+    for (const article of articles) {
       assert.ok(
         !article.body.trimStart().startsWith('---'),
         `frontmatter was not stripped from ${article.file}`,
       );
+    }
+  });
+});
+
+/* ------------------------- DoD 5: nothing under knowledge/ is silently dropped */
+
+/**
+ * Every article-shaped file under knowledge/, found the way the editorial gates find
+ * them: one level of directories, `*.md`, no leading underscore. This is the set
+ * collectArticles must account for in full — the assertion below is that the split is
+ * exhaustive, not that any particular file lands on either side, so it stays true for
+ * any corpus (this template's, an adopter's) and names no place-specific path.
+ */
+function articleShapedFiles(root) {
+  const knowledge = join(root, 'knowledge');
+  const found = [];
+  for (const entry of readdirSync(knowledge, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    for (const name of readdirSync(join(knowledge, entry.name))) {
+      if (name.endsWith('.md') && !name.startsWith('_')) found.push(`knowledge/${entry.name}/${name}`);
+    }
+  }
+  return found.sort();
+}
+
+describe('DoD 5: collectArticles accounts for every article under knowledge/', () => {
+  test('the real corpus splits exhaustively: every article-shaped file is embedded or reported', async () => {
+    const { articles, excluded } = await collectArticles(REPO_ROOT);
+    const accounted = [...articles.map((a) => a.file), ...excluded.map((e) => e.file)].sort();
+    assert.deepEqual(
+      accounted,
+      articleShapedFiles(REPO_ROOT),
+      'an article-shaped file under knowledge/ appeared in neither articles nor excluded, ' +
+        'so it would be missing from retrieval with nothing reporting it',
+    );
+  });
+
+  test('every excluded entry names a file that exists and carries a non-empty reason', async () => {
+    const { excluded } = await collectArticles(REPO_ROOT);
+    for (const entry of excluded) {
+      assert.ok(existsSync(join(REPO_ROOT, entry.file)), `excluded file must exist: ${entry.file}`);
+      assert.equal(typeof entry.reason, 'string');
+      assert.ok(entry.reason.length > 0, `an exclusion must state why: ${entry.file}`);
+    }
+  });
+
+  test('an article in a directory that is not a configured category is reported, not swallowed', async () => {
+    // A fixture corpus, so the case holds regardless of what this repository's own
+    // knowledge/ tree happens to contain today.
+    const root = mkdtempSync(join(tmpdir(), 'sekai-embeddings-'));
+    try {
+      writeFileSync(
+        join(root, 'place.config.ts'),
+        'export default { categories: [{ slug: "alpha", title: "Alpha" }] };\n',
+      );
+      mkdirSync(join(root, 'knowledge', 'Alpha'), { recursive: true });
+      mkdirSync(join(root, 'knowledge', 'Unrouted'), { recursive: true });
+      writeFileSync(join(root, 'knowledge', 'Alpha', 'published.md'), '---\ntitle: P\n---\n\nBody.\n');
+      writeFileSync(join(root, 'knowledge', 'Unrouted', 'orphan.md'), '---\ntitle: O\n---\n\nBody.\n');
+      writeFileSync(join(root, 'knowledge', 'Unrouted', '_skipped.md'), '---\ntitle: S\n---\n\nBody.\n');
+
+      const { articles, excluded } = await collectArticles(root);
+
+      assert.deepEqual(
+        articles.map((a) => a.file),
+        ['knowledge/Alpha/published.md'],
+        'only an article in a configured category is embedded',
+      );
+      assert.deepEqual(
+        excluded.map((e) => e.file),
+        ['knowledge/Unrouted/orphan.md'],
+        'the unconfigured-directory article must be reported by name',
+      );
+      assert.match(excluded[0].reason, /place\.config\.ts/, 'the reason must point at the fix');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
@@ -512,7 +629,7 @@ describe('DoD 2: every chunk url exists in the built topics index', () => {
     const known = new Set(topics.map((topic) => topic.url));
     assert.ok(known.size > 0, 'the built topics index must not be empty');
 
-    const articles = await collectArticles(REPO_ROOT);
+    const { articles } = await collectArticles(REPO_ROOT);
     assert.ok(articles.length > 0, 'the corpus must not be empty');
 
     let total = 0;
