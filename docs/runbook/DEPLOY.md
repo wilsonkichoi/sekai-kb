@@ -569,6 +569,59 @@ No D1, no secrets, no rate limit. The worker is stateless: its only external
 dependency is the site's own `topics.json`, which it fetches once on cold start
 and caches in global scope.
 
+### Corpus embeddings
+
+`npm run embeddings:build` turns `knowledge/` into the retrieval index the chat
+worker queries. It chunks every article at roughly 300-500 words on `##` heading
+boundaries, embeds each chunk with `@cf/baai/bge-m3` through the Workers AI REST
+API, and writes `workers/chat/vectors.json`.
+
+**The artifact is gitignored, so a deploy must rebuild it first.** It carries every
+article's title, URL, and body text, and `workers/` is a code tree that may hold no
+place identity (AGENTS.md iron rule 2). `npm run worker-config:check` fails if a
+`vectors.json` is ever committed. Nothing in the site build or in CI produces it:
+the build stays green with no Cloudflare credentials in the environment, and this
+command is a deliberate manual step.
+
+**1. Mint an API token.** In the Cloudflare dashboard under My Profile > API Tokens,
+create a custom token with exactly one permission:
+
+```
+Account | Workers AI | Read
+```
+
+Scope it to the single account you deploy from. That permission is all
+`ai/run/@cf/baai/bge-m3` needs — a token with Edit rights, or an Account-wide
+template token, grants more than this command can use.
+
+**2. Export the two variables and run the build.**
+
+```bash
+CF_ACCOUNT_ID=<your-account-id> CF_AI_TOKEN=<the-token> npm run embeddings:build
+```
+
+Both are required. A missing or blank value exits nonzero naming the variable
+rather than silently skipping the embedding step and writing a hollow index. Your
+account id is on the right-hand sidebar of any zone's overview page, and in the URL
+of the dashboard's account home.
+
+**3. Re-run it after any `knowledge/` change.** The index is a snapshot: an article
+added, edited, or deleted since the last run is respectively missing, stale, or a
+dangling citation until you rebuild. The run prints articles in, chunks out, and
+bytes written, and it fails naming the file if any article produced zero chunks.
+
+**Free-tier budget.** Workers AI allows 10,000 neurons per day on the free plan
+(`[as-of 2026-07]`); one embedding call is well under one neuron, so a corpus of a
+few thousand chunks costs a small fraction of one day's allowance. The cost scales
+with total chunks, not with articles, and it is paid once per rebuild — there is no
+per-request cost at read time, because the chat worker loads the static artifact
+rather than querying a vector service.
+
+| Name | Required | Source | Meaning |
+|---|---|---|---|
+| `CF_ACCOUNT_ID` | yes | Cloudflare dashboard | The account that owns the Workers AI allowance. |
+| `CF_AI_TOKEN` | yes | API token, `Workers AI: Read` | Bearer token for the `ai/run` REST endpoint. |
+
 ---
 
 ## Visual regression

@@ -41,11 +41,15 @@ const SKIP_DIRS = new Set([
 const SKIP_PATHS = new Set([
   'src/content', 'src/data', 'public/kb',
 ]);
-// Derived worker deploy configs (workers/*/wrangler.generated.toml, written by
-// `npm run worker-config` from place.config.ts). Gitignored and place-specific by
-// design, like the projections above, and skipped by BASENAME because they sit
-// inside the worker directories rather than in a tree of their own.
-const SKIP_FILES = new Set(['wrangler.generated.toml']);
+// Derived worker artifacts. Both are gitignored and place-specific by design, like the
+// projections above, and both are skipped by BASENAME because they sit inside the worker
+// directories rather than in a tree of their own:
+//   wrangler.generated.toml  deploy config written by `npm run worker-config`
+//   vectors.json             corpus embeddings written by `npm run embeddings:build`,
+//                            carrying every article's title, url, and body text
+// A committed one would evade this skip only by being tracked, which
+// scripts/ci/check-worker-config.mjs fails on.
+const SKIP_FILES = new Set(['wrangler.generated.toml', 'vectors.json']);
 // Audio extensions are listed for the same reason the image ones are: template
 // mode walks the whole tree, so public/media/ is in scope, and the NUL-byte
 // fallback below is a heuristic no format guarantees. Naming the extension makes

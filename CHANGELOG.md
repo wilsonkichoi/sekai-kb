@@ -55,6 +55,23 @@ tags, never framework `main`** (ADR 004, SPEC
   pattern to a second worker.
 - **Runbook:** `docs/runbook/DEPLOY.md` gains an OG worker subsection with the deploy
   command, vars table, route registration, and cache-purge instructions.
+- **Corpus embeddings (`npm run embeddings:build`).** `scripts/core/build-embeddings.mjs`
+  chunks every `knowledge/` article at roughly 300-500 words on `##` heading boundaries,
+  embeds each chunk with `@cf/baai/bge-m3` through the Workers AI REST API, and writes
+  `workers/chat/vectors.json`: int8-quantized unit vectors (a consumer's dot product is
+  cosine) plus per-chunk `{id, slug, title, url, category, heading, chunkIndex, text}`
+  metadata, under a versioned `rag-v1` manifest. This is the retrieval substrate the chat
+  worker, the MCP `semantic_search` tool, and the refresh pipeline all read.
+- **The embedding index is derived and gitignored.** It carries every article's title,
+  URL, and body text, so it is rebuilt at deploy time rather than committed to `workers/`.
+  Both machine gates skip it by name, and `npm run worker-config:check` now fails if a
+  `vectors.json` — or any generated worker artifact — is tracked by git.
+- **`npm run test:embeddings`** covers the chunker's splitting rules, the int8
+  quantization round-trip, the Workers AI request contract against a stubbed `fetch`, and
+  the zero-chunk coverage failure. It runs in CI and needs neither network nor credentials.
+- **Runbook:** `docs/runbook/DEPLOY.md` gains a Corpus embeddings subsection with the two
+  environment variables, the minimum API-token scope, when to re-run, and the free-tier
+  neuron budget.
 
 > **Upgrade note:** `features.og` and `workers.og` are config-schema additions.
 > Both are absent-safe: missing keys leave OG on the static `og-default.png`

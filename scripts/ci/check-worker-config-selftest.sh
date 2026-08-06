@@ -5,9 +5,10 @@
 #
 # A guard that only ever asserts the green path proves nothing: it would pass
 # just as happily with an empty file list or an unreachable comparison. This
-# test plants five defect classes -- every kind of deployment identity that
-# must never be committed, plus the worker the guard has never heard of and the
-# template that lost a whole block -- and requires the guard to FAIL each time:
+# test plants six defect classes -- every kind of deployment identity that
+# must never be committed, plus the worker the guard has never heard of, the
+# template that lost a whole block, and the derived artifacts that must never be
+# tracked -- and requires the guard to FAIL each time:
 #
 #   1. ORIGIN        -- a real https origin in [vars] ALLOWED_ORIGIN. The
 #                       template ships it empty; a real one is a deploy config
@@ -27,6 +28,13 @@
 #                       config with no database binding and the deployed worker
 #                       hits `env.DB.prepare` with `env.DB` undefined. Absence
 #                       must fail as loudly as a wrong value.
+#   6. TRACKED DERIVED  -- a generated worker config and a generated embedding
+#                       index committed to git. Both are gitignored AND skipped
+#                       by name in the two machine gates, so a tracked one is
+#                       invisible to every other check in this repository: this
+#                       guard is the only thing standing between it and a
+#                       release. The fixture is a real git repository, because
+#                       the check reads `git ls-files`.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -47,7 +55,7 @@
 #
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
 # exit 1 when the guard fails to catch a planted defect, exit 0 when it catches
-# all five)
+# all six)
 
 set -euo pipefail
 
@@ -216,4 +224,21 @@ assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 drop_table "$COPY" '[[d1_databases]]'
 assert_guard_catches "$COPY" "a deleted [[d1_databases]] block"
 
-echo "OK: worker config self-test passed -- the guard catches a committed origin, a place-named worker name, a place-named database_name, an unregistered worker, and a deleted [[d1_databases]] block"
+# 6. TRACKED DERIVED: both generated artifacts committed. The check reads
+# `git ls-files`, so the fixture must be a real repository -- staged is enough,
+# no commit needed. The copies above are not repositories, which is exactly why
+# this class needs its own fixture rather than riding along with one of them.
+COPY="$(fresh_copy tracked-derived)"
+git -C "$COPY" init -q
+assert_guard_passes "$COPY" "a git repository with no derived artifact tracked"
+FEEDBACK_WORKER="$(dirname "$COPY/$REL")"
+printf 'name = "planted"\n' > "$FEEDBACK_WORKER/wrangler.generated.toml"
+mkdir -p "$COPY/workers/chat"
+printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/chat/vectors.json"
+git -C "$COPY" add -A
+assert_guard_catches "$COPY" "a tracked generated worker config" \
+  "$(basename "$FEEDBACK_WORKER")/wrangler.generated.toml"
+assert_guard_catches "$COPY" "a tracked generated embedding index" \
+  "workers/chat/vectors.json"
+
+echo "OK: worker config self-test passed -- the guard catches a committed origin, a place-named worker name, a place-named database_name, an unregistered worker, a deleted [[d1_databases]] block, and a tracked derived artifact"

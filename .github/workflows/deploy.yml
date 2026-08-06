@@ -143,6 +143,13 @@ jobs:
         run: npm run test:workers
       - name: OG image resolve matrix
         run: npm run test:og
+      # Corpus embeddings: the chunker, the int8 quantization round-trip, the Workers
+      # AI request contract (against a stubbed fetch -- no network, no credentials),
+      # and the zero-chunk coverage failure. The artifact these produce is gitignored
+      # and rebuilt at deploy time, so this suite is the only thing that keeps the
+      # schema 7.2b, 9.1, and 11.2 read from drifting.
+      - name: Corpus embedding chunker and artifact contract
+        run: npm run test:embeddings
       - run: npm run framework-release:selftest
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy

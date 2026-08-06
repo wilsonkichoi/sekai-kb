@@ -28,9 +28,12 @@
 //     below, including a deleted one (removing the whole block is not a way to pass
 //     either: the generator only rewrites keys the template already has, so a
 //     template with no D1 block generates a deploy config with no `env.DB`);
-//   - a wrangler.generated.toml tracked by git (it is derived and gitignored; the two
-//     machine gates skip it by name, so committing one would smuggle identity past
-//     them).
+//   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
+//     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
+//     embeddings:build`). Both are gitignored and both are skipped by name in the two
+//     machine gates, so committing one would smuggle place identity past them -- the
+//     deploy config through its origin and worker names, the vector index through every
+//     article title, url, and body chunk it carries.
 //
 // Success prints one summary line and exits 0.
 //
@@ -207,17 +210,38 @@ for (const dir of workerDirs) {
   checked += 1;
 }
 
-// A generated config is gitignored and skipped by name in both machine gates, so a
-// committed one would carry deployment identity straight past them.
-const tracked = spawnSync('git', ['-C', root, 'ls-files', `*/${GENERATED_BASENAME}`, GENERATED_BASENAME], {
-  encoding: 'utf8',
-});
-if (tracked.status === 0) {
+/* -- Derived artifacts that must never be tracked ---------------------------
+ *
+ * Each is written into workers/ by a script, gitignored, and skipped BY NAME in both
+ * machine gates. That skip is what makes a committed one dangerous: the gates would
+ * walk straight past it. `what` is what a reader needs in order to understand why the
+ * file is forbidden rather than merely untidy.
+ */
+const DERIVED_ARTIFACTS = [
+  {
+    basename: GENERATED_BASENAME,
+    what: 'a generated worker config',
+    identity: 'deployment identity (this instance\'s origin, worker name, and database ids)',
+  },
+  {
+    basename: 'vectors.json',
+    what: 'a generated corpus embedding index',
+    identity: 'place identity (every article title, url, and body chunk it embeds)',
+  },
+];
+
+for (const artifact of DERIVED_ARTIFACTS) {
+  const tracked = spawnSync(
+    'git',
+    ['-C', root, 'ls-files', `*/${artifact.basename}`, artifact.basename],
+    { encoding: 'utf8' },
+  );
+  if (tracked.status !== 0) continue;
   for (const path of tracked.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
     failures.push(
-      `${path}: a generated worker config is tracked by git. It is derived, gitignored, ` +
-        'and skipped by both machine gates by name -- committing one puts deployment ' +
-        `identity in the repository. Run \`git rm --cached ${path}\`.`,
+      `${path}: ${artifact.what} is tracked by git. It is derived, gitignored, and ` +
+        `skipped by both machine gates by name -- committing one puts ${artifact.identity} ` +
+        `in the repository. Run \`git rm --cached ${path}\`.`,
     );
   }
 }
@@ -234,5 +258,5 @@ if (failures.length) {
 
 console.log(
   `OK: worker config gate passed -- ${checked} committed ${TEMPLATE_BASENAME} file(s) carry ` +
-    'framework placeholders only, and no generated config is tracked.',
+    'framework placeholders only, and no derived worker artifact is tracked.',
 );

@@ -88,11 +88,13 @@ fi
 #    src/data via prebuild JSON, public/kb via build-kb-index): pruned by PATH,
 #    so a same-basename directory elsewhere is still scanned.
 #  - The denylist files (they necessarily contain the forbidden terms), the
-#    template marker, and the derived worker deploy configs
-#    (workers/*/wrangler.generated.toml, written by npm run worker-config and
-#    gitignored — they carry the instance's own origin and worker names by design)
-#    are dropped by filename. A committed one would evade this skip only by being
-#    tracked, which scripts/ci/check-worker-config.mjs fails on.
+#    template marker, and the derived worker artifacts are dropped by filename:
+#    workers/*/wrangler.generated.toml (written by npm run worker-config — it
+#    carries the instance's own origin and worker names by design) and
+#    workers/chat/vectors.json (written by npm run embeddings:build — it carries
+#    every article's title, url, and body text). Both are gitignored, and a
+#    committed one would evade this skip only by being tracked, which
+#    scripts/ci/check-worker-config.mjs fails on.
 # grep -I skips binary files. -print0/xargs -0 handle any spaces in paths.
 HITS="$(find "${SCAN_ROOTS[@]}" \
   \( -type d \( \
@@ -105,6 +107,7 @@ HITS="$(find "${SCAN_ROOTS[@]}" \
        ! -name genericity-denylist.local.txt \
        ! -name .sekai-template \
        ! -name wrangler.generated.toml \
+       ! -name vectors.json \
        -print0 \) \
   | xargs -0 grep -HniIE "$PATTERN" 2>/dev/null || true)"
 
