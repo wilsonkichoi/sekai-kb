@@ -110,6 +110,18 @@ tags, never framework `main`** (ADR 004, SPEC
   sequence, chat D1 migration, secret, deployment, model verification, shared
   Workers AI free allocation, and hosted-model escalation path.
 
+### Changed
+
+- **The supported Node floor is now 22.13.** The chat worker's D1 statements are
+  executed against a real SQLite database built from the shipped migration, using the
+  core `node:sqlite` module, which stopped requiring `--experimental-sqlite` in Node
+  22.13.0. The previous floor, 22.12, differs by one patch release inside the same LTS
+  line.
+
+> **Upgrade note:** Node ≥ 22.13 is required (previously ≥ 22.12). Instances on 22.12
+> exactly must take a patch upgrade within the same LTS line; every later 22.x, 24.x,
+> and 26.x runtime already satisfies it. Nothing in `place.config.ts` changes.
+
 > **Upgrade note:** `features.og` and `workers.og` are config-schema additions.
 > Both are absent-safe: missing keys leave OG on the static `og-default.png`
 > fallback, so no config edit is required on upgrade. To enable per-article OG

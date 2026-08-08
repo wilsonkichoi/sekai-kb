@@ -257,12 +257,6 @@ for (const artifact of DERIVED_ARTIFACTS) {
   );
   if (tracked.status !== 0) continue;
   for (const path of tracked.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
-    if (
-      artifact.basename === 'vectors.json' &&
-      !/^workers\/[^/]+\/vectors\.json$/.test(path)
-    ) {
-      continue;
-    }
     failures.push(
       `${path}: ${artifact.what} is tracked by git. It is derived, gitignored, and ` +
         `skipped by both machine gates by name -- committing one puts ${artifact.identity} ` +

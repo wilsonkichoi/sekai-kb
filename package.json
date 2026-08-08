@@ -5,7 +5,7 @@
   "private": true,
   "description": "AI-native place knowledge base — the sekai-kb framework template.",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "init": "node scripts/init/index.mjs",

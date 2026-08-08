@@ -13,7 +13,7 @@ on GitHub, then cloned). `<owner>/<repo>` below means your GitHub repo.
 
 | Tool    | Version   | Check                  | Install                                                        |
 | ------- | --------- | ---------------------- | --------------------------------------------------------------- |
-| Node.js | ≥ 22.12   | `node --version`       | <https://nodejs.org/> or your version manager                   |
+| Node.js | ≥ 22.13   | `node --version`       | <https://nodejs.org/> or your version manager                   |
 | npm     | ships with Node | `npm --version`  | —                                                               |
 | uv      | any recent | `uv --version`        | `curl -LsSf https://astral.sh/uv/install.sh \| sh`               |
 | Python  | ≥ 3.12    | managed by uv          | nothing to do — uv reads `.python-version` and fetches it        |

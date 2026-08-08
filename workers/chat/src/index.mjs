@@ -2,6 +2,10 @@
 
 import vectorArtifact from '../vectors.json' with { type: 'json' };
 
+import { SQL } from './sql.mjs';
+
+export { SQL };
+
 export const EMBED_MODEL = '@cf/baai/bge-m3';
 export const CHAT_MODEL = '@cf/zai-org/glm-4.7-flash';
 
@@ -12,28 +16,6 @@ const MIN_MESSAGE_CHARS = 2;
 const MAX_MESSAGE_CHARS = 1000;
 const MAX_HISTORY_ENTRIES = 20;
 const TOP_K = 5;
-
-export const SQL = {
-  RATE_LIMIT_PRUNE: `
-    DELETE FROM submission_window
-    WHERE ip_hash = ?1 AND (window_start <= ?2 OR count <= 0)
-  `,
-  RATE_LIMIT_RECORD: `
-    INSERT INTO submission_window (ip_hash, window_start, count)
-    VALUES (?1, ?2, 1)
-    ON CONFLICT(ip_hash, window_start) DO UPDATE SET count = count + 1
-  `,
-  RATE_LIMIT_COUNT: `
-    SELECT SUM(count) AS total, MIN(window_start) AS oldest
-    FROM submission_window
-    WHERE ip_hash = ?1
-  `,
-  RATE_LIMIT_RELEASE: `
-    UPDATE submission_window
-    SET count = count - 1
-    WHERE ip_hash = ?1 AND window_start = ?2 AND count > 0
-  `,
-};
 
 let decodedArtifact;
 
@@ -239,7 +221,11 @@ function withFinalCitations(upstream, citations) {
         const { done, value } = await reader.read();
         if (done) {
           pending += decoder.decode();
-          if (pending.trim() && pending.trim() !== 'data: [DONE]') queued.push(pending);
+          // Terminate the trailing partial frame: an upstream that ends without a blank
+          // line would otherwise concatenate it with the citations event below.
+          if (pending.trim() && pending.trim() !== 'data: [DONE]') {
+            queued.push(pending.endsWith('\n\n') ? pending : `${pending.replace(/\n+$/, '')}\n\n`);
+          }
           for (const event of queued) controller.enqueue(encoder.encode(event));
           controller.enqueue(
             encoder.encode(`event: citations\ndata: ${JSON.stringify(citations)}\n\n`),
@@ -346,9 +332,19 @@ export async function handleRequest(request, env) {
     return json({ error: 'embedding_artifact_incompatible', detail: error.message }, 503, allowedOrigin);
   }
 
+  // Two try blocks, not one: an outage or an exhausted neuron allocation is an
+  // availability failure, while a dimension disagreement is the artifact mismatch DoD 3
+  // asks the 503 to name. Reporting the first as the second sends the operator after a
+  // corrupt artifact that is fine.
+  let embedded;
+  try {
+    embedded = await env.AI.run(EMBED_MODEL, { text: [payload.message.trim()] });
+  } catch (error) {
+    return json({ error: 'query_embedding_unavailable', detail: error.message }, 503, allowedOrigin);
+  }
+
   let retrieved;
   try {
-    const embedded = await env.AI.run(EMBED_MODEL, { text: [payload.message.trim()] });
     retrieved = retrieve(embedded?.data?.[0], artifact);
   } catch (error) {
     return json({ error: 'query_embedding_incompatible', detail: error.message }, 503, allowedOrigin);
@@ -362,7 +358,15 @@ export async function handleRequest(request, env) {
     })),
     { role: 'user', content: payload.message.trim() },
   ];
-  const generated = await env.AI.run(CHAT_MODEL, { messages, stream: true });
+  // The shared 10k neurons/day allocation is spent by both the embedding above and this
+  // call, so exhausting it throws here. Unwrapped, that reaches the client as a bare
+  // runtime 500 with no CORS headers and no {error} body, unlike every other path here.
+  let generated;
+  try {
+    generated = await env.AI.run(CHAT_MODEL, { messages, stream: true });
+  } catch (error) {
+    return json({ error: 'generation_unavailable', detail: error.message }, 503, allowedOrigin);
+  }
   if (!(generated instanceof ReadableStream)) {
     return json({ error: 'generation_stream_unavailable' }, 503, allowedOrigin);
   }

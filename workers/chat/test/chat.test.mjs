@@ -42,7 +42,12 @@ import {
   validPayload,
 } from './helpers.mjs';
 
-const fixturePath = fileURLToPath(new URL('./fixtures/vectors.json', import.meta.url));
+// The fixture is deliberately NOT named vectors.json: both machine gates skip that
+// basename, so a fixture carrying it would be scanned by nobody. This name is what
+// makes DoD 8's "synthetic, place-free" property machine-checked.
+const fixturePath = fileURLToPath(
+  new URL('./fixtures/corpus-vectors.fixture.json', import.meta.url),
+);
 const artifactPath = fileURLToPath(new URL('../vectors.json', import.meta.url));
 const fixtureBytes = readFileSync(fixturePath);
 const originalArtifact = existsSync(artifactPath) ? readFileSync(artifactPath) : null;
@@ -68,6 +73,15 @@ function cleanupArtifact() {
 
 process.once('exit', cleanupArtifact);
 after(cleanupArtifact);
+
+// A developer's real artifact is gitignored, so a leaked synthetic copy is invisible to
+// `git status` and would be bundled by the next deploy. 'exit' does not run on a signal.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    cleanupArtifact();
+    process.exit(130);
+  });
+}
 
 const workerModule = await import('../src/index.mjs');
 const { CHAT_MODEL, EMBED_MODEL, SQL, handleRequest, default: worker } = workerModule;
@@ -176,6 +190,17 @@ describe('retrieval, prompting, and SSE', () => {
     assert.match(body, /event: citations\ndata: .+\n\n$/, 'citations must remain the final event');
   });
 
+  test('an upstream that ends without a blank line still yields a separate citations frame', async () => {
+    const AI = createAiStub({ streamParts: ['data: {"response":"tail"}'] });
+    const { response } = await accepted({ AI });
+    const body = await response.text();
+    assert.match(
+      body,
+      /^data: \{"response":"tail"\}\n\nevent: citations\ndata: .+\n\n$/,
+      `the trailing partial frame must be terminated, got ${JSON.stringify(body)}`,
+    );
+  });
+
   test('final citations contain exactly title and URL for every prompted chunk', async () => {
     const { response } = await accepted();
     const body = await response.text();
@@ -216,6 +241,33 @@ describe('retrieval, prompting, and SSE', () => {
       else assert.match(text, /dim|dimension/, `response must name dimension: ${output.body}`);
     });
   }
+
+  // An AI outage and a corrupt artifact are different operator problems. Reporting the
+  // first as the second sends whoever is on the deploy after an artifact that is fine.
+  test('an embedding call failure is 503 with CORS, and is not reported as an artifact mismatch', async () => {
+    const AI = {
+      calls: [],
+      async run(model) {
+        if (model === EMBED_MODEL) throw new Error('inference upstream refused the request');
+        throw new Error('generation must not be reached');
+      },
+    };
+    const { response } = await accepted({ AI });
+    const body = await errorShape(response, 503);
+    assertCors(response);
+    assert.notEqual(body.error, 'query_embedding_incompatible', 'an outage is not a mismatch');
+  });
+
+  test('a generation failure is 503 with CORS and an {error} body, never a bare runtime 500', async () => {
+    const AI = createAiStub({
+      onRun(model) {
+        if (model === CHAT_MODEL) throw new Error('daily neuron allocation exhausted');
+      },
+    });
+    const { response } = await accepted({ AI });
+    await errorShape(response, 503);
+    assertCors(response);
+  });
 });
 
 describe('CORS and method handling', () => {

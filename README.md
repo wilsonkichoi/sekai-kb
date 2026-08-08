@@ -14,7 +14,7 @@ with your own place.
 
 ## Prerequisites
 
-- **Node.js ≥ 22.12** (and npm)
+- **Node.js ≥ 22.13** (and npm)
 - **[uv](https://docs.astral.sh/uv/)** — runs the Python editorial tooling; it
   fetches Python ≥ 3.12 itself
 - **[gh](https://cli.github.com/)** — the GitHub CLI, for Pages setup and CI
