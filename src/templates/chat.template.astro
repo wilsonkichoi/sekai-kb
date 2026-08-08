@@ -354,7 +354,10 @@ const CHAT_SCRIPT = `
                 history.push({ role: 'assistant', content: state.answer });
                 saveHistory(history);
               } else if (state.sawCitations) {
-                showNote(turn, msg('empty-answer'), 'data-chat-empty-answer');
+                var noteKey = state.citations.length
+                  ? 'empty-answer'
+                  : 'empty-answer-no-sources';
+                showNote(turn, msg(noteKey), 'data-chat-empty-answer');
               }
               finish();
               return;
@@ -436,6 +439,7 @@ const CHAT_SCRIPT = `
             data-msg-unavailable={t('chat.error.unavailable')}
             data-msg-error={t('chat.error.generic')}
             data-msg-empty-answer={t('chat.error.emptyAnswer')}
+            data-msg-empty-answer-no-sources={t('chat.error.emptyAnswerNoSources')}
           >
             <label class="composer-label" for="chat-input">
               {t('chat.input.label')}

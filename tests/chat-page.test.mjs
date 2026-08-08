@@ -50,6 +50,7 @@ assert.ok(MSG_NAMES.includes('rate-limited'), 'the template must pass a rate-lim
 assert.ok(MSG_NAMES.includes('unavailable'), 'the template must pass an unavailable message');
 assert.ok(MSG_NAMES.includes('error'), 'the template must pass a generic error message');
 assert.ok(MSG_NAMES.includes('empty-answer'), 'the template must pass an empty-answer message');
+assert.ok(MSG_NAMES.includes('empty-answer-no-sources'), 'the template must pass an empty-answer-no-sources message');
 
 const msgAttrs = MSG_NAMES.map((name) => `data-msg-${name}="${name}"`).join('\n            ');
 
@@ -571,6 +572,36 @@ test('an answer with no text renders an inline note beside the sources that did 
         await page.locator('[data-chat-error]').count(),
         0,
         'the citations frame arrived, so the broken-contract note must not also fire',
+      );
+    },
+  );
+});
+
+// When the citations payload is empty and the answer is also empty, the note must not
+// claim sources were found: the "no sources found" text is already rendered above it.
+test('an empty-answer note with no citations uses copy that does not claim sources arrived', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Thinking.' } }] })}\n\n`,
+      );
+      res.write(citationsFrame([]));
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-chat-empty-answer]').textContent(),
+        'empty-answer-no-sources',
+        'the no-sources variant must be used when citations are empty',
+      );
+      assert.equal(
+        await page.locator('[data-chat-sources]').getAttribute('data-empty'),
+        '',
+        'the sources block shows the empty state',
       );
     },
   );
