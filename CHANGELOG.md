@@ -110,6 +110,13 @@ tags, never framework `main`** (ADR 004, SPEC
   sequence, chat D1 migration, secret, deployment, model verification, shared
   Workers AI free allocation, and hosted-model escalation path.
 
+- **The documented Node floor is machine-derived.** `npm run version:check` now derives
+  the floor from `package.json` `engines.node` and fails when any registered statement of
+  it disagrees — the README, the runbook prerequisites table, the wizard-emitted instance
+  README, and the adopt skill. A reworded or deleted statement fails too, rather than
+  passing silently, since an unfindable statement is how a stale one hides. Raising the
+  floor is a one-line `engines` edit plus whatever prose the gate then names.
+
 ### Changed
 
 - **The supported Node floor is now 22.13.** The chat worker's D1 statements are

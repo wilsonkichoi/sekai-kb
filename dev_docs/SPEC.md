@@ -20,7 +20,7 @@ diagrams (SSOT): `dev_docs/diagrams/architecture.drawio`, `data-flow.drawio`,
 ## Stack
 
 - **Astro 6.x + Tailwind 4.x**, zero client-side frameworks; vanilla JS on interactive
-  pages. Node >= 22.12 (`package.json` `engines` is the operative floor).
+  pages. Node >= 22.13 (`package.json` `engines` is the operative floor).
 - **MiniSearch** client-side search, index prebuilt; plain word tokenization (English-only,
   no CJK code path).
 - **D3 from CDN** for the knowledge graph only; **Chart.js from CDN** only if the dashboard

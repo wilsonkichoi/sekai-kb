@@ -406,7 +406,7 @@ npm run dev                 # http://localhost:4321
 npm run build               # production build + contract checks
 \`\`\`
 
-Requires Node.js ≥ 22.12 and [uv](https://docs.astral.sh/uv/) (which fetches
+Requires Node.js ≥ 22.13 and [uv](https://docs.astral.sh/uv/) (which fetches
 Python ≥ 3.12 for the editorial tooling).
 
 ## Where things live

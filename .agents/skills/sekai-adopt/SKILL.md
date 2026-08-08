@@ -51,7 +51,7 @@ npm ci --force && uv sync
 Both must succeed before you continue. If either fails (e.g. `uv` or Node not
 installed), **hard-stop** and give the user the exact missing prerequisite and
 command — do not proceed to the interview only to hit the failure at build. The
-prerequisites and version floor are in `docs/runbook/DEPLOY.md` (Node ≥ 22.12,
+prerequisites and version floor are in `docs/runbook/DEPLOY.md` (Node ≥ 22.13,
 `uv`, `gh`).
 
 Then read `scripts/init/README.md` — it is the SSOT for the answers-JSON schema,
@@ -180,7 +180,7 @@ Walk the user through going live using `docs/runbook/DEPLOY.md`. Reference its
 sections rather than pasting command text (the runbook is the SSOT and stays
 current):
 
-- **Prerequisites** + **Install** — Node ≥ 22.12, `uv`, `gh`; `npm ci --force`,
+- **Prerequisites** + **Install** — Node ≥ 22.13, `uv`, `gh`; `npm ci --force`,
   `uv sync`.
 - **GitHub Pages** — enable Pages (Source: GitHub Actions), then push `main`.
 - **Custom domain (Cloudflare DNS)** — only if they set a custom `place.domain`;
