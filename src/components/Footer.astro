@@ -9,10 +9,13 @@
  * No place literals.
  */
 import { useTranslations, getLangFromUrl } from '../i18n/utils';
+import { resolveChat } from '../lib/chat';
 import placeConfig from '../../place.config';
 
 const lang = getLangFromUrl(Astro.url);
 const t = useTranslations(lang);
+// Both halves, like the Header: see src/lib/chat.ts.
+const chat = resolveChat(placeConfig);
 
 const { name, tagline, domain, brandSuffix } = placeConfig.place;
 const { categories, features, links } = placeConfig;
@@ -117,6 +120,7 @@ const colLinkClass =
         {features.graph && <a href="/graph">{t('footer.graph')}</a>}
         {features.soundscape && <a href="/soundscape">{t('footer.soundscape')}</a>}
         {features.dashboard && <a href="/dashboard">{t('footer.dashboard')}</a>}
+        {chat.enabled && <a href="/chat">{t('footer.chat')}</a>}
         <a href={`${links.repo}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noopener"
           >{t('footer.contribute')}</a
         >

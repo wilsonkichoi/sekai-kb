@@ -86,8 +86,18 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 const workerModule = await import('../src/index.mjs');
 const { CHAT_MODEL, EMBED_MODEL, SQL, handleRequest, default: worker } = workerModule;
 
-const EXPECTED_TITLES = ['Alpha Guide', 'Bravo Guide', 'Charlie Guide', 'Delta Guide', 'Echo Guide'];
-const EXPECTED_URLS = ['/guides/alpha', '/guides/bravo', '/guides/charlie', '/guides/delta', '/guides/echo'];
+// The fixture's six chunks are unit vectors chosen to rank strictly against the
+// default query [10, 0, 0]: alpha 1.000, bravo 0.898, charlie 0.709, delta 0.504,
+// echo 0.197, foxtrot -1.000. Two cutoffs matter, so both are named here.
+//
+// RANKED_* is the top-k selection with no floor: five chunks, foxtrot excluded
+// because it is sixth. FLOORED_* is what survives the shipped 0.46 default, which
+// additionally drops echo. A test asserts against whichever contract it is about.
+const RANKED_TITLES = ['Alpha Guide', 'Bravo Guide', 'Charlie Guide', 'Delta Guide', 'Echo Guide'];
+const RANKED_URLS = ['/guides/alpha', '/guides/bravo', '/guides/charlie', '/guides/delta', '/guides/echo'];
+const FLOORED_TITLES = RANKED_TITLES.slice(0, 4);
+const FLOORED_URLS = RANKED_URLS.slice(0, 4);
+const citationsOf = (titles, urls) => titles.map((title, index) => ({ title, url: urls[index] }));
 
 async function accepted(overrides = {}, payload = validPayload()) {
   const setup = makeEnv(SQL, overrides);
@@ -138,7 +148,10 @@ describe('retrieval, prompting, and SSE', () => {
       { role: 'assistant', content: 'turn five' },
     ];
     const AI = createAiStub({ query: [10, 0, 0] });
-    const { response } = await accepted({ AI }, { message, history });
+    // Floor disabled, so this stays a test of top-k selection alone: all five
+    // ranked chunks are prompted and foxtrot is excluded for being sixth, not for
+    // being below a threshold. The floor has its own suite below.
+    const { response } = await accepted({ AI, RELEVANCE_FLOOR: '0' }, { message, history });
 
     assert.equal(response.status, 200);
     assert.equal(AI.calls.length, 2);
@@ -152,9 +165,9 @@ describe('retrieval, prompting, and SSE', () => {
     assert.deepEqual(messages.at(-1), { role: 'user', content: message });
     assert.equal(messages[0].role, 'system');
     const systemPrompt = messages[0].content;
-    for (let index = 0; index < EXPECTED_TITLES.length; index += 1) {
-      assert.ok(systemPrompt.includes(EXPECTED_TITLES[index]), `missing title ${EXPECTED_TITLES[index]}`);
-      assert.ok(systemPrompt.includes(EXPECTED_URLS[index]), `missing URL ${EXPECTED_URLS[index]}`);
+    for (let index = 0; index < RANKED_TITLES.length; index += 1) {
+      assert.ok(systemPrompt.includes(RANKED_TITLES[index]), `missing title ${RANKED_TITLES[index]}`);
+      assert.ok(systemPrompt.includes(RANKED_URLS[index]), `missing URL ${RANKED_URLS[index]}`);
     }
     assert.equal(systemPrompt.includes('Foxtrot Guide'), false, 'the sixth-ranked chunk must not be prompted');
     assert.ok(systemPrompt.includes(SITE_NAME), 'the system prompt must identify the configured site');
@@ -202,12 +215,14 @@ describe('retrieval, prompting, and SSE', () => {
   });
 
   test('final citations contain exactly title and URL for every prompted chunk', async () => {
+    // Default env, so the shipped floor applies: the payload must track what
+    // actually reached the prompt, not the pre-floor ranking.
     const { response } = await accepted();
     const body = await response.text();
     const finalFrame = body.match(/event: citations\ndata: (.+)\n\n$/);
     assert.ok(finalFrame, `expected a final citations event, got ${JSON.stringify(body)}`);
     assert.deepEqual(JSON.parse(finalFrame[1]), {
-      citations: EXPECTED_TITLES.map((title, index) => ({ title, url: EXPECTED_URLS[index] })),
+      citations: citationsOf(FLOORED_TITLES, FLOORED_URLS),
     });
   });
 
@@ -220,7 +235,89 @@ describe('retrieval, prompting, and SSE', () => {
     await second.response.text();
     assert.equal(fixtureDecodeCalls, 1, 'the fixture base64 must be decoded once in module-global state');
   });
+});
 
+/*
+ * The relevance floor exists so that "the corpus cannot answer this" is expressible.
+ * Top-k alone always returns k chunks, so a question with no support still cites the
+ * k least-bad matches -- which is a fabricated source list wearing a real URL.
+ *
+ * Reading the fixture scores (see RANKED_TITLES): a floor between 0.198 and 0.504
+ * drops echo only; above 1.0 drops everything. Both boundaries are exercised.
+ */
+describe('relevance floor', () => {
+  async function citationsFrom(response) {
+    const body = await response.text();
+    const frame = body.match(/event: citations\ndata: (.+)\n\n$/);
+    assert.ok(frame, `expected a final citations event, got ${JSON.stringify(body)}`);
+    return JSON.parse(frame[1]).citations;
+  }
+
+  test('the shipped default drops a chunk below it and keeps the rest', async () => {
+    const { response } = await accepted();
+    assert.deepEqual(await citationsFrom(response), citationsOf(FLOORED_TITLES, FLOORED_URLS));
+  });
+
+  test('RELEVANCE_FLOOR overrides the default', async () => {
+    // 0.8 admits alpha (1.000) and bravo (0.898); charlie (0.709) is the first cut.
+    const { response } = await accepted({ RELEVANCE_FLOOR: '0.8' });
+    assert.deepEqual(await citationsFrom(response), citationsOf(RANKED_TITLES.slice(0, 2), RANKED_URLS.slice(0, 2)));
+  });
+
+  // An orthogonal query rather than an impossible floor: every fixture chunk lies in
+  // the first two dimensions, so a third-dimension query scores 0.000 against all of
+  // them. That is the real shape of the case this exists for -- a question the corpus
+  // has nothing to say about -- and it exercises the shipped default rather than a
+  // value tuned to defeat the fixture.
+  const ORTHOGONAL_QUERY = [0, 0, 10];
+
+  test('a query nothing clears yields an empty citation payload and still streams', async () => {
+    const { response } = await accepted({ AI: createAiStub({ query: ORTHOGONAL_QUERY }) });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'text/event-stream');
+    assert.deepEqual(await citationsFrom(response), []);
+  });
+
+  test('with nothing retrieved the prompt carries no excerpt and instructs a refusal', async () => {
+    const AI = createAiStub({ query: ORTHOGONAL_QUERY });
+    await accepted({ AI });
+    const systemPrompt = AI.calls[1].input.messages[0].content;
+    for (const url of RANKED_URLS) {
+      assert.equal(systemPrompt.includes(url), false, `no excerpt may be prompted, found ${url}`);
+    }
+    assert.match(systemPrompt, /not.*(cover|relevant)|no excerpt/i, 'the prompt must state the corpus does not cover it');
+    assert.match(systemPrompt, /brows/i, 'the prompt must suggest browsing');
+    assert.match(systemPrompt, /not cite|do not cite/i, 'the prompt must forbid citing anything');
+    assert.ok(systemPrompt.includes(SITE_NAME), 'the prompt must still identify the configured site');
+  });
+
+  test('a floor of 0 disables filtering and restores plain top-k', async () => {
+    const { response } = await accepted({ RELEVANCE_FLOOR: '0' });
+    assert.deepEqual(await citationsFrom(response), citationsOf(RANKED_TITLES, RANKED_URLS));
+  });
+
+  // A mistyped tuning var must not take chat down, and must not silently become a
+  // permissive floor either: every unusable value falls back to the shipped default.
+  for (const [label, value] of [
+    ['blank', ''],
+    ['whitespace', '   '],
+    ['non-numeric', 'strict'],
+    ['negative', '-0.5'],
+    ['above one', '1.5'],
+  ]) {
+    test(`a ${label} RELEVANCE_FLOOR falls back to the default`, async () => {
+      const { response } = await accepted({ RELEVANCE_FLOOR: value });
+      assert.deepEqual(await citationsFrom(response), citationsOf(FLOORED_TITLES, FLOORED_URLS));
+    });
+  }
+});
+
+/*
+ * The two ways the machinery under the answer fails: a vector artifact the worker
+ * cannot use, and an upstream inference call that does not return. Both must reach
+ * the caller as a described 503 rather than a bare runtime 500.
+ */
+describe('artifact and upstream failures', () => {
   for (const mismatch of ['model', 'dim']) {
     test(`returns 503 and names the artifact ${mismatch} mismatch`, () => {
       const runner = fileURLToPath(new URL('./artifact-case.mjs', import.meta.url));

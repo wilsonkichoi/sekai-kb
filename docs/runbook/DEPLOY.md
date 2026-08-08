@@ -450,6 +450,8 @@ worker-config`, except `IP_HASH_SALT`, which is a secret you set once (step 5). 
 committed `wrangler.toml` is where the framework's own defaults live; the
 "Source" column says where each value comes from.
 
+<!-- worker-vars: feedback -->
+
 | Name | Required | Source | Meaning |
 |---|---|---|---|
 | `name` | yes | derived: `<place-slug>-<worker>` | The Worker script name, account-scoped, and the subdomain of its `workers.dev` URL. |
@@ -559,6 +561,8 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/ZONE_ID/purge_cache" \
 Or purge everything via the Cloudflare dashboard under Caching > Purge Cache.
 
 ### OG worker configuration
+
+<!-- worker-vars: og -->
 
 | Name | Required | Source | Meaning |
 |---|---|---|---|
@@ -710,6 +714,8 @@ workers: {
 Rebuild and redeploy the static site after setting the endpoint. `ALLOWED_ORIGIN`
 is derived from `place.domain` and exact-match CORS rejects every other origin.
 
+<!-- worker-vars: chat -->
+
 | Name | Required | Source | Meaning |
 |---|---|---|---|
 | `AI` | yes | `[ai] binding = "AI"` | Workers AI binding used for query embedding and streamed answer generation. |
@@ -719,6 +725,68 @@ is derived from `place.domain` and exact-match CORS rejects every other origin.
 | `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the stored address hash. Missing or blank requests receive 500. |
 | `RATE_LIMIT_MAX` | no | template (`20`) | Accepted requests per hashed address in the rolling window. |
 | `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`) | Exact rolling-window duration in seconds. |
+| `RELEVANCE_FLOOR` | no | template (`0.46`) | Cosine score a chunk must reach to be retrieved. Nothing clears it means nothing is cited and the answer refuses. See below. |
+
+### Tuning the relevance floor
+
+Retrieval takes the top five chunks by cosine similarity, which on its own can never
+say "the corpus does not cover this": a fixed count off a sorted list always returns
+five, so a question with no support still cites the five least-bad matches. That is a
+fabricated source list wearing real URLs. `RELEVANCE_FLOOR` is the cutoff that makes an
+empty result reachable. Below it a chunk is not retrieved, so it never enters the
+prompt and never becomes a citation; when nothing clears it the model is told outright
+that no excerpt is relevant, and the page renders "no sources found".
+
+**The shipped default in the table above is measured against the template's demo
+corpus, and your corpus is not that corpus.** Re-measure it after your content settles:
+
+1. Build the vectors (`npm run embeddings:build`) so you are scoring against the same
+   artifact the worker loads.
+2. Assemble two lists of questions: ten or so your articles genuinely answer, and five
+   or so about places or topics your knowledge base never mentions.
+3. Embed each question with `@cf/baai/bge-m3` and score it against every chunk in
+   `workers/chat/vectors.json`, exactly as the worker does: L2-normalize the query and
+   take its dot product with each stored vector divided by 127.
+4. Compare the best score per question across the two lists. Set the floor in the gap
+   between them.
+
+On the demo corpus, measured 2026-08-08, that gap runs from 0.435 (the best score any
+never-mentioned place reached) to 0.484 (the worst score a real question reached), and
+the shipped default splits it. Set the floor too high and real questions start refusing;
+too low and off-topic questions keep citing. Setting it to `0` disables filtering
+entirely.
+
+**What the floor cannot do.** It separates questions about *other* places. It does not
+separate questions about *your* place that no article happens to answer: those are dense
+with your vocabulary and score at or above genuinely answerable questions (0.512 to
+0.595 on the demo corpus, against a real-question floor of 0.484). No cutoff catches
+those without also rejecting real questions, so for them the refusal appears in the
+answer text and a person is what verifies it. The evaluation set below encodes that
+split directly, as `expect: no-citations` versus `expect: refusal-in-answer`.
+
+### Evaluating the deployed chat
+
+`knowledge/chat/_eval.md` is an optional list of questions with the articles each answer
+should rest on. `npm run chat:eval` posts every one to a deployed worker and exits
+nonzero when a cited URL resolves to no published article, when a question declaring
+`expect: no-citations` cites anything, or when a request errors. It writes
+`reports/chat-eval.md` with every question, answer, and citation set.
+
+```bash
+npm run chat:eval
+npm run chat:eval -- --endpoint https://your-chat-worker.workers.dev
+```
+
+The endpoint comes from `workers.chat`, the presented origin from `place.domain`, and
+the published-article index from your local `public/kb/topics.json` when it exists,
+otherwise from `/kb/topics.json` on your site. `--endpoint`, `--origin`, `--topics`, and
+`--out` override each of those.
+
+Answer quality is deliberately not machine-judged: scoring prose would need a second
+model in the loop or a brittle string match against a free-tier model's phrasing. Read
+the report and confirm each answer is grounded in what it cites and that the refusal
+questions refused. An absent manifest exits 0 with "no evaluation set", so an instance
+that never writes one is not broken.
 
 **Model and free-tier contract.** `CHAT_MODEL` in `workers/chat/src/index.mjs` is
 the single generation-model constant. On 2026-08-07 it was verified against the

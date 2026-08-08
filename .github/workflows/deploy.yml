@@ -134,6 +134,13 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Feedback widget browser contract
         run: npm run test:feedback
+      # Chat surface contract: the four flag/endpoint gate combinations, the evaluation
+      # set's reader and the runner's exit codes (including the absent-manifest zero),
+      # and the page client driven in Chromium against a real streaming server. The
+      # runner is the Phase 7 feature proof's machine half, so the suite that pins its
+      # failure classes is a CI gate rather than one someone may remember to run.
+      - name: Chat page, gate, and evaluation runner contract
+        run: npm run test:chat
       # Cloudflare Worker unit suites (node:test, no runtime dependency). The runner
       # walks workers/ for *.test.mjs, so a worker added in a later phase is gated
       # here the moment its first suite lands — no second edit to this workflow. It

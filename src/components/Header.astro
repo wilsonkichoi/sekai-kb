@@ -1,6 +1,7 @@
 ---
 import BrandMark from './BrandMark.astro';
 import { useTranslations, getLangFromUrl } from '../i18n/utils';
+import { resolveChat } from '../lib/chat';
 import placeConfig from '../../place.config';
 
 const currentPath = Astro.url.pathname;
@@ -11,6 +12,10 @@ const t = useTranslations(lang);
 const navHref = (p: string) => p;
 
 const { features, links } = placeConfig;
+// Chat needs both halves (flag + endpoint), unlike the flag-only gates above it, so
+// it reads the shared predicate rather than the flag alone. A nav link to a page
+// rendering "chat is not enabled here" is worse than no link at all.
+const chat = resolveChat(placeConfig);
 
 const normalizedPath = currentPath.replace(/\/$/, '') || '/';
 const isHome = normalizedPath === '/';
@@ -22,6 +27,7 @@ const navConfig = [
   ...(features.map ? [{ path: '/map', label: t('nav.map') }] : []),
   ...(features.soundscape ? [{ path: '/soundscape', label: t('nav.soundscape') }] : []),
   ...(features.dashboard ? [{ path: '/dashboard', label: t('nav.dashboard') }] : []),
+  ...(chat.enabled ? [{ path: '/chat', label: t('nav.chat') }] : []),
   { path: '/about', label: t('nav.about') },
   { path: '/contribute', label: t('nav.contribute') },
 ].map((item) => {
