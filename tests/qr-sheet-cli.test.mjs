@@ -184,8 +184,13 @@ describe('the route set the CLI validates `article` against', () => {
 `,
       { articles: ['Guides/alpha.md', 'Drafts/hidden.md'] },
     );
-    const { html } = runOk(root);
+    const { code, stderr, html } = run(root);
+    assert.match(
+      stderr,
+      /context "unconfigured" declares `article` "\/drafts\/hidden", which does not resolve/,
+    );
     assert.equal(html, null, 'the only context was dropped, so no sheet is written');
+    assert.equal(code, 1, 'and every declared context being dropped is a failure, not an empty OK');
   });
 
   // With no `src/pages` the route set cannot be derived at all. That is NOT the same
@@ -268,6 +273,23 @@ describe('the states that are not failures', () => {
 });
 
 describe('the states that are failures', () => {
+  // An empty sheet from a manifest somebody wrote is not the same state as an empty
+  // sheet from a manifest that declares nothing, and the summary line is what the
+  // operator reads -- the per-context warnings above it scroll past.
+  test('a manifest whose contexts are all dropped fails, naming how many, rather than reporting none declared', () => {
+    const root = makeRoot(
+      'contexts:\n' +
+        '  - slug: NOT-A-SLUG\n    label: One\n    greeting: Ask.\n' +
+        '  - slug: two\n    label: Two\n    greeting: Ask.\n    article: /nowhere\n',
+    );
+
+    const { code, stdout, stderr, html } = run(root);
+    assert.equal(code, 1);
+    assert.match(stderr, /all 2 context\(s\) declared .* were dropped by validation/);
+    assert.doesNotMatch(stdout, /no contexts declared/, 'they were declared, and then rejected');
+    assert.equal(html, null);
+  });
+
   test('an unknown flag is refused rather than ignored', () => {
     const root = makeRoot('contexts: []\n');
     const { code, stderr } = run(root, ['--topics', 'public/kb/topics.json']);

@@ -823,7 +823,10 @@ contexts:
   embedded for the reader's first question and is never shown to the model as an
   instruction, so a hint changes which articles are found and cannot change how the
   answer is written. It rides the first question only: by the third, the reader has moved
-  on.
+  on. A `hint` is capped at 200 characters, the longest one the chat worker accepts; a
+  longer one is ignored with a build-time warning and the context keeps working, because
+  sending it would fail every question asked from that context and take the printed code
+  out of service.
 - **`article`** is a site-root-absolute route your build produces, rendered as a link
   under the greeting. A route that resolves to nothing drops that whole context with a
   build-time warning, because a greeting that sends a reader at a 404 is worse than one
@@ -847,14 +850,18 @@ Each card carries the code, the place's name, and the URL in plain text for anyo
 would rather type it; the sheet is laid out to fit both A4 and US Letter without choosing
 a paper size, and everything including the codes is inline, so it prints correctly from a
 `file://` URL with no network. With no manifest it exits 0 saying no contexts are
-declared.
+declared — declaring none is not a failure. A manifest whose contexts were *all* dropped
+by validation is the opposite state and exits nonzero naming how many, because an empty
+sheet from a manifest you wrote is a manifest to go fix, not a place with nothing on a
+wall yet.
 
-Two flags, both optional:
+The flags, all optional: `--domain`, `--out`, `--root`.
 
 | Flag | Default | Use it when |
 |---|---|---|
 | `--domain <host>` | `place.domain` | Printing codes for a domain you have not put in the config yet — a staging host, or a rehearsal before the site goes live. |
 | `--out <path>` | `qr-sheet.html` | Keeping several sheets side by side, or writing outside the repository. Only the default path is gitignored. |
+| `--root <path>` | this repository | Printing another instance's sheet without leaving this one. It is also how the CLI's own test suite drives it against a temporary tree. |
 
 No build is required. The `article` links are checked against the routes your build
 produces, and that set is derived from `knowledge/` and `place.config.ts` — the same set

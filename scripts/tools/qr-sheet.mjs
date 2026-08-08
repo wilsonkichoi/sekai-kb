@@ -10,12 +10,16 @@
 // context list to the client, since a static build has no server to resolve `?ctx=`.)
 //
 // An instance with no manifest exits 0 saying so. Declaring no context is not a
-// failure; it means this place has nothing to put on a wall yet.
+// failure; it means this place has nothing to put on a wall yet. A manifest whose
+// contexts were ALL dropped by validation is the opposite state and exits nonzero:
+// somebody wrote those contexts and got no sheet, and the summary line is what they
+// read.
 //
 // Usage:
 //   npm run qr:sheet
 //   npm run qr:sheet -- --domain example.invalid
 //   npm run qr:sheet -- --out reports/codes.html
+//   npm run qr:sheet -- --root ../other-instance
 //
 // This file lives under scripts/, which both genericity gates scan: its source is
 // pure ASCII and carries no place-specific string.
@@ -30,6 +34,14 @@ import { renderSheet, SHEET_OUTPUT_PATH } from '../lib/qr-sheet.mjs';
 
 const DEFAULT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
+/**
+ * Every flag this CLI accepts, each taking a value.
+ * `scripts/ci/check-chat-context-schema-docs.mjs` derives the runbook's flag list from
+ * this array, so a flag added, removed, or renamed without the documentation following
+ * it fails CI (`.agent-toolkit/rules/guard-or-explain-prose-drift.md`).
+ */
+export const QR_SHEET_FLAGS = ['--domain', '--out', '--root'];
+
 function fail(message) {
   console.error(`qr-sheet: ${message}`);
   process.exit(1);
@@ -42,7 +54,7 @@ const options = { root: DEFAULT_ROOT, out: SHEET_OUTPUT_PATH };
 for (let i = 0; i < argv.length; i += 1) {
   const flag = argv[i];
   const value = argv[i + 1];
-  if (['--domain', '--out', '--root'].includes(flag)) {
+  if (QR_SHEET_FLAGS.includes(flag)) {
     if (!value) fail(`${flag} needs a value.`);
     options[flag.slice(2)] = value;
     i += 1;
@@ -100,7 +112,18 @@ try {
 
 // The reader emits its own diagnostics to the console, so a dropped context is
 // visible here without this file reprinting the list.
-const { contexts } = readChatContexts(root, knownRoutes ? { knownRoutes } : {});
+const { contexts, declared } = readChatContexts(root, knownRoutes ? { knownRoutes } : {});
+
+// An empty sheet has two causes that look identical in `contexts` and are opposite
+// things to tell an operator. Declaring nothing is not a failure; declaring contexts
+// and having every one of them rejected is a manifest to go fix, and the summary line
+// is what gets read -- the warnings above it scroll past.
+if (contexts.length === 0 && declared > 0) {
+  fail(
+    `all ${declared} context(s) declared in ${CONTEXT_MANIFEST_PATH} were dropped by ` +
+      'validation -- see the warnings above. No sheet written.',
+  );
+}
 
 if (contexts.length === 0) {
   console.log(

@@ -61,7 +61,11 @@ tags, never framework `main`** (ADR 004, SPEC
   embedded query text and is absent from the prompt, so a context can change which articles
   are found and cannot instruct the model. A scanned URL is editable by anyone holding a
   phone; the prompt is the one place it may not reach. `workers/chat/` accepts `hint` as an
-  optional bounded string, and a worker test asserts both halves.
+  optional bounded string, and a worker test asserts both halves. A `hint` is capped at 200
+  characters, the bound the worker enforces on a request: the worker refuses a longer one
+  with a 400 for the whole request, so the reader drops an over-long hint at build time with
+  a warning and keeps the context. Shipping one would otherwise make every question asked
+  from that context fail for as long as the code stayed on the wall.
 - **`npm run qr:sheet`.** Renders the declared contexts as `qr-sheet.html` at the repository
   root — gitignored, a print artifact rather than repository content. One card per context:
   the code as inline SVG, the place's name, and the URL as text for anyone who would rather
@@ -69,7 +73,9 @@ tags, never framework `main`** (ADR 004, SPEC
   layout fits A4 and US Letter without choosing a paper size. No build is needed: the
   `article` links are checked against the same route set `/chat` validates against, derived
   from `knowledge/` and `place.config.ts`. With no manifest it exits 0 saying no contexts are
-  declared. It is a script and not a `/qr` route: a page would add a gated route and an index
+  declared; a manifest whose contexts were all dropped by validation exits nonzero naming how
+  many, because an empty sheet from a manifest somebody wrote is a manifest to go fix. It is
+  a script and not a `/qr` route: a page would add a gated route and an index
   to maintain for something only the operator printing the signs ever opens.
 - **`@paulmillr/qr` (dev dependency).** Pure JS, zero runtime dependencies, no native
   bindings. It also ships a decoder, which `npm run test:qr` uses to round-trip every card's
@@ -77,8 +83,11 @@ tags, never framework `main`** (ADR 004, SPEC
   somebody prints it, mounts it, and scans it.
 - **`scripts/ci/check-chat-context-schema-docs.mjs`** (folded into `npm run schema-docs`)
   derives the context field lists from the reader and fails CI when `dev_docs/SPEC.md`, the
-  manifest body, or `docs/runbook/DEPLOY.md` disagrees with it. Its engine is now shared with
-  the soundscape gate in `scripts/lib/schema-docs.mjs`.
+  manifest body, or `docs/runbook/DEPLOY.md` disagrees with it. It also holds the hint bound
+  and the `qr:sheet` flag list to one value each: the worker's own `MAX_HINT_CHARS` and the
+  runbook's flag table are registered as statements about the reader and the CLI, so a second
+  implementation cannot drift from the first any more quietly than prose can. Its engine is
+  now shared with the soundscape gate in `scripts/lib/schema-docs.mjs`.
 - **Runbook:** `docs/runbook/DEPLOY.md` gains a QR-codes section covering how to declare a
   context, what each field does, how contexts are dropped one at a time, and how to print.
 

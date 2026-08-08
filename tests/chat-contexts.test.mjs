@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
+  CONTEXT_HINT_MAX_CHARS,
   CONTEXT_MANIFEST_PATH,
   CONTEXT_OPTIONAL_FIELDS,
   CONTEXT_REQUIRED_FIELDS,
@@ -170,7 +171,7 @@ describe('the published schema constants', () => {
     writeFileSync(stray, withFrontmatter(contexts(validItem()), 'body'));
 
     const { result } = call(root);
-    assert.deepEqual(result, { contexts: [], notes: '', warnings: [] });
+    assert.deepEqual(result, { contexts: [], declared: 0, notes: '', warnings: [] });
   });
 });
 
@@ -245,7 +246,7 @@ describe('a well-formed manifest', () => {
     const root = makeRoot();
 
     const { result } = call(root);
-    assert.deepEqual(result, { contexts: [], notes: '', warnings: [] });
+    assert.deepEqual(result, { contexts: [], declared: 0, notes: '', warnings: [] });
   });
 
   test('notes is the manifest body, trimmed', () => {
@@ -269,7 +270,7 @@ describe('a well-formed manifest', () => {
 /* ----------------------------------------------------- an absent manifest */
 
 describe('the manifest is absent', () => {
-  const empty = { contexts: [], notes: '', warnings: [] };
+  const empty = { contexts: [], declared: 0, notes: '', warnings: [] };
 
   test('no knowledge/ directory at all is a supported state, not a defect', () => {
     const { result, logged } = call(makeRoot());
@@ -583,6 +584,93 @@ describe('the optional hint', () => {
       assert.ok(warning.includes('hint'), `expected the warning to name "hint", got: ${warning}`);
     });
   }
+});
+
+/* ------------------------------------------------------- the declared count */
+//
+// `contexts: []` reads the same whether the manifest declared nothing or declared five
+// contexts that were all rejected. Those are opposite things to tell an operator whose
+// sheet came out empty, so the count of entries the list held is reported separately.
+
+describe('the declared count', () => {
+  test('counts every entry the list held, including the dropped ones', () => {
+    const root = rootWith(
+      validItem(),
+      validItem({ slug: 'ALPHA' }), // dropped: not a lowercase-kebab slug
+      validItem({ slug: 'charlie', greeting: undefined }), // dropped: missing a required field
+    );
+
+    const call_ = call(root);
+    assert.deepEqual(slugs(call_.result), ['alpha']);
+    assert.equal(call_.result.declared, 3);
+  });
+
+  test('is zero when nothing was declared at all', () => {
+    const empty = makeRoot();
+    writeManifest(empty, withFrontmatter('contexts: []'));
+
+    assert.equal(call(empty).result.declared, 0);
+    assert.equal(call(makeRoot()).result.declared, 0, 'an absent manifest declares nothing');
+  });
+
+  test('is zero when the contexts key is unusable, which is not the same as declaring entries', () => {
+    for (const frontmatter of ['title: Chat contexts', 'contexts:', 'contexts: nope']) {
+      const root = makeRoot();
+      writeManifest(root, withFrontmatter(frontmatter));
+      assert.equal(call(root).result.declared, 0, `expected 0 declared for: ${frontmatter}`);
+    }
+  });
+});
+
+/* ----------------------------------------------------- the hint length bound */
+//
+// The bound is not cosmetic. The chat worker refuses a request whose `hint` exceeds
+// its own MAX_HINT_CHARS with a 400 for the WHOLE request, so a manifest that shipped
+// a longer hint would make every question asked from that context fail -- permanently,
+// for anyone who scanned that printed code. Catching it here, at the same place every
+// other manifest defect is caught, is what keeps it out of a build.
+
+describe('a hint over the length bound', () => {
+  const hintOf = (length) => 'x'.repeat(length);
+
+  test('a hint exactly at the bound is kept', () => {
+    const hint = hintOf(CONTEXT_HINT_MAX_CHARS);
+    const root = rootWith(validItem({ hint }));
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.contexts, [expectedContext({ hint })]);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(logged, []);
+  });
+
+  test('one character over the bound loses the hint and keeps the context', () => {
+    const root = rootWith(validItem({ hint: hintOf(CONTEXT_HINT_MAX_CHARS + 1) }), validItem({ slug: 'charlie' }));
+
+    const call_ = call(root);
+    assert.deepEqual(
+      slugs(call_.result),
+      ['alpha', 'charlie'],
+      'an over-long hint must never drop a context: the code is already on a wall',
+    );
+    assert.equal(call_.result.contexts[0].hint, null);
+
+    const warning = onlyWarning(call_);
+    assert.ok(warning.includes('hint'), `expected the warning to name "hint", got: ${warning}`);
+    assert.ok(
+      warning.includes(String(CONTEXT_HINT_MAX_CHARS)),
+      `expected the warning to name the ${CONTEXT_HINT_MAX_CHARS}-character bound, got: ${warning}`,
+    );
+  });
+
+  test('the bound is measured after trimming, exactly as the worker measures it', () => {
+    // A quoted scalar, so YAML keeps the padding a plain scalar would strip.
+    const root = rootWith(validItem({ hint: `"   ${hintOf(CONTEXT_HINT_MAX_CHARS)}   "` }));
+
+    const { result, logged } = call(root);
+    assert.deepEqual(result.contexts, [expectedContext({ hint: hintOf(CONTEXT_HINT_MAX_CHARS) })]);
+    assert.deepEqual(result.warnings, [], 'padding is not content and must not spend the bound');
+    assert.deepEqual(logged, []);
+  });
 });
 
 /* ------------------------------------------------------- the article field */

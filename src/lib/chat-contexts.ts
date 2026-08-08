@@ -49,6 +49,26 @@ export const CONTEXT_REQUIRED_FIELDS = ['slug', 'label', 'greeting'] as const;
 export const CONTEXT_OPTIONAL_FIELDS = ['hint', 'article'] as const;
 
 /**
+ * The longest `hint` a context may carry.
+ *
+ * This is not a style preference: the chat worker rejects a request whose `hint`
+ * exceeds its own `MAX_HINT_CHARS` with a 400 for the WHOLE request, not by ignoring
+ * the field. A manifest that ships a longer hint would therefore turn a printed code
+ * into a permanent error: the reader scans it, gets the greeting, asks anything, and
+ * every question that session fails. Bounding it here, where every other manifest
+ * defect is already caught and named, is what keeps that failure out of the build in
+ * the first place.
+ *
+ * The two sides carry one value, held together by
+ * `scripts/ci/check-chat-context-schema-docs.mjs`: it derives this number and fails
+ * CI when the worker's constant, or the prose that documents the limit, disagrees.
+ * They cannot share an import - an adopter may delete a worker tree it does not
+ * deploy (`scripts/ci/run-worker-tests.mjs` treats an absent `workers/` as a skip),
+ * and a page build that imported from one would break in that instance.
+ */
+export const CONTEXT_HINT_MAX_CHARS = 200;
+
+/**
  * A slug is the `ctx` query value of a URL that gets PRINTED and then scanned off a
  * wall. Restricting it to lowercase kebab means the string in the code, the string
  * in the address bar, and the string in the manifest are the same three bytes for
@@ -73,6 +93,14 @@ export interface ChatContext {
 export interface ChatContextManifest {
   /** Contexts that survived validation, in manifest order. */
   contexts: ChatContext[];
+  /**
+   * How many entries the `contexts` list held before validation, so a caller can
+   * tell "this manifest declares nothing" from "everything it declared was
+   * rejected". Those look identical in `contexts` and are opposite states to
+   * report: the first is a place with nothing on a wall yet, the second is a
+   * manifest to go fix.
+   */
+  declared: number;
   /** The manifest body (free-form human notes), trimmed. */
   notes: string;
   /** Build-time diagnostics. Also emitted through `console.warn`. */
@@ -245,15 +273,29 @@ function readContext(
   // costs the context its retrieval bias and nothing else. Dropping the whole
   // context over it would take a printed code out of service for a value nobody
   // sees.
+  //
+  // A hint the worker would refuse is the same class of defect: it is dropped rather
+  // than sent, because a hint the request cannot carry costs the context its
+  // retrieval bias, while sending it would cost the context every answer.
   let hint: string | null = null;
   if (item.hint !== undefined && item.hint !== null && item.hint !== '') {
-    if (isNonEmptyString(item.hint)) {
-      hint = item.hint.trim();
-    } else {
+    if (!isNonEmptyString(item.hint)) {
       warnings.push(
         `${CONTEXT_MANIFEST_PATH}: context "${slug}" declares a non-string \`hint\`; ignored. ` +
           'The context still works, without a retrieval hint.',
       );
+    } else if (item.hint.trim().length > CONTEXT_HINT_MAX_CHARS) {
+      // Measured after trimming, exactly as the worker measures it, so the two agree
+      // on the same string rather than on the same field.
+      warnings.push(
+        `${CONTEXT_MANIFEST_PATH}: context "${slug}" declares a \`hint\` of ` +
+          `${item.hint.trim().length} characters, over the ${CONTEXT_HINT_MAX_CHARS}-character ` +
+          'limit the chat worker accepts; ignored. Sending it would fail every question ' +
+          'asked from this context, so the context works without a retrieval hint. ' +
+          'Shorten it to keep the bias.',
+      );
+    } else {
+      hint = item.hint.trim();
     }
   }
 
@@ -289,7 +331,7 @@ export function readChatContexts(
     raw = readFileSync(resolve(root, CONTEXT_MANIFEST_PATH), 'utf8');
   } catch {
     // No QR flow in this instance. `/chat` behaves exactly as it does without one.
-    return { contexts: [], notes: '', warnings: [] };
+    return { contexts: [], declared: 0, notes: '', warnings: [] };
   }
 
   const warnings: string[] = [];
@@ -302,7 +344,7 @@ export function readChatContexts(
     warnings.push(
       `${CONTEXT_MANIFEST_PATH}: frontmatter could not be parsed (${reason}); no contexts read.`,
     );
-    return emit({ contexts: [], notes: '', warnings });
+    return emit({ contexts: [], declared: 0, notes: '', warnings });
   }
 
   const notes = String(parsed.content ?? '').trim();
@@ -312,7 +354,7 @@ export function readChatContexts(
 
   if (declared === undefined || declared === null) {
     warnings.push(`${CONTEXT_MANIFEST_PATH}: no \`contexts\` list; no contexts read.`);
-    return emit({ contexts: [], notes, warnings });
+    return emit({ contexts: [], declared: 0, notes, warnings });
   }
 
   if (!Array.isArray(declared)) {
@@ -320,7 +362,7 @@ export function readChatContexts(
       `${CONTEXT_MANIFEST_PATH}: \`contexts\` must be a list, got ${typeof declared}; ` +
         'no contexts read.',
     );
-    return emit({ contexts: [], notes, warnings });
+    return emit({ contexts: [], declared: 0, notes, warnings });
   }
 
   const seenSlugs = new Set<string>();
@@ -330,7 +372,7 @@ export function readChatContexts(
     if (context) contexts.push(context);
   });
 
-  return emit({ contexts, notes, warnings });
+  return emit({ contexts, declared: declared.length, notes, warnings });
 }
 
 /**

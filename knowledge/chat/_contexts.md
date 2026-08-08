@@ -26,6 +26,10 @@
 #              It is appended to the embedded text of the reader's first question and
 #              is never shown to the model as an instruction, so a hint can steer
 #              which articles are found and cannot talk the answer into anything.
+#              A hint is capped at 200 characters, the longest one the chat worker
+#              accepts. A longer hint is ignored with a build-time warning and the
+#              context still works: sending it would fail every question asked from
+#              this context, which would take the printed code out of service.
 #   article  - optional, a site-root-absolute route this build produces. It renders as
 #              a link under the greeting. A route that does not resolve drops the whole
 #              context with a build-time warning, because a greeting that sends a

@@ -333,6 +333,12 @@ sentence fails CI.
    `hint` is appended to the **embedded query text** and never to the generation prompt, so
    a context can steer which articles are retrieved and cannot instruct the model — a
    scanned URL is attacker-editable, and the prompt is the one place it may not reach.
+   A `hint` is capped at 200 characters, the bound the chat worker enforces on a request:
+   the worker refuses an over-long hint with a 400 for the whole request, so a manifest
+   that shipped one would make every question asked from that context fail, permanently,
+   for anyone who scanned that sign. The reader drops it with a build-time warning and
+   keeps the context, and the same gate holds the reader's constant, the worker's, and
+   this sentence to one value.
    `npm run qr:sheet` renders the declared contexts as a gitignored `qr-sheet.html`, one
    printable card each, laid out to fit A4 and US Letter. It is a script and not a route:
    a `/qr` page would add a gated route and a maintained index page for something only the
