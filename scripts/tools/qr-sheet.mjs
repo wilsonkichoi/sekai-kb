@@ -4,9 +4,10 @@
 // Every context declared in `knowledge/chat/_contexts.md` becomes one card: the code
 // that opens `https://<domain>/chat?ctx=<slug>`, the place's name, and the URL as
 // text for anyone who would rather type it. The result is a single self-contained
-// HTML file you open and print -- there is no `/qr` route, because a public page
-// would publish the internal context map for no visitor benefit and would change a
-// gated statement about this site's route list.
+// HTML file you open and print -- there is no `/qr` route, because a page would add a
+// gated route and an index to maintain for something only the operator printing the
+// signs ever opens. (It would buy no privacy: `/chat` necessarily ships the whole
+// context list to the client, since a static build has no server to resolve `?ctx=`.)
 //
 // An instance with no manifest exits 0 saying so. Declaring no context is not a
 // failure; it means this place has nothing to put on a wall yet.
@@ -19,10 +20,11 @@
 // This file lives under scripts/, which both genericity gates scan: its source is
 // pure ASCII and carries no place-specific string.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { builtRoutes, knowledgeCollectionIds } from '../../src/lib/built-routes.ts';
 import { readChatContexts, CONTEXT_MANIFEST_PATH } from '../../src/lib/chat-contexts.ts';
 import { renderSheet, SHEET_OUTPUT_PATH } from '../lib/qr-sheet.mjs';
 
@@ -40,7 +42,7 @@ const options = { root: DEFAULT_ROOT, out: SHEET_OUTPUT_PATH };
 for (let i = 0; i < argv.length; i += 1) {
   const flag = argv[i];
   const value = argv[i + 1];
-  if (['--domain', '--out', '--root', '--topics'].includes(flag)) {
+  if (['--domain', '--out', '--root'].includes(flag)) {
     if (!value) fail(`${flag} needs a value.`);
     options[flag.slice(2)] = value;
     i += 1;
@@ -72,24 +74,26 @@ if (!domain) {
 
 /* -- the routes a context `article` may resolve to --------------------------- */
 //
-// Only supplied when this build has actually produced them. Passing an empty or
-// stale set would drop every context that declares an `article` -- and a card
-// silently missing off a printed sheet is worse than a link this run could not
-// verify, which the reader is warned about instead (src/lib/chat-contexts.ts).
+// The SAME set `/chat` validates against, from the same function: static pages,
+// category hubs, and articles. It has to be the same set, because a supplied route
+// set is what makes an unresolvable `article` drop its whole context -- so a NARROWER
+// set here would drop cards for links the site serves perfectly well, which is the
+// exact failure the reader's fallback exists to avoid.
+//
+// Derived from `knowledge/` and `place.config.ts` rather than from build output, so
+// the sheet can be printed before anything is built and cannot disagree with a stale
+// artifact. A set that cannot be derived at all is treated as no route set: links are
+// omitted with a warning and every card still prints.
 
-const topicsPath = resolve(root, options.topics ?? 'public/kb/topics.json');
 let knownRoutes;
-if (existsSync(topicsPath)) {
-  try {
-    const topics = JSON.parse(readFileSync(topicsPath, 'utf8'));
-    if (Array.isArray(topics)) {
-      knownRoutes = topics.map((topic) => topic?.url).filter((url) => typeof url === 'string');
-    }
-  } catch (error) {
-    console.warn(`qr-sheet: ${topicsPath} could not be read (${error.message}); article links are omitted.`);
-  }
-} else if (options.topics) {
-  fail(`--topics ${options.topics} does not exist.`);
+try {
+  const routes = builtRoutes(place, knowledgeCollectionIds(place, root), join(root, 'src/pages'));
+  if (routes.length > 0) knownRoutes = routes;
+} catch (error) {
+  console.warn(
+    `qr-sheet: the built route set could not be derived (${error.message}); ` +
+      'every declared `article` link is omitted and every card still prints.',
+  );
 }
 
 /* -- read, render, write ----------------------------------------------------- */

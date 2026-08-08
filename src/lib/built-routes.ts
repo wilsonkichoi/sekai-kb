@@ -16,12 +16,62 @@
  * ASCII and carries no place-specific string.
  */
 import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { PlaceConfig } from '../../place.config';
 
 /** The one field of a content-collection entry this needs: `<category>/<name>.md`. */
 export interface CollectionEntryId {
   id: string;
+}
+
+/** Content root. `src/content/` is a derived projection of it, written by sync. */
+const KNOWLEDGE_DIR = 'knowledge';
+
+/**
+ * The same collection entries `getCollection('en')` yields, discovered from
+ * `knowledge/` on disk instead of through `astro:content`.
+ *
+ * A plain Node caller -- `npm run qr:sheet` -- needs the built route set too, and it
+ * has no Astro module runner to ask. Deriving it from `knowledge/` rather than from a
+ * build artifact means the answer is available BEFORE anything is built and cannot go
+ * stale against it: `knowledge/` is the single source of truth (iron rule 1) and
+ * `src/content/` is a copy of it that sync writes.
+ *
+ * This mirrors ONE rule from `scripts/core/sync.sh`, and mirrors it exactly: the
+ * default language projects `knowledge/{category.title}/` to
+ * `src/content/en/{category.slug}/`. The directory is the category's TITLE and the
+ * collection id carries its SLUG, so a scan that treated the directory name as the id
+ * would miss every article whose category is titled differently from its slug -- which
+ * is every category with a capital letter in its name.
+ *
+ * A leading `_` marks a manifest rather than an article, the same filter the three
+ * scanners that walk `knowledge/` apply. Never throws: an absent or unreadable
+ * `knowledge/` yields no entries, and the caller decides what that means.
+ */
+export function knowledgeCollectionIds(
+  config: PlaceConfig,
+  root: string = process.cwd(),
+): CollectionEntryId[] {
+  const base = join(root, KNOWLEDGE_DIR);
+  const ids: CollectionEntryId[] = [];
+
+  for (const category of config.categories) {
+    let files: string[];
+    try {
+      files = readdirSync(join(base, category.title), { withFileTypes: true })
+        .filter(
+          (entry) => entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('_'),
+        )
+        .map((entry) => entry.name);
+    } catch {
+      // A category with no directory yet is a normal state, not an error.
+      continue;
+    }
+    for (const file of files) ids.push({ id: `${category.slug}/${file}` });
+  }
+
+  return ids;
 }
 
 /**
@@ -38,6 +88,8 @@ export interface CollectionEntryId {
 export function builtRoutes(
   config: PlaceConfig,
   collection: CollectionEntryId[],
+  // Absolute when the caller is not running from the repository root, which every
+  // caller outside the Astro build is.
   pagesDir = 'src/pages',
 ): string[] {
   const categorySlugs = new Set(config.categories.map((category) => category.slug));

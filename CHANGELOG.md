@@ -66,9 +66,11 @@ tags, never framework `main`** (ADR 004, SPEC
   root — gitignored, a print artifact rather than repository content. One card per context:
   the code as inline SVG, the place's name, and the URL as text for anyone who would rather
   type it. Everything is inline, so it prints from a `file://` URL with no network, and the
-  layout fits A4 and US Letter without choosing a paper size. With no manifest it exits 0
-  saying no contexts are declared. It is a script and not a `/qr` route: a public page would
-  publish the internal context map for no visitor benefit.
+  layout fits A4 and US Letter without choosing a paper size. No build is needed: the
+  `article` links are checked against the same route set `/chat` validates against, derived
+  from `knowledge/` and `place.config.ts`. With no manifest it exits 0 saying no contexts are
+  declared. It is a script and not a `/qr` route: a page would add a gated route and an index
+  to maintain for something only the operator printing the signs ever opens.
 - **`@paulmillr/qr` (dev dependency).** Pure JS, zero runtime dependencies, no native
   bindings. It also ships a decoder, which `npm run test:qr` uses to round-trip every card's
   own inline SVG back to the URL it should encode — a wrong code is otherwise invisible until

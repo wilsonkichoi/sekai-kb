@@ -71,7 +71,7 @@
     "test:og": "node --experimental-strip-types --test tests/og-image-resolve.test.mjs",
     "test:embeddings": "node --experimental-strip-types --test tests/embeddings-chunker.test.mjs tests/embeddings-build.test.mjs",
     "test:chat": "node --experimental-strip-types --test tests/chat-gate.test.mjs tests/chat-eval.test.mjs tests/chat-contexts.test.mjs && node --test tests/chat-page.test.mjs",
-    "test:qr": "node --experimental-strip-types --test tests/qr-sheet.test.mjs",
+    "test:qr": "node --experimental-strip-types --test tests/qr-sheet.test.mjs tests/qr-sheet-cli.test.mjs",
     "test:workers": "node scripts/ci/run-worker-tests.mjs",
     "test:theme": "node scripts/visual/theme-surfaces.test.mjs",
     "visual:baseline": "node scripts/visual/capture-baseline.mjs --baseline",

@@ -335,8 +335,10 @@ sentence fails CI.
    scanned URL is attacker-editable, and the prompt is the one place it may not reach.
    `npm run qr:sheet` renders the declared contexts as a gitignored `qr-sheet.html`, one
    printable card each, laid out to fit A4 and US Letter. It is a script and not a route:
-   a public `/qr` page would publish the internal context map for no visitor benefit and
-   would change the gated route list below.
+   a `/qr` page would add a gated route and a maintained index page for something only the
+   operator printing signs ever needs. It buys no privacy — `/chat` necessarily ships the
+   whole context list to the client, since a static build has no server to resolve `?ctx=`
+   — so the argument is cost, not secrecy.
    Retrieval applies a cosine **relevance floor** before top-k, so a question the corpus
    cannot support retrieves nothing, cites nothing, and is answered with a refusal. Top-k
    alone cannot express that: it returns a fixed count off a sorted list, so an

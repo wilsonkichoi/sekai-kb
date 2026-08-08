@@ -397,11 +397,11 @@ const CHAT_SCRIPT = `
     };
 
     var request = { message: question, history: history.slice(-MAX_HISTORY_MESSAGES) };
-    // Spent on the first question and not carried further: see the header note.
-    if (pendingHint) {
-      request.hint = pendingHint;
-      pendingHint = '';
-    }
+    // Carried until a question actually reaches the worker, then spent -- see the
+    // header note. Clearing it here instead would let a first question that 503s or
+    // dies on the network burn the hint, so the reader's first ANSWERED question, the
+    // one they scanned the code to ask, would be the unbiased one.
+    if (pendingHint) request.hint = pendingHint;
 
     fetch(endpoint, {
       method: 'POST',
@@ -414,6 +414,8 @@ const CHAT_SCRIPT = `
           finish();
           return null;
         }
+        // The worker took the question, so the hint has done its job.
+        pendingHint = '';
 
         var reader = response.body.getReader();
         var decoder = new TextDecoder();

@@ -750,6 +750,46 @@ test('a context greeting sends its hint with the first question and with no othe
   );
 });
 
+// The hint is spent when the worker takes the question, not when the request is built.
+// Clearing it on send would let a first question that 503s burn it, leaving the reader's
+// first ANSWERED question -- the one they scanned the code to ask -- unbiased.
+test('a first question the worker refuses does not spend the hint', async () => {
+  let attempt = 0;
+  await withPage(
+    (res) => {
+      attempt += 1;
+      if (attempt === 1) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'generation_unavailable' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ response: 'Answer.' })}\n\n`);
+      res.write(`event: citations\ndata: ${JSON.stringify({ citations: [] })}\n\n`);
+      res.end();
+    },
+    async (page, requests) => {
+      await ask(page, 'First question.');
+      await settled(page);
+      assert.equal(await page.locator('[data-chat-error]').textContent(), 'unavailable');
+      assert.equal(requests[0].hint, CONTEXTS[0].hint);
+
+      await ask(page, 'Second question.');
+      await settled(page);
+      assert.equal(
+        requests[1].hint,
+        CONTEXTS[0].hint,
+        'the retry is still the first question that reaches the worker',
+      );
+
+      await ask(page, 'Third question.');
+      await settled(page);
+      assert.equal('hint' in requests[2], false, 'now it is spent');
+    },
+    { contexts: CONTEXTS, search: '?ctx=north-dock' },
+  );
+});
+
 test('a context with no hint and no article greets and sends no hint field', async () => {
   await withPage(
     streamAnswer('Answer.', []),

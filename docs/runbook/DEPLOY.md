@@ -846,13 +846,20 @@ artifact regenerated on demand, not repository content. Open it in a browser and
 Each card carries the code, the place's name, and the URL in plain text for anyone who
 would rather type it; the sheet is laid out to fit both A4 and US Letter without choosing
 a paper size, and everything including the codes is inline, so it prints correctly from a
-`file://` URL with no network. `--domain` overrides `place.domain`, and `--out` the
-output path. With no manifest it exits 0 saying no contexts are declared.
+`file://` URL with no network. With no manifest it exits 0 saying no contexts are
+declared.
 
-Run it after a build when your contexts declare `article` links: the runner reads
-`public/kb/topics.json` to check them. Without that file it cannot verify a link, so it
-omits the links and prints every card anyway rather than dropping cards off a sheet
-because the site had not been built.
+Two flags, both optional:
+
+| Flag | Default | Use it when |
+|---|---|---|
+| `--domain <host>` | `place.domain` | Printing codes for a domain you have not put in the config yet — a staging host, or a rehearsal before the site goes live. |
+| `--out <path>` | `qr-sheet.html` | Keeping several sheets side by side, or writing outside the repository. Only the default path is gitignored. |
+
+No build is required. The `article` links are checked against the routes your build
+produces, and that set is derived from `knowledge/` and `place.config.ts` — the same set
+`/chat` itself validates against — so the sheet can be printed before the site has ever
+been built.
 
 **Model and free-tier contract.** `CHAT_MODEL` in `workers/chat/src/index.mjs` is
 the single generation-model constant. On 2026-08-07 it was verified against the
