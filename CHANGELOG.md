@@ -110,6 +110,48 @@ tags, never framework `main`** (ADR 004, SPEC
   sequence, chat D1 migration, secret, deployment, model verification, shared
   Workers AI free allocation, and hosted-model escalation path.
 
+- **`/chat`, the reader-facing chat page.** Vanilla JS over `fetch` and the streams API:
+  no client framework, no off-origin script. Answer text renders frame by frame as it
+  arrives, and the articles behind an answer render as linked cards built from the
+  worker's structural citation payload — never from URLs parsed out of answer prose, so a
+  model that invents a plausible-looking link mid-sentence cannot get it rendered.
+  Several retrieved chunks of one article collapse into one card. Conversation lives in
+  `sessionStorage`, is capped to the last four turns on the way to the worker, and clears
+  when the tab closes. A 429, a 503, or a stream that dies mid-answer renders inline and
+  keeps whatever text already arrived.
+- **The chat surface has one gate, in `src/lib/chat.ts`.** It needs BOTH `features.chat`
+  and a non-empty `workers.chat`. The page always builds; with either half missing it
+  renders a static "chat is not enabled here" state carrying no endpoint and no script,
+  and the Header and Footer entry points read the same predicate, so the nav never links
+  to a disabled page.
+- **A relevance floor makes refusal reachable (`RELEVANCE_FLOOR`, default `0.46`).**
+  Retrieval now applies a cosine cutoff before top-k. Top-k alone always returns five
+  chunks, so a question the corpus cannot answer still cited the five least-bad matches —
+  a fabricated source list wearing real URLs. Below the floor a chunk is not retrieved,
+  never enters the prompt, and never becomes a citation; when nothing clears it the model
+  is told no excerpt is relevant and the page renders "no sources found". It is a
+  deploy-time var rather than a constant because the separating value is a property of
+  the corpus, and the runbook carries the procedure for re-measuring it.
+- **`knowledge/chat/_eval.md` and `npm run chat:eval`.** An optional evaluation set —
+  gray-matter frontmatter, leading `_` so the `knowledge/` scanners skip it — pairing each
+  question with the articles its answer should rest on. The runner posts every question to
+  a deployed worker and exits nonzero when a cited URL resolves to no published article,
+  when a question declaring `expect: no-citations` cites anything, or when a request
+  errors, then writes `reports/chat-eval.md` with every question, answer, and citation
+  set. An absent manifest exits 0, so an instance that never writes one is not broken.
+  Answer quality is deliberately not machine-judged; the report exists for the human
+  review that judges it.
+- **Two refusal kinds, because one of them cannot be machine-checked.** A question about
+  a place the corpus never mentions falls below the floor and must cite nothing
+  (`expect: no-citations`, enforced by the runner). A question about a subject this place
+  plausibly has but no article covers scores at or above genuinely answerable questions,
+  so no floor separates it; its refusal appears in the answer and is human-judged
+  (`expect: refusal-in-answer`). The runbook documents the measurement behind that split.
+- **`npm run test:chat`** covers the four gate combinations, the evaluation set's reader
+  and every runner failure class including the absent-manifest zero exit, and the page
+  client driven in Chromium against a real streaming server: progressive rendering,
+  citation cards, the empty-payload state, the four-turn cap, session storage, and the
+  429/503/mid-stream failures. It runs in CI.
 - **The documented Node floor is machine-derived.** `npm run version:check` now derives
   the floor from `package.json` `engines.node` and fails when any registered statement of
   it disagrees — the README, the runbook prerequisites table, the wizard-emitted instance
@@ -133,6 +175,15 @@ tags, never framework `main`** (ADR 004, SPEC
 > Both are absent-safe: missing keys leave OG on the static `og-default.png`
 > fallback, so no config edit is required on upgrade. To enable per-article OG
 > cards, deploy `workers/og/` per the runbook, then set both keys.
+
+> **Upgrade note:** the chat worker's retrieval behavior changes. `RELEVANCE_FLOOR`
+> (default `0.46`) is a new `[vars]` entry, absent-safe in both directions: the worker
+> carries the same default in code, so an unset var needs no config edit. But a
+> redeployed chat worker will now refuse questions it previously answered with five
+> weakly-matched citations, which is the intent. `place.config.ts` is unchanged. If your
+> corpus differs materially from the template's, re-measure the floor before redeploying
+> — `docs/runbook/DEPLOY.md` §Tuning the relevance floor has the procedure — and
+> regenerate the worker config so the var is present to tune.
 
 > **Upgrade note:** `workers.chat` and `workers.chatDatabaseId` are absent-safe
 > config-schema additions. Existing instances build with chat disabled and require

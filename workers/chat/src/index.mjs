@@ -11,6 +11,24 @@ export const CHAT_MODEL = '@cf/zai-org/glm-4.7-flash';
 
 const DEFAULT_RATE_LIMIT_MAX = 20;
 const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 3600;
+/**
+ * Cosine score a chunk must reach to enter the prompt. Below it, a chunk is not
+ * retrieved at all, so it never becomes a citation.
+ *
+ * Top-k alone cannot express "nothing here is relevant": it slices a fixed count
+ * off a sorted list, so a question the corpus cannot answer still returns the five
+ * least-bad matches and cites them. The floor is what makes an empty retrieval --
+ * and therefore an empty citation payload, and a model with no excerpts to answer
+ * from -- reachable.
+ *
+ * The default is measured, not chosen: on the template's demo corpus, questions
+ * about places the corpus never mentions top out at 0.435 while the weakest
+ * genuinely answerable question reaches 0.484. This sits in that gap. It is
+ * deliberately a deploy-time var (`RELEVANCE_FLOOR`) rather than a constant,
+ * because the separating value depends on the corpus: see
+ * `docs/runbook/DEPLOY.md` for how to re-measure it against your own articles.
+ */
+const DEFAULT_RELEVANCE_FLOOR = 0.46;
 const MAX_BODY_BYTES = 32 * 1024;
 const MIN_MESSAGE_CHARS = 2;
 const MAX_MESSAGE_CHARS = 1000;
@@ -44,6 +62,19 @@ function badRequest(error, field, origin) {
 function positiveIntVar(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+/**
+ * A var holding a cosine score, so the accepted range is [0, 1]. Zero is a real
+ * value -- it disables the floor -- which is why this cannot reuse
+ * `positiveIntVar`'s "> 0 or fall back" rule. Anything unparseable, negative, or
+ * above 1 falls back rather than failing the request: a mistyped tuning var must
+ * not take chat down, and the default is a safe retrieval policy.
+ */
+function unitIntervalVar(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : fallback;
 }
 
 function isNonBlankString(value) {
@@ -160,7 +191,7 @@ function normalize(vector) {
   return vector.map((value) => value / magnitude);
 }
 
-function retrieve(queryVector, artifact) {
+function retrieve(queryVector, artifact, floor = DEFAULT_RELEVANCE_FLOOR) {
   const normalized = normalize(queryVector);
   if (!normalized || normalized.length !== artifact.dim) {
     throw new Error('query embedding dimension does not match the corpus artifact');
@@ -175,10 +206,28 @@ function retrieve(queryVector, artifact) {
     return { chunk, score };
   });
   ranked.sort((left, right) => right.score - left.score);
-  return ranked.slice(0, TOP_K).map(({ chunk }) => chunk);
+  // Filter before slicing, so "nothing is relevant" is expressible as an empty
+  // result rather than collapsing into the five least-bad matches.
+  return ranked
+    .filter(({ score }) => score >= floor)
+    .slice(0, TOP_K)
+    .map(({ chunk }) => chunk);
 }
 
 function systemPrompt(siteName, chunks) {
+  // No chunk cleared the relevance floor. Saying so explicitly beats sending the
+  // standard prompt with an empty context block, which reads as a malformed prompt
+  // and invites the model to answer from its own training instead of refusing.
+  if (chunks.length === 0) {
+    return [
+      `You are a helpful guide to ${siteName}.`,
+      'Answer only from the supplied knowledge-base excerpts.',
+      'No excerpt in the knowledge base is relevant to this question.',
+      'Say that the knowledge base does not cover it and suggest browsing the knowledge base.',
+      'Do not answer from any other source, and do not cite anything.',
+    ].join('\n');
+  }
+
   const context = chunks
     .map(
       (chunk, index) =>
@@ -345,7 +394,11 @@ export async function handleRequest(request, env) {
 
   let retrieved;
   try {
-    retrieved = retrieve(embedded?.data?.[0], artifact);
+    retrieved = retrieve(
+      embedded?.data?.[0],
+      artifact,
+      unitIntervalVar(env.RELEVANCE_FLOOR, DEFAULT_RELEVANCE_FLOOR),
+    );
   } catch (error) {
     return json({ error: 'query_embedding_incompatible', detail: error.message }, 503, allowedOrigin);
   }

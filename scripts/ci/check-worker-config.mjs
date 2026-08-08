@@ -80,6 +80,7 @@ const EXPECTED = {
       SITE_NAME: '',
       RATE_LIMIT_MAX: '20',
       RATE_LIMIT_WINDOW_SECONDS: '3600',
+      RELEVANCE_FLOOR: '0.46',
     },
     aiBinding: 'AI',
     d1Bindings: ['DB'],

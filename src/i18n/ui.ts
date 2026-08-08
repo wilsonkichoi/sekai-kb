@@ -23,6 +23,7 @@ export const ui = {
     'nav.changelog': 'Changelog',
     'nav.dashboard': 'Dashboard',
     'nav.soundscape': 'Soundscape',
+    'nav.chat': 'Ask',
     // header aria + search
     'nav.aria-home': 'Home',
     'nav.aria-main-navigation': 'Main navigation',
@@ -39,6 +40,7 @@ export const ui = {
     'footer.graph': 'Knowledge Graph',
     'footer.dashboard': 'Dashboard',
     'footer.soundscape': 'Soundscape',
+    'footer.chat': 'Ask',
     'footer.contribute': 'Contribute',
     'footer.changelog': 'Changelog',
     'footer.report': 'Report an issue',
@@ -77,6 +79,31 @@ export const ui = {
       'Too many submissions from this network. Please try again later.',
     'feedback.error': 'Could not send your feedback. Please try again later.',
     'feedback.noscript': 'This form needs JavaScript. Email your feedback instead:',
+    // chat page (features.chat + workers.chat)
+    'chat.meta.title': 'Ask',
+    'chat.meta.description':
+      'Ask a question and get an answer drawn from this knowledge base, with links to the articles it came from.',
+    'chat.hero.title': 'Ask the knowledge base',
+    'chat.hero.subtitle':
+      'Answers are assembled from the articles on this site and cite the ones they draw on. If the articles do not cover something, the answer will say so.',
+    'chat.disabled.title': 'Chat is not enabled here',
+    'chat.disabled.description':
+      'This instance has no chat endpoint configured, so questions cannot be answered. Everything the chat would draw on is readable directly.',
+    'chat.disabled.cta': 'Browse the articles',
+    'chat.input.label': 'Your question',
+    'chat.input.placeholder': 'What would you like to know?',
+    'chat.send': 'Ask',
+    'chat.sending': 'Thinking...',
+    'chat.speaker.reader': 'You',
+    'chat.speaker.guide': 'Answer',
+    'chat.sources.title': 'Sources',
+    'chat.sources.none': 'No sources found. Nothing in the knowledge base covers this.',
+    'chat.transcript.label': 'Conversation',
+    'chat.transcript.empty': 'Ask a question to start. The conversation clears when you close the tab.',
+    'chat.error.rateLimited': 'Too many questions from this network. Please try again later.',
+    'chat.error.unavailable': 'The answering service is unavailable right now. Please try again later.',
+    'chat.error.generic': 'Could not get an answer. Please try again later.',
+    'chat.noscript': 'Asking questions needs JavaScript. Browse the articles instead:',
     // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
     'soundscape.meta.title': 'Soundscape',
     // Says how the audio plays, never where it came from: provenance is per clip,

@@ -1,0 +1,461 @@
+// The /chat client: SSE consumption, citation cards, session history, and failure.
+//
+// The script under test is extracted from src/templates/chat.template.astro and run
+// in a real browser against a real streaming HTTP server, both served from one
+// origin. A server rather than request interception, because two of the properties
+// here are about timing: text must render frame by frame as it arrives, and a stream
+// that dies mid-answer must keep what already landed.
+//
+// The fixture's message strings are DERIVED from the template's own `data-msg-*`
+// attributes, so a renamed or added message cannot leave this suite testing a form
+// the page no longer renders.
+//
+// tests/ is framework code that ships to every adopter: every fixture here is
+// synthetic and carries no place name.
+
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { after, before, test } from 'node:test';
+
+import { chromium } from 'playwright';
+
+const templateSource = readFileSync(
+  new URL('../src/templates/chat.template.astro', import.meta.url),
+  'utf8',
+);
+
+const scriptMatch = templateSource.match(/const CHAT_SCRIPT = `([\s\S]*?)\n`;\n---/);
+assert.ok(scriptMatch, 'chat.template.astro must expose its inline client as CHAT_SCRIPT');
+
+// CHAT_SCRIPT is a template literal, so what reaches the browser is its EVALUATED
+// value, not its source: `\\n` in the file is a one-character newline escape in the
+// emitted script. Reading the raw source would test a script whose SSE frame
+// splitting is on the literal characters backslash-n, which is not the page that
+// ships. Evaluating it here reproduces exactly what Astro emits.
+assert.equal(
+  scriptMatch[1].includes('${'),
+  false,
+  'CHAT_SCRIPT must stay interpolation-free so this suite can evaluate it standalone',
+);
+const chatScript = new Function(`return \`${scriptMatch[1]}\`;`)();
+
+// Every message the template hands the client, by attribute name. The fixture sets
+// each to its own name, so an assertion can say which message surfaced.
+const MSG_NAMES = [...templateSource.matchAll(/data-msg-([a-z-]+)=\{t\('[^']+'\)\}/g)].map(
+  (match) => match[1],
+);
+assert.ok(MSG_NAMES.includes('no-sources'), 'the template must pass a no-sources message');
+assert.ok(MSG_NAMES.includes('rate-limited'), 'the template must pass a rate-limited message');
+assert.ok(MSG_NAMES.includes('unavailable'), 'the template must pass an unavailable message');
+assert.ok(MSG_NAMES.includes('error'), 'the template must pass a generic error message');
+
+const msgAttrs = MSG_NAMES.map((name) => `data-msg-${name}="${name}"`).join('\n            ');
+
+function fixtureHtml(endpoint) {
+  return `<!doctype html>
+<html>
+  <body>
+    <section data-chat>
+      <div class="log" data-chat-log role="log" aria-live="polite">
+        <p class="log-empty" data-chat-empty>Ask a question to start.</p>
+      </div>
+      <form
+            data-chat-form
+            data-endpoint="${endpoint}"
+            ${msgAttrs}
+      >
+        <textarea data-chat-input rows="2" required maxlength="1000"></textarea>
+        <button type="submit">send</button>
+      </form>
+      <script>${chatScript}</script>
+    </section>
+  </body>
+</html>`;
+}
+
+const frame = (text) => `data: ${JSON.stringify({ response: text })}\n\n`;
+const citationsFrame = (citations) =>
+  `event: citations\ndata: ${JSON.stringify({ citations })}\n\n`;
+
+let browser;
+before(async () => {
+  browser = await chromium.launch({ headless: true });
+});
+after(async () => {
+  await browser?.close();
+});
+
+/**
+ * Serves the fixture page and one POST endpoint from a single origin, runs `body`
+ * against a fresh page, and tears everything down.
+ *
+ * `respond(res, requestBody)` owns the endpoint response, so a test can stream,
+ * stall, or destroy the connection as it needs.
+ */
+async function withPage(respond, body) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fixtureHtml('/ask'));
+      return;
+    }
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+    });
+    req.on('end', () => {
+      requests.push(JSON.parse(raw));
+      respond(res, requests.at(-1));
+    });
+  });
+
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const { port } = server.address();
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(`http://127.0.0.1:${port}/`);
+    return await body(page, requests);
+  } finally {
+    await context.close();
+    await new Promise((done) => server.close(done));
+  }
+}
+
+/** Streams an SSE answer and its citation payload, then closes. */
+const streamAnswer = (text, citations) => (res) => {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+  res.write(frame(text));
+  res.write(citationsFrame(citations));
+  res.end();
+};
+
+async function ask(page, question = 'What does alpha cover?') {
+  await page.locator('[data-chat-input]').fill(question);
+  await page.locator('[data-chat-form] button[type="submit"]').click();
+}
+
+const settled = (page) =>
+  page.waitForFunction(() => {
+    const button = document.querySelector('[data-chat-form] button[type="submit"]');
+    return button && !button.disabled;
+  });
+
+/* -- transcript 1: an answer with citations --------------------------------- */
+
+test('an answer with citations renders linked cards, one per article', async () => {
+  await withPage(
+    streamAnswer('Alpha covers alpha.', [
+      { title: 'Alpha Guide', url: '/guides/alpha' },
+      // Retrieval returns chunks, so one article can appear several times. A reader
+      // wants one card per article.
+      { title: 'Alpha Guide', url: '/guides/alpha' },
+      { title: 'Bravo Guide', url: '/guides/bravo' },
+    ]),
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'Alpha covers alpha.',
+      );
+
+      const cards = page.locator('[data-chat-sources] .source-card');
+      assert.equal(await cards.count(), 2, 'duplicate URLs collapse into one card');
+      assert.deepEqual(await cards.allTextContents(), ['Alpha Guide', 'Bravo Guide']);
+      assert.deepEqual(
+        await page.locator('[data-chat-sources] a.source-card').evaluateAll((links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+        ['/guides/alpha', '/guides/bravo'],
+      );
+
+      assert.equal(await page.locator('[data-chat-empty]').isVisible(), false);
+      // The speaker label and the question, in that order, from the `you` message.
+      assert.equal(
+        await page.locator('[data-turn="user"]').textContent(),
+        'youWhat does alpha cover?',
+      );
+    },
+  );
+});
+
+/* -- transcript 2: an answer with no citations ------------------------------ */
+
+test('an empty citation payload renders the no-sources state, not a bare answer', async () => {
+  await withPage(streamAnswer('The knowledge base does not cover that.', []), async (page) => {
+    await ask(page);
+    await settled(page);
+
+    const sources = page.locator('[data-chat-sources]');
+    assert.equal(await sources.count(), 1, 'the sources block still renders');
+    assert.equal(await sources.getAttribute('data-empty'), '');
+    assert.equal(await sources.textContent(), 'no-sources');
+    assert.equal(
+      await page.locator('[data-chat-sources] .source-card').count(),
+      0,
+      'nothing may be presented as a source',
+    );
+  });
+});
+
+/* -- transcript 3: the stream dies mid-answer ------------------------------- */
+
+test('a stream that dies mid-answer keeps the partial text and reports inline', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(frame('Partial answer'));
+      // No citations frame, no clean end: the socket goes away.
+      setTimeout(() => res.destroy(), 50);
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'Partial answer',
+        'text that already arrived must survive the failure',
+      );
+      assert.equal(await page.locator('[data-chat-error]').textContent(), 'error');
+      assert.equal(
+        await page.locator('[data-turn="user"]').count(),
+        1,
+        'the transcript must be preserved',
+      );
+    },
+  );
+});
+
+/* -- worker failure statuses ------------------------------------------------ */
+
+for (const [status, expected] of [
+  [429, 'rate-limited'],
+  [503, 'unavailable'],
+  [500, 'error'],
+]) {
+  test(`a ${status} renders the ${expected} message inline and preserves the transcript`, async () => {
+    await withPage(
+      (res) => {
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'nope' }));
+      },
+      async (page) => {
+        await ask(page, 'A question that fails.');
+        await settled(page);
+
+        assert.equal(await page.locator('[data-chat-error]').textContent(), expected);
+        assert.equal(await page.locator('[data-turn="user"]').textContent(), `youA question that fails.`);
+        assert.equal(
+          await page.locator('[data-chat-form] button[type="submit"]').isDisabled(),
+          false,
+          'the composer must be usable again',
+        );
+      },
+    );
+  });
+}
+
+/* -- progressive rendering -------------------------------------------------- */
+
+test('answer text renders frame by frame rather than after the stream closes', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(frame('first '));
+      setTimeout(() => {
+        res.write(frame('second'));
+        res.write(citationsFrame([{ title: 'Alpha Guide', url: '/guides/alpha' }]));
+        res.end();
+      }, 400);
+    },
+    async (page) => {
+      await ask(page);
+
+      // Observable before the stream closes: the whole point of streaming.
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-turn="assistant"] [data-turn-body]')?.textContent ===
+          'first ',
+      );
+      assert.equal(
+        await page.locator('[data-chat-sources]').count(),
+        0,
+        'citations must not render until the payload arrives',
+      );
+
+      await settled(page);
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'first second',
+      );
+      assert.equal(await page.locator('[data-chat-sources] .source-card').count(), 1);
+    },
+  );
+});
+
+/* -- upstream frame shapes -------------------------------------------------- */
+
+// The generation model streams OpenAI-compatible chunks, not the documented
+// `{response}` form. Reading only the latter rendered a blank answer under a full set
+// of citations against the real deployed worker, which is the defect these pin.
+test('an OpenAI-compatible content frame renders as the answer', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Chunked ' } }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'answer.' } }] })}\n\n`);
+      res.write(citationsFrame([{ title: 'Alpha Guide', url: '/guides/alpha' }]));
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'Chunked answer.',
+      );
+    },
+  );
+});
+
+test('a reasoning stream is never rendered as the answer', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      // A reasoning model emits far more of this than of the answer itself.
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Let me think about ' } }] })}\n\n`,
+      );
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'the question.' } }] })}\n\n`,
+      );
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'The answer.' } }] })}\n\n`);
+      res.write(citationsFrame([{ title: 'Alpha Guide', url: '/guides/alpha' }]));
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+      const body = await page.locator('[data-turn="assistant"] [data-turn-body]').textContent();
+      assert.equal(body, 'The answer.');
+      assert.equal(body.includes('think'), false, 'private reasoning must not reach the reader');
+    },
+  );
+});
+
+/* -- citations come only from the payload ----------------------------------- */
+
+test('a URL written in the answer prose never becomes a source card', async () => {
+  await withPage(
+    streamAnswer('See /guides/invented and https://example.invalid/page for more.', []),
+    async (page) => {
+      await ask(page);
+      await settled(page);
+      assert.equal(
+        await page.locator('[data-chat-sources] .source-card').count(),
+        0,
+        'the renderer must ignore prose entirely',
+      );
+      assert.equal(await page.locator('[data-chat-sources]').getAttribute('data-empty'), '');
+    },
+  );
+});
+
+test('a citation URL that is not site-root-absolute renders as text, never as a link', async () => {
+  await withPage(
+    streamAnswer('Answer.', [
+      { title: 'Script', url: 'javascript:alert(1)' },
+      { title: 'Offsite', url: '//evil.example.invalid/x' },
+      { title: 'Real', url: '/guides/alpha' },
+    ]),
+    async (page) => {
+      await ask(page);
+      await settled(page);
+      assert.deepEqual(
+        await page.locator('[data-chat-sources] a.source-card').evaluateAll((links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+        ['/guides/alpha'],
+        'only a site-root-absolute URL may become a link',
+      );
+      assert.equal(await page.locator('[data-chat-sources] span.source-card').count(), 2);
+    },
+  );
+});
+
+/* -- session history -------------------------------------------------------- */
+
+test('history lives in sessionStorage and never in localStorage', async () => {
+  await withPage(streamAnswer('Alpha covers alpha.', []), async (page) => {
+    await ask(page, 'First question.');
+    await settled(page);
+
+    const stored = await page.evaluate(() => ({
+      session: sessionStorage.getItem('chat-history'),
+      local: localStorage.getItem('chat-history'),
+      localKeys: localStorage.length,
+    }));
+    assert.equal(stored.local, null, 'nothing may persist past the tab');
+    assert.equal(stored.localKeys, 0);
+    assert.deepEqual(JSON.parse(stored.session), [
+      { role: 'user', content: 'First question.' },
+      { role: 'assistant', content: 'Alpha covers alpha.' },
+    ]);
+  });
+});
+
+test('only the last four turns are sent to the worker', async () => {
+  await withPage(streamAnswer('Answer.', []), async (page, requests) => {
+    await page.evaluate(() => {
+      const history = [];
+      for (let i = 1; i <= 3; i += 1) {
+        history.push({ role: 'user', content: `question ${i}` });
+        history.push({ role: 'assistant', content: `answer ${i}` });
+      }
+      sessionStorage.setItem('chat-history', JSON.stringify(history));
+    });
+
+    await ask(page, 'The newest question.');
+    await settled(page);
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].message, 'The newest question.');
+    assert.deepEqual(
+      requests[0].history,
+      [
+        { role: 'user', content: 'question 2' },
+        { role: 'assistant', content: 'answer 2' },
+        { role: 'user', content: 'question 3' },
+        { role: 'assistant', content: 'answer 3' },
+      ],
+      'six stored turns must be cut to the last four on the way out',
+    );
+  });
+});
+
+test('a corrupt session store is ignored rather than breaking the conversation', async () => {
+  await withPage(streamAnswer('Answer.', []), async (page, requests) => {
+    await page.evaluate(() => sessionStorage.setItem('chat-history', 'not json'));
+    await ask(page);
+    await settled(page);
+    assert.deepEqual(requests[0].history, []);
+    assert.equal(
+      await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+      'Answer.',
+    );
+  });
+});
+
+test('an empty question is not sent', async () => {
+  await withPage(streamAnswer('Answer.', []), async (page, requests) => {
+    await page.locator('[data-chat-input]').fill('   ');
+    await page.locator('[data-chat-form] button[type="submit"]').click();
+    await page.waitForTimeout(200);
+    assert.equal(requests.length, 0);
+  });
+});

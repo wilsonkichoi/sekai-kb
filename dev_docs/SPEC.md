@@ -258,12 +258,16 @@ vendor-agnostic lazy-loading knowledge protocol: any browsing-capable AI reads `
 ## Pages
 
 Routes under `src/pages/`: `index`, `[category]/index`, `[category]/[slug]`, `404`,
-`about`, `changelog`, `contribute`, `dashboard`, `explore`, `feed.xml`, `graph`,
+`about`, `changelog`, `chat`, `contribute`, `dashboard`, `explore`, `feed.xml`, `graph`,
 `latest`, `map`, `rss.xml`, `soundscape`, `system`.
 Non-route build outputs: `llms.txt` and `/kb/*`, emitted by `build-kb-index.mjs`
 rather than by an Astro page. `/map` is Leaflet; `/soundscape` is native HTML5
 audio with no player library. Phase 6 also adds the feedback widget (a component,
-not a route); Phase 7 adds `/chat`.
+not a route). `/chat` is vanilla JS over `fetch` and the streams API, with no client
+framework and no off-origin script; it always builds, and `src/lib/chat.ts` decides
+whether it renders the live panel or a static disabled state. That predicate needs
+BOTH `features.chat` and a non-empty `workers.chat`, and the Header and Footer entry
+points read the same function, so the nav never links to a disabled page.
 
 The route list is derived from `src/pages/` and gated by
 `scripts/ci/check-framework-docs.mjs`, so adding a page without amending this
@@ -317,6 +321,20 @@ sentence fails CI.
    queries with Workers AI `@cf/baai/bge-m3`, performs in-worker cosine retrieval over
    static JSON vectors, and calls free-tier Workers AI with citation-required prompting. QR codes deep
    link to `/chat?ctx=<location>`.
+   Retrieval applies a cosine **relevance floor** before top-k, so a question the corpus
+   cannot support retrieves nothing, cites nothing, and is answered with a refusal. Top-k
+   alone cannot express that: it returns a fixed count off a sorted list, so an
+   unanswerable question still cites the least-bad matches. The floor is the deploy-time
+   var `RELEVANCE_FLOOR`, not a constant, because the separating value is a property of
+   the corpus; `docs/runbook/DEPLOY.md` carries the default and the procedure for
+   re-measuring it. It bounds one refusal class only. A question about a subject the
+   place plausibly has but no article covers scores at or above genuinely answerable
+   questions, so no floor separates it and the answer is where its refusal shows up.
+   `knowledge/chat/_eval.md` is the optional evaluation set and `npm run chat:eval` runs
+   it against a deployed worker, failing on a citation that resolves to no published
+   article, on a question declaring `expect: no-citations` that cites anything, and on
+   any request error. Answer quality is deliberately not machine-judged; the run writes a
+   Markdown report for the human review that is. An absent manifest exits 0.
 7. **Framework scaffolding.** The primary path is GitHub "Use this template" followed by
    `/sekai-adopt`. The skill interviews for place identity, domain, map, language,
    categories, and grounding material; it calls `npm run init -- --answers <json>`, then
