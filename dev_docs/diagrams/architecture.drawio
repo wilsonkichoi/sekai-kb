@@ -107,7 +107,7 @@
             <mxGeometry height="73" width="375" x="461" y="65" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="workers/chat — Phase 7 RAG&#xa;query embed via Workers AI bge-m3&#xa;in-worker cosine over static vectors&#xa;Claude API, citations required" mermaidId="n:chat" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="workers/chat — Phase 7 RAG&#xa;query embed via Workers AI bge-m3&#xa;in-worker cosine over static vectors&#xa;Claude API, citations required" id="18">
+        <UserObject label="workers/chat — Phase 7 RAG&#xa;query embed via Workers AI bge-m3&#xa;in-worker cosine over static vectors&#xa;Workers AI, citations required" mermaidId="n:chat" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="workers/chat — Phase 7 RAG&#xa;query embed via Workers AI bge-m3&#xa;in-worker cosine over static vectors&#xa;Workers AI, citations required" id="18">
           <mxCell parent="15" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="112" width="317" x="35" y="45" as="geometry" />
           </mxCell>

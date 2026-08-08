@@ -1,0 +1,384 @@
+// workers/chat/src/index.mjs — retrieval-augmented chat on Cloudflare Workers AI.
+
+import vectorArtifact from '../vectors.json' with { type: 'json' };
+
+export const EMBED_MODEL = '@cf/baai/bge-m3';
+export const CHAT_MODEL = '@cf/zai-org/glm-4.7-flash';
+
+const DEFAULT_RATE_LIMIT_MAX = 20;
+const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 3600;
+const MAX_BODY_BYTES = 32 * 1024;
+const MIN_MESSAGE_CHARS = 2;
+const MAX_MESSAGE_CHARS = 1000;
+const MAX_HISTORY_ENTRIES = 20;
+const TOP_K = 5;
+
+export const SQL = {
+  RATE_LIMIT_PRUNE: `
+    DELETE FROM submission_window
+    WHERE ip_hash = ?1 AND (window_start <= ?2 OR count <= 0)
+  `,
+  RATE_LIMIT_RECORD: `
+    INSERT INTO submission_window (ip_hash, window_start, count)
+    VALUES (?1, ?2, 1)
+    ON CONFLICT(ip_hash, window_start) DO UPDATE SET count = count + 1
+  `,
+  RATE_LIMIT_COUNT: `
+    SELECT SUM(count) AS total, MIN(window_start) AS oldest
+    FROM submission_window
+    WHERE ip_hash = ?1
+  `,
+  RATE_LIMIT_RELEASE: `
+    UPDATE submission_window
+    SET count = count - 1
+    WHERE ip_hash = ?1 AND window_start = ?2 AND count > 0
+  `,
+};
+
+let decodedArtifact;
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    Vary: 'Origin',
+  };
+}
+
+function json(body, status, origin, extraHeaders = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(origin ? corsHeaders(origin) : {}),
+      ...extraHeaders,
+    },
+  });
+}
+
+function badRequest(error, field, origin) {
+  return json({ error, field }, 400, origin);
+}
+
+function positiveIntVar(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function isNonBlankString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function mediaTypeOf(value) {
+  return (value || '').split(';')[0].trim().toLowerCase();
+}
+
+async function readBoundedText(request) {
+  if (!request.body) return { text: '' };
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return { tooLarge: true };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(bytes) };
+}
+
+function validatePayload(payload) {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { error: 'invalid_json', field: 'body' };
+  }
+  if (!isNonBlankString(payload.message)) {
+    return { error: 'required', field: 'message' };
+  }
+  const message = payload.message.trim();
+  if (message.length < MIN_MESSAGE_CHARS) return { error: 'too_short', field: 'message' };
+  if (message.length > MAX_MESSAGE_CHARS) return { error: 'too_long', field: 'message' };
+  if (!Array.isArray(payload.history)) return { error: 'invalid_type', field: 'history' };
+  if (payload.history.length > MAX_HISTORY_ENTRIES) {
+    return { error: 'too_many_entries', field: 'history' };
+  }
+  for (let index = 0; index < payload.history.length; index += 1) {
+    const entry = payload.history[index];
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      return { error: 'invalid_entry', field: `history[${index}]` };
+    }
+    if (!['user', 'assistant'].includes(entry.role)) {
+      return { error: 'invalid_role', field: `history[${index}].role` };
+    }
+    if (!isNonBlankString(entry.content)) {
+      return { error: 'required', field: `history[${index}].content` };
+    }
+  }
+  return null;
+}
+
+async function hashIp(ip, salt) {
+  const bytes = new TextEncoder().encode(`${ip}${salt}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function decodeArtifact() {
+  if (decodedArtifact) return decodedArtifact;
+  if (vectorArtifact?.model !== EMBED_MODEL) {
+    throw new Error('embedding artifact model does not match this worker');
+  }
+  if (
+    vectorArtifact?.schema !== 'rag-v1' ||
+    vectorArtifact?.quant !== 'i8-unit' ||
+    !Number.isInteger(vectorArtifact?.dim) ||
+    vectorArtifact.dim <= 0 ||
+    !Array.isArray(vectorArtifact?.chunks) ||
+    vectorArtifact?.count !== vectorArtifact.chunks.length ||
+    typeof vectorArtifact?.vectors !== 'string'
+  ) {
+    throw new Error('embedding artifact metadata is incompatible with this worker');
+  }
+
+  const binary = atob(vectorArtifact.vectors);
+  const vectors = new Int8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    const value = binary.charCodeAt(index);
+    vectors[index] = value > 127 ? value - 256 : value;
+  }
+  if (vectors.length !== vectorArtifact.count * vectorArtifact.dim) {
+    throw new Error('embedding artifact vector length does not match its metadata');
+  }
+
+  decodedArtifact = Object.freeze({
+    dim: vectorArtifact.dim,
+    chunks: vectorArtifact.chunks,
+    vectors,
+  });
+  return decodedArtifact;
+}
+
+function normalize(vector) {
+  let sumSquares = 0;
+  for (const value of vector) sumSquares += value * value;
+  const magnitude = Math.sqrt(sumSquares);
+  if (!Number.isFinite(magnitude) || magnitude === 0) return null;
+  return vector.map((value) => value / magnitude);
+}
+
+function retrieve(queryVector, artifact) {
+  const normalized = normalize(queryVector);
+  if (!normalized || normalized.length !== artifact.dim) {
+    throw new Error('query embedding dimension does not match the corpus artifact');
+  }
+
+  const ranked = artifact.chunks.map((chunk, chunkIndex) => {
+    let score = 0;
+    const offset = chunkIndex * artifact.dim;
+    for (let dim = 0; dim < artifact.dim; dim += 1) {
+      score += normalized[dim] * (artifact.vectors[offset + dim] / 127);
+    }
+    return { chunk, score };
+  });
+  ranked.sort((left, right) => right.score - left.score);
+  return ranked.slice(0, TOP_K).map(({ chunk }) => chunk);
+}
+
+function systemPrompt(siteName, chunks) {
+  const context = chunks
+    .map(
+      (chunk, index) =>
+        `[${index + 1}] ${chunk.title}\nURL: ${chunk.url}\n${chunk.text}`,
+    )
+    .join('\n\n');
+  return [
+    `You are a helpful guide to ${siteName}.`,
+    'Answer only from the supplied knowledge-base excerpts.',
+    'Cite supporting claims with the excerpt number and its exact URL.',
+    'If the excerpts do not contain the answer, say so and suggest browsing the knowledge base.',
+    '',
+    context,
+  ].join('\n');
+}
+
+function citationPayload(chunks) {
+  return {
+    citations: chunks.map((chunk) => ({
+      title: chunk.title,
+      url: chunk.url,
+    })),
+  };
+}
+
+function withFinalCitations(upstream, citations) {
+  const reader = upstream.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const queued = [];
+  let pending = '';
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (queued.length) {
+        controller.enqueue(encoder.encode(queued.shift()));
+        return;
+      }
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          pending += decoder.decode();
+          if (pending.trim() && pending.trim() !== 'data: [DONE]') queued.push(pending);
+          for (const event of queued) controller.enqueue(encoder.encode(event));
+          controller.enqueue(
+            encoder.encode(`event: citations\ndata: ${JSON.stringify(citations)}\n\n`),
+          );
+          controller.close();
+          return;
+        }
+
+        pending += decoder.decode(value, { stream: true });
+        const events = pending.split('\n\n');
+        pending = events.pop() ?? '';
+        for (const event of events) {
+          if (event.trim() === 'data: [DONE]') continue;
+          queued.push(`${event}\n\n`);
+        }
+        if (queued.length) {
+          controller.enqueue(encoder.encode(queued.shift()));
+          return;
+        }
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+}
+
+async function applyRateLimit(request, env, origin) {
+  const salt = env?.IP_HASH_SALT;
+  if (!isNonBlankString(salt)) {
+    return json({ error: 'server_misconfigured' }, 500, origin);
+  }
+
+  const ipHash = await hashIp(request.headers.get('CF-Connecting-IP') || '', salt);
+  const max = positiveIntVar(env.RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_MAX);
+  const windowSeconds = positiveIntVar(
+    env.RATE_LIMIT_WINDOW_SECONDS,
+    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+  );
+  const now = Math.floor(Date.now() / 1000);
+
+  await env.DB.prepare(SQL.RATE_LIMIT_PRUNE).bind(ipHash, now - windowSeconds).run();
+  await env.DB.prepare(SQL.RATE_LIMIT_RECORD).bind(ipHash, now).run();
+  const usage = await env.DB.prepare(SQL.RATE_LIMIT_COUNT).bind(ipHash).first();
+  if (Number(usage?.total ?? 0) <= max) return null;
+
+  await env.DB.prepare(SQL.RATE_LIMIT_RELEASE).bind(ipHash, now).run();
+  const oldest = Number(usage?.oldest ?? now);
+  return json({ error: 'rate_limited' }, 429, origin, {
+    'Retry-After': String(Math.max(1, oldest + windowSeconds - now)),
+  });
+}
+
+export async function handleRequest(request, env) {
+  const allowedOrigin = env?.ALLOWED_ORIGIN;
+  const origin = request.headers.get('Origin');
+  if (!isNonBlankString(allowedOrigin) || !isNonBlankString(origin) || origin !== allowedOrigin) {
+    return json({ error: 'origin_not_allowed' }, 403, null);
+  }
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(allowedOrigin),
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+  if (request.method !== 'POST') {
+    return json({ error: 'method_not_allowed' }, 405, allowedOrigin);
+  }
+  if (!isNonBlankString(env?.SITE_NAME)) {
+    return json({ error: 'server_misconfigured' }, 500, allowedOrigin);
+  }
+  if (mediaTypeOf(request.headers.get('Content-Type')) !== 'application/json') {
+    return badRequest('invalid_content_type', 'content-type', allowedOrigin);
+  }
+
+  const declaredLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return badRequest('payload_too_large', 'body', allowedOrigin);
+  }
+  const body = await readBoundedText(request);
+  if (body.tooLarge) return badRequest('payload_too_large', 'body', allowedOrigin);
+
+  let payload;
+  try {
+    payload = JSON.parse(body.text);
+  } catch {
+    return badRequest('invalid_json', 'body', allowedOrigin);
+  }
+  const invalid = validatePayload(payload);
+  if (invalid) return badRequest(invalid.error, invalid.field, allowedOrigin);
+
+  const rateLimitResponse = await applyRateLimit(request, env, allowedOrigin);
+  if (rateLimitResponse) return rateLimitResponse;
+
+  let artifact;
+  try {
+    artifact = decodeArtifact();
+  } catch (error) {
+    return json({ error: 'embedding_artifact_incompatible', detail: error.message }, 503, allowedOrigin);
+  }
+
+  let retrieved;
+  try {
+    const embedded = await env.AI.run(EMBED_MODEL, { text: [payload.message.trim()] });
+    retrieved = retrieve(embedded?.data?.[0], artifact);
+  } catch (error) {
+    return json({ error: 'query_embedding_incompatible', detail: error.message }, 503, allowedOrigin);
+  }
+
+  const messages = [
+    { role: 'system', content: systemPrompt(env.SITE_NAME.trim(), retrieved) },
+    ...payload.history.slice(-4).map((entry) => ({
+      role: entry.role,
+      content: entry.content.trim(),
+    })),
+    { role: 'user', content: payload.message.trim() },
+  ];
+  const generated = await env.AI.run(CHAT_MODEL, { messages, stream: true });
+  if (!(generated instanceof ReadableStream)) {
+    return json({ error: 'generation_stream_unavailable' }, 503, allowedOrigin);
+  }
+
+  return new Response(withFinalCitations(generated, citationPayload(retrieved)), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      ...corsHeaders(allowedOrigin),
+    },
+  });
+}
+
+export default {
+  fetch(request, env) {
+    return handleRequest(request, env);
+  },
+};

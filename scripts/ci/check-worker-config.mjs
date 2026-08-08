@@ -74,6 +74,16 @@ import {
  * restatement of whatever the file happens to say today.
  */
 const EXPECTED = {
+  chat: {
+    vars: {
+      ALLOWED_ORIGIN: '',
+      SITE_NAME: '',
+      RATE_LIMIT_MAX: '20',
+      RATE_LIMIT_WINDOW_SECONDS: '3600',
+    },
+    aiBinding: 'AI',
+    d1Bindings: ['DB'],
+  },
   feedback: {
     vars: {
       ALLOWED_ORIGIN: '',
@@ -178,6 +188,15 @@ for (const dir of workerDirs) {
     }
   }
 
+  const ai = config.tables.ai;
+  if (expected.aiBinding) {
+    if (!ai || ai.binding !== expected.aiBinding) {
+      report('[ai] binding', ai?.binding, expected.aiBinding);
+    }
+  } else if (ai) {
+    failures.push(`${rel}: carries an unregistered [ai] binding.`);
+  }
+
   const databases = config.arrays.d1_databases ?? [];
   const wantBindings = expected.d1Bindings ?? [];
   if (databases.length !== wantBindings.length) {
@@ -238,6 +257,12 @@ for (const artifact of DERIVED_ARTIFACTS) {
   );
   if (tracked.status !== 0) continue;
   for (const path of tracked.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
+    if (
+      artifact.basename === 'vectors.json' &&
+      !/^workers\/[^/]+\/vectors\.json$/.test(path)
+    ) {
+      continue;
+    }
     failures.push(
       `${path}: ${artifact.what} is tracked by git. It is derived, gitignored, and ` +
         `skipped by both machine gates by name -- committing one puts ${artifact.identity} ` +

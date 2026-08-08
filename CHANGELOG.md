@@ -94,11 +94,32 @@ tags, never framework `main`** (ADR 004, SPEC
   through the environment. They are ignored because `.dev.vars` is wrangler's conventional
   local-secret path and `.env` is everyone else's, so a token parked in one for convenience
   is never stageable.
+- **Cited RAG chat worker (`workers/chat/`).** The worker embeds each query with
+  `@cf/baai/bge-m3`, decodes the generated int8 corpus artifact once per isolate,
+  retrieves the five highest cosine matches, and streams a free-tier Workers AI
+  answer followed by a structural citation event covering every prompted chunk.
+- **The chat endpoint fails closed.** Exact-origin CORS, bounded request validation,
+  model and dimension compatibility checks, and a D1-backed exact rolling limit of
+  20 requests per hashed address per 3,600 seconds protect the endpoint without
+  storing or logging raw IP addresses.
+- **Chat deployment configuration and tests.** `place.config.ts` gains absent-safe
+  `workers.chat` and `workers.chatDatabaseId` keys; the generated wrangler config
+  supplies instance identity while the committed template declares `AI` and `DB`
+  bindings. The `node:test` contract suite runs through `npm run test:workers` in CI.
+- **Runbook:** `docs/runbook/DEPLOY.md` now covers the required embedding-first
+  sequence, chat D1 migration, secret, deployment, model verification, shared
+  Workers AI free allocation, and hosted-model escalation path.
 
 > **Upgrade note:** `features.og` and `workers.og` are config-schema additions.
 > Both are absent-safe: missing keys leave OG on the static `og-default.png`
 > fallback, so no config edit is required on upgrade. To enable per-article OG
 > cards, deploy `workers/og/` per the runbook, then set both keys.
+
+> **Upgrade note:** `workers.chat` and `workers.chatDatabaseId` are absent-safe
+> config-schema additions. Existing instances build with chat disabled and require
+> no edit. To enable chat, rebuild the embedding artifact, create and migrate the
+> chat D1 database, deploy `workers/chat/`, and set both values as documented in
+> `docs/runbook/DEPLOY.md`.
 
 ## [1.1.1] — 2026-08-04
 

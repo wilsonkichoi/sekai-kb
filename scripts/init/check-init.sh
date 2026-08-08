@@ -304,6 +304,7 @@ INPUT="$TMP/interactive-input.txt"
   printf '@example\n'                                              # twitter
   printf '\n\n'                                                    # threads/instagram -> none
   printf '\n'                                                      # workers.feedback -> blank
+  printf '\n'                                                      # workers.chat -> blank
   printf '\n'                                                      # workers.og -> blank
 } > "$INPUT"
 snapshot "$TMP/run3"

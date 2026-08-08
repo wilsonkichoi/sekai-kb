@@ -83,6 +83,10 @@ export interface PlaceConfig {
      * auth. `npm run worker-config` reads it; unset generates an empty id and says so.
      */
     feedbackDatabaseId?: string;
+    /** URL of this instance's deployed `workers/chat/` worker. */
+    chat?: string;
+    /** D1 `database_id` for the chat worker's rolling rate-limit state. */
+    chatDatabaseId?: string;
     /** URL of this instance's deployed `workers/og/` worker. */
     og?: string;
   };

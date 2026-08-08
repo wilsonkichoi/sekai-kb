@@ -46,9 +46,10 @@ diagrams (SSOT): `dev_docs/diagrams/architecture.drawio`, `data-flow.drawio`,
   ever built, is Reciprocal Rank Fusion merged in-worker over the existing MiniSearch
   index. Evidence and the measurements behind this:
   `dev_docs/research/platform-notes.md §2.3`, `§2.5`.
-- **Chat generation calls the Claude API** with citation-required prompting. The model is
-  selected at packet time against the current lineup and is deliberately **not pinned
-  here**: the quality/cost escalation path and its per-token figures are recorded in
+- **Chat generation starts on free-tier Workers AI** with citation-required prompting. The
+  model is selected at packet time against the current catalog and is deliberately **not
+  pinned here**: the hosted-model quality/cost escalation path and its per-token
+  figures are recorded in
   `dev_docs/research/platform-notes.md §2.10`, dated, and must be re-verified before use.
   Pinning a model identifier from archived research would ship a stale contract.
 
@@ -172,7 +173,7 @@ Schema: `place {name, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`workers? {feedback?, feedbackDatabaseId?, og?}`,
+`workers? {feedback?, feedbackDatabaseId?, chat?, chatDatabaseId?, og?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
 Init-time: written only by the `npm run init`
@@ -314,7 +315,7 @@ sentence fails CI.
 6. **RAG chat and QR flow.** `build-embeddings.mjs` chunks articles at 300-500 tokens on
    `##` boundaries and embeds them with bge-m3 at 1024 dimensions. `workers/chat/` embeds
    queries with Workers AI `@cf/baai/bge-m3`, performs in-worker cosine retrieval over
-   static JSON vectors, and calls Claude with citation-required prompting. QR codes deep
+   static JSON vectors, and calls free-tier Workers AI with citation-required prompting. QR codes deep
    link to `/chat?ctx=<location>`.
 7. **Framework scaffolding.** The primary path is GitHub "Use this template" followed by
    `/sekai-adopt`. The skill interviews for place identity, domain, map, language,

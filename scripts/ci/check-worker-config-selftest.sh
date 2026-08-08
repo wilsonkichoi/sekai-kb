@@ -5,7 +5,7 @@
 #
 # A guard that only ever asserts the green path proves nothing: it would pass
 # just as happily with an empty file list or an unreachable comparison. This
-# test plants six defect classes -- every kind of deployment identity that
+# test plants seven defect classes -- every kind of deployment identity that
 # must never be committed, plus the worker the guard has never heard of, the
 # template that lost a whole block, and the derived artifacts that must never be
 # tracked -- and requires the guard to FAIL each time:
@@ -35,6 +35,8 @@
 #                       guard is the only thing standing between it and a
 #                       release. The fixture is a real git repository, because
 #                       the check reads `git ls-files`.
+#   7. DROPPED AI       -- the chat worker's [ai] binding deleted outright. A
+#                       deployed worker without it cannot call env.AI.run.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -241,4 +243,10 @@ assert_guard_catches "$COPY" "a tracked generated worker config" \
 assert_guard_catches "$COPY" "a tracked generated embedding index" \
   "workers/chat/vectors.json"
 
-echo "OK: worker config self-test passed -- the guard catches a committed origin, a place-named worker name, a place-named database_name, an unregistered worker, a deleted [[d1_databases]] block, and a tracked derived artifact"
+# 7. DROPPED AI: the registered chat worker must keep the Workers AI binding.
+COPY="$(fresh_copy dropped-ai)"
+assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
+drop_table "$COPY" '[ai]'
+assert_guard_catches "$COPY" "a deleted [ai] block"
+
+echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, and tracked derived artifacts"

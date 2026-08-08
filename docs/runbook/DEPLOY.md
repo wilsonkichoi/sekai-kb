@@ -280,9 +280,11 @@ Dynamic capability runs on Cloudflare Workers, separate from the static site on
 GitHub Pages. Each worker lives in its own directory under `workers/` with its own
 `wrangler.toml`, and is deployed by hand — CI never deploys a worker, so nothing
 here runs on a push. `workers/feedback/` is the endpoint the feedback widget posts
-to; `workers/og/` renders per-article social-preview images on demand.
+to; `workers/chat/` retrieves cited knowledge-base context and streams an answer;
+`workers/og/` renders per-article social-preview images on demand.
 
-Everything below stays inside the **free tier**: Workers and one D1 database.
+Everything below can stay inside the **free tier**: Workers, D1, and the shared
+Workers AI daily allocation.
 
 ### The config you deploy is generated, not committed
 
@@ -321,8 +323,8 @@ template — `main`, `compatibility_date`, the D1 `binding`, `migrations_dir`, a
 rate-limit vars — is carried through unchanged.
 
 **`npm run init` does nothing for `workers/`.** The wizard never touches the tree:
-its only worker-related prompt asks for the deployed `workers.feedback` URL, with a
-blank default, because at init time no worker exists yet. Generation at deploy time
+its worker-related prompts ask for deployed endpoint URLs, with blank defaults,
+because at init time no worker exists yet. Generation at deploy time
 is the whole adoption path for `workers/`, and it needs no wizard step — your
 `place.config.ts` is the only input.
 
@@ -649,6 +651,87 @@ rather than querying a vector service.
 |---|---|---|---|
 | `CF_ACCOUNT_ID` | yes | Cloudflare dashboard | The account that owns the Workers AI allowance. |
 | `CF_AI_TOKEN` | yes | API token, `Workers AI: Read` + `Workers AI: Edit` (or the Workers AI template) | Bearer token for the `ai/run` REST endpoint. |
+
+### Deploying the chat worker
+
+Build the corpus embeddings first. The generated `workers/chat/vectors.json` is a
+required module import, so `wrangler deploy` fails if the artifact is absent. Rebuild
+it after every `knowledge/` change before redeploying the worker.
+
+**1. Generate the worker config and create its D1 database.** The D1 database holds
+only hashed-address rolling rate-limit counters. Cloudflare's native Rate Limiting
+binding supports only 10- or 60-second periods, so it cannot implement this worker's
+configurable 3,600-second exact rolling window.
+
+```bash
+npm run worker-config
+npx wrangler d1 create <place-slug>-chat \
+  --config workers/chat/wrangler.generated.toml
+```
+
+Put the printed id in the instance-owned config and regenerate:
+
+```ts
+workers: {
+  chat: '',
+  chatDatabaseId: 'PASTE_THE_DATABASE_ID',
+},
+```
+
+```bash
+npm run worker-config
+npx wrangler d1 migrations apply <place-slug>-chat --remote \
+  --config workers/chat/wrangler.generated.toml
+```
+
+**2. Set the IP-hash salt.** The worker refuses POST requests with HTTP 500 when
+the salt is absent or blank. It stores `sha256(address + salt)`, never the address.
+
+```bash
+openssl rand -hex 32 | npx wrangler secret put IP_HASH_SALT \
+  --config workers/chat/wrangler.generated.toml
+```
+
+**3. Deploy and record the endpoint.** The committed template declares the Workers
+AI binding as `AI`; no API token is needed for inference inside the deployed Worker.
+
+```bash
+npx wrangler deploy --config workers/chat/wrangler.generated.toml
+```
+
+```ts
+features: { chat: true, /* ... */ },
+workers: {
+  chat: 'https://<place-slug>-chat.<subdomain>.workers.dev',
+  chatDatabaseId: '…',
+},
+```
+
+Rebuild and redeploy the static site after setting the endpoint. `ALLOWED_ORIGIN`
+is derived from `place.domain` and exact-match CORS rejects every other origin.
+
+| Name | Required | Source | Meaning |
+|---|---|---|---|
+| `AI` | yes | `[ai] binding = "AI"` | Workers AI binding used for query embedding and streamed answer generation. |
+| `DB` | yes | `[[d1_databases]] binding = "DB"` | Exact rolling-window rate-limit state. |
+| `ALLOWED_ORIGIN` | yes | `place.domain` | The only accepted browser origin. Unset or mismatched requests receive 403. |
+| `SITE_NAME` | yes | `place.name` | Site identity injected into the system prompt. |
+| `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the stored address hash. Missing or blank requests receive 500. |
+| `RATE_LIMIT_MAX` | no | template (`20`) | Accepted requests per hashed address in the rolling window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`) | Exact rolling-window duration in seconds. |
+
+**Model and free-tier contract.** `CHAT_MODEL` in `workers/chat/src/index.mjs` is
+the single generation-model constant. On 2026-08-07 it was verified against the
+[Workers AI model catalog](https://developers.cloudflare.com/workers-ai/models/)
+and the [model's streaming API documentation](https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/)
+as `@cf/zai-org/glm-4.7-flash`, a Cloudflare-hosted, streaming-capable model. The
+Workers AI free allocation is
+10,000 neurons per day, shared by corpus builds, per-request query embeddings, and
+answer generation. Monitor that account-level total; if answer quality requires a
+hosted paid model, follow the dated quality/cost escalation analysis in
+[the upstream platform notes §2.10](https://github.com/wilsonkichoi/sekai-kb/blob/main/dev%5Fdocs/research/platform-notes.md#210-cost-and-platform-comparison)
+and re-verify the model and pricing at selection time. The SPEC intentionally does
+not pin a generation model.
 
 ---
 

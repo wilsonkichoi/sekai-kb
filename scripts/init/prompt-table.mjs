@@ -429,6 +429,14 @@ export const PROMPTS = [
       v === '' || /^https?:\/\/\S+$/.test(v) ? null : `"${v}" is not a URL`,
   },
   {
+    id: 'workers.chat',
+    question: 'Chat worker URL (blank until you deploy workers/chat)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^https?:\/\/\S+$/.test(v) ? null : `"${v}" is not a URL`,
+  },
+  {
     id: 'workers.og',
     question: 'OG image worker URL (blank until you deploy workers/og)',
     kind: 'text',
