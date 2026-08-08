@@ -310,7 +310,14 @@ describe('relevance floor', () => {
       assert.deepEqual(await citationsFrom(response), citationsOf(FLOORED_TITLES, FLOORED_URLS));
     });
   }
+});
 
+/*
+ * The two ways the machinery under the answer fails: a vector artifact the worker
+ * cannot use, and an upstream inference call that does not return. Both must reach
+ * the caller as a described 503 rather than a bare runtime 500.
+ */
+describe('artifact and upstream failures', () => {
   for (const mismatch of ['model', 'dim']) {
     test(`returns 503 and names the artifact ${mismatch} mismatch`, () => {
       const runner = fileURLToPath(new URL('./artifact-case.mjs', import.meta.url));

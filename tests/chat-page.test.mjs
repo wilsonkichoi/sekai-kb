@@ -366,24 +366,63 @@ test('a URL written in the answer prose never becomes a source card', async () =
   );
 });
 
+// Every one of these looks site-root-absolute to a leading-character test, and every
+// one of them resolves off-origin in a real URL parser: a backslash is a slash for
+// http(s), and a tab is stripped before parsing rather than encoded.
 test('a citation URL that is not site-root-absolute renders as text, never as a link', async () => {
   await withPage(
     streamAnswer('Answer.', [
       { title: 'Script', url: 'javascript:alert(1)' },
       { title: 'Offsite', url: '//evil.example.invalid/x' },
+      { title: 'Backslash', url: '/\\evil.example.invalid/x' },
+      { title: 'Double backslash', url: '\\\\evil.example.invalid/x' },
+      { title: 'Tab', url: '/\t/evil.example.invalid/x' },
       { title: 'Real', url: '/guides/alpha' },
     ]),
     async (page) => {
       await ask(page);
       await settled(page);
-      assert.deepEqual(
-        await page.locator('[data-chat-sources] a.source-card').evaluateAll((links) =>
-          links.map((link) => link.getAttribute('href')),
-        ),
-        ['/guides/alpha'],
-        'only a site-root-absolute URL may become a link',
+      const hrefs = await page
+        .locator('[data-chat-sources] a.source-card')
+        .evaluateAll((links) => links.map((link) => link.href));
+      assert.equal(hrefs.length, 1, 'only a site-root-absolute URL may become a link');
+      assert.equal(new URL(hrefs[0]).pathname, '/guides/alpha');
+      assert.equal(
+        hrefs.every((href) => new URL(href).origin === new URL(page.url()).origin),
+        true,
+        'no rendered link may resolve off this origin',
       );
-      assert.equal(await page.locator('[data-chat-sources] span.source-card').count(), 2);
+      assert.equal(await page.locator('[data-chat-sources] span.source-card').count(), 5);
+    },
+  );
+});
+
+/* -- the citations frame is a contract, not an optional trailer -------------- */
+
+test('a clean close with no citations frame reports an error rather than "no sources"', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(frame('An answer that arrived.'));
+      // No citations frame, but a clean end: the source list never came, which is not
+      // the same claim as "this answer rests on nothing".
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'An answer that arrived.',
+        'the answer that did arrive must survive',
+      );
+      assert.equal(await page.locator('[data-chat-error]').textContent(), 'error');
+      assert.equal(
+        await page.locator('[data-chat-sources]').count(),
+        0,
+        'a missing payload must not be rendered as an empty one',
+      );
     },
   );
 });
@@ -409,7 +448,9 @@ test('history lives in sessionStorage and never in localStorage', async () => {
   });
 });
 
-test('only the last four turns are sent to the worker', async () => {
+// Four MESSAGES, which is two prior exchanges: a question and its answer are one
+// entry each, and `workers/chat/` applies the same window to what it receives.
+test('only the last four history messages are sent to the worker', async () => {
   await withPage(streamAnswer('Answer.', []), async (page, requests) => {
     await page.evaluate(() => {
       const history = [];
@@ -433,7 +474,7 @@ test('only the last four turns are sent to the worker', async () => {
         { role: 'user', content: 'question 3' },
         { role: 'assistant', content: 'answer 3' },
       ],
-      'six stored turns must be cut to the last four on the way out',
+      'six stored messages must be cut to the last four on the way out',
     );
   });
 });

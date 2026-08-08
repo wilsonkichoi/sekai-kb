@@ -450,6 +450,8 @@ worker-config`, except `IP_HASH_SALT`, which is a secret you set once (step 5). 
 committed `wrangler.toml` is where the framework's own defaults live; the
 "Source" column says where each value comes from.
 
+<!-- worker-vars: feedback -->
+
 | Name | Required | Source | Meaning |
 |---|---|---|---|
 | `name` | yes | derived: `<place-slug>-<worker>` | The Worker script name, account-scoped, and the subdomain of its `workers.dev` URL. |
@@ -559,6 +561,8 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/ZONE_ID/purge_cache" \
 Or purge everything via the Cloudflare dashboard under Caching > Purge Cache.
 
 ### OG worker configuration
+
+<!-- worker-vars: og -->
 
 | Name | Required | Source | Meaning |
 |---|---|---|---|
@@ -710,6 +714,8 @@ workers: {
 Rebuild and redeploy the static site after setting the endpoint. `ALLOWED_ORIGIN`
 is derived from `place.domain` and exact-match CORS rejects every other origin.
 
+<!-- worker-vars: chat -->
+
 | Name | Required | Source | Meaning |
 |---|---|---|---|
 | `AI` | yes | `[ai] binding = "AI"` | Workers AI binding used for query embedding and streamed answer generation. |
@@ -731,8 +737,8 @@ empty result reachable. Below it a chunk is not retrieved, so it never enters th
 prompt and never becomes a citation; when nothing clears it the model is told outright
 that no excerpt is relevant, and the page renders "no sources found".
 
-**The shipped default of 0.46 is measured against the template's demo corpus, and your
-corpus is not that corpus.** Re-measure it after your content settles:
+**The shipped default in the table above is measured against the template's demo
+corpus, and your corpus is not that corpus.** Re-measure it after your content settles:
 
 1. Build the vectors (`npm run embeddings:build`) so you are scoring against the same
    artifact the worker loads.
@@ -744,10 +750,11 @@ corpus is not that corpus.** Re-measure it after your content settles:
 4. Compare the best score per question across the two lists. Set the floor in the gap
    between them.
 
-On the demo corpus that gap runs from 0.435 (the best score any never-mentioned place
-reached) to 0.484 (the worst score a real question reached), and 0.46 splits it. Set the
-floor too high and real questions start refusing; too low and off-topic questions keep
-citing. Setting it to `0` disables filtering entirely.
+On the demo corpus, measured 2026-08-08, that gap runs from 0.435 (the best score any
+never-mentioned place reached) to 0.484 (the worst score a real question reached), and
+the shipped default splits it. Set the floor too high and real questions start refusing;
+too low and off-topic questions keep citing. Setting it to `0` disables filtering
+entirely.
 
 **What the floor cannot do.** It separates questions about *other* places. It does not
 separate questions about *your* place that no article happens to answer: those are dense

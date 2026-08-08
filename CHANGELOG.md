@@ -116,8 +116,8 @@ tags, never framework `main`** (ADR 004, SPEC
   worker's structural citation payload — never from URLs parsed out of answer prose, so a
   model that invents a plausible-looking link mid-sentence cannot get it rendered.
   Several retrieved chunks of one article collapse into one card. Conversation lives in
-  `sessionStorage`, is capped to the last four turns on the way to the worker, and clears
-  when the tab closes. A 429, a 503, or a stream that dies mid-answer renders inline and
+  `sessionStorage`, is capped to the last four messages — two prior exchanges — on the
+  way to the worker, and clears when the tab closes. A 429, a 503, or a stream that dies mid-answer renders inline and
   keeps whatever text already arrived.
 - **The chat surface has one gate, in `src/lib/chat.ts`.** It needs BOTH `features.chat`
   and a non-empty `workers.chat`. The page always builds; with either half missing it

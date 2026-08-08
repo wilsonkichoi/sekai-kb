@@ -45,8 +45,11 @@ const { enabled, endpoint } = resolveChat(placeConfig);
  *     never buffered to the end.
  *   - Citations from the payload only, deduplicated by URL because retrieval returns
  *     chunks and a reader wants articles: five chunks of one article is one card.
- *   - Session history in `sessionStorage`, capped to the last four turns on the way
- *     out. sessionStorage is what clears it on tab close, with no unload handler.
+ *   - Session history in `sessionStorage`, capped on the way out to the last four
+ *     MESSAGES -- two prior exchanges, since a question and its answer are one entry
+ *     each. That is the same window `workers/chat/` applies to whatever it receives,
+ *     and the two must agree or the cap is whichever side is stricter by accident.
+ *     sessionStorage is what clears it on tab close, with no unload handler.
  *   - A worker failure renders inline and leaves the transcript standing.
  */
 const CHAT_SCRIPT = `
@@ -62,7 +65,7 @@ const CHAT_SCRIPT = `
 
   var endpoint = form.getAttribute('data-endpoint');
   var STORE = 'chat-history';
-  var MAX_TURNS_SENT = 4;
+  var MAX_HISTORY_MESSAGES = 4;
   var sending = false;
 
   function msg(name) {
@@ -122,8 +125,19 @@ const CHAT_SCRIPT = `
   // repository content, and a link target is the one value in it that becomes
   // executable if it carries a 'javascript:' scheme, so anything else renders as
   // plain text instead of a link.
+  //
+  // The leading '/' is not sufficient on its own: the URL parser reads a backslash
+  // as a slash for http(s), strips tabs and newlines before parsing, and resolves
+  // percent-encodings, so several site-root-looking strings ('/\\host', '/<tab>/host')
+  // land on another origin. Resolving the candidate and comparing origins is the check
+  // that holds for all of them, rather than a growing list of second characters.
   function isLinkable(url) {
-    return typeof url === 'string' && url.charAt(0) === '/' && url.charAt(1) !== '/';
+    if (typeof url !== 'string' || url.charAt(0) !== '/') return false;
+    try {
+      return new URL(url, location.origin).origin === location.origin;
+    } catch (e) {
+      return false;
+    }
   }
 
   function renderCitations(turn, citations) {
@@ -270,7 +284,7 @@ const CHAT_SCRIPT = `
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: question, history: history.slice(-MAX_TURNS_SENT) }),
+      body: JSON.stringify({ message: question, history: history.slice(-MAX_HISTORY_MESSAGES) }),
     })
       .then(function (response) {
         if (!response.ok || !response.body) {
@@ -288,7 +302,14 @@ const CHAT_SCRIPT = `
             if (result.done) {
               pending += decoder.decode();
               if (pending.trim()) consume(pending, state);
-              renderCitations(turn, state.citations);
+              // A stream that closes cleanly without a citations frame is a broken
+              // contract, not an answer with no sources: the worker emits the frame on
+              // every path, including the empty one. Rendering "no sources found" here
+              // would tell the reader an answer had no support when what actually
+              // happened is that the source list never arrived. scripts/tools/chat-eval.mjs
+              // draws the same line, so both consumers of this stream agree.
+              if (state.sawCitations) renderCitations(turn, state.citations);
+              else showError(turn, msg('error'));
               history.push({ role: 'user', content: question });
               history.push({ role: 'assistant', content: state.answer });
               saveHistory(history);
