@@ -129,13 +129,21 @@ const CHAT_SCRIPT = `
     return turn;
   }
 
-  function showError(turn, text) {
+  // An inline note under a turn. Every state that reaches one here is recoverable, so
+  // the note is appended beside the transcript rather than replacing it, and the hook
+  // attribute says which state it is: a reader who is told nothing has no way to tell a
+  // failure from an answer the model declined to give.
+  function showNote(turn, text, hook) {
     var note = document.createElement('p');
     note.className = 'turn-error';
-    note.setAttribute('data-chat-error', '');
+    note.setAttribute(hook, '');
     note.setAttribute('role', 'status');
     note.textContent = text;
     turn.appendChild(note);
+  }
+
+  function showError(turn, text) {
+    showNote(turn, text, 'data-chat-error');
   }
 
   // Site-root-absolute only. The payload is worker output rather than reviewed
@@ -335,10 +343,18 @@ const CHAT_SCRIPT = `
               // assistant entry in the window, which the worker refuses, and since a
               // refused request appends nothing the blank would never age out: every
               // later question in the tab would fail until the tab was closed.
+              //
+              // Not remembering it is only half of what the reader needs. Without the
+              // note below the turn renders as the 'Answer' label, an empty body and a
+              // row of source cards, which reads as an answer the model chose not to
+              // give rather than one that never arrived. The broken-contract branch
+              // above already carries its own note, so a turn never gets two.
               if (state.answer.trim()) {
                 history.push({ role: 'user', content: question });
                 history.push({ role: 'assistant', content: state.answer });
                 saveHistory(history);
+              } else if (state.sawCitations) {
+                showNote(turn, msg('empty-answer'), 'data-chat-empty-answer');
               }
               finish();
               return;
@@ -419,6 +435,7 @@ const CHAT_SCRIPT = `
             data-msg-rate-limited={t('chat.error.rateLimited')}
             data-msg-unavailable={t('chat.error.unavailable')}
             data-msg-error={t('chat.error.generic')}
+            data-msg-empty-answer={t('chat.error.emptyAnswer')}
           >
             <label class="composer-label" for="chat-input">
               {t('chat.input.label')}

@@ -49,6 +49,7 @@ assert.ok(MSG_NAMES.includes('no-sources'), 'the template must pass a no-sources
 assert.ok(MSG_NAMES.includes('rate-limited'), 'the template must pass a rate-limited message');
 assert.ok(MSG_NAMES.includes('unavailable'), 'the template must pass an unavailable message');
 assert.ok(MSG_NAMES.includes('error'), 'the template must pass a generic error message');
+assert.ok(MSG_NAMES.includes('empty-answer'), 'the template must pass an empty-answer message');
 
 const msgAttrs = MSG_NAMES.map((name) => `data-msg-${name}="${name}"`).join('\n            ');
 
@@ -528,6 +529,74 @@ test('a turn with no answer text is not stored, so the next question still works
           { role: 'assistant', content: 'The second answer.' },
         ],
         'the turn that did answer is stored normally',
+      );
+    },
+  );
+});
+
+// Dropping the turn is only half of what the reader needs. Left alone, the same stream
+// renders the speaker label, an empty body and a row of source cards, which reads as an
+// answer the model declined to give rather than one that never arrived -- and says
+// nothing about the retry being free.
+test('an answer with no text renders an inline note beside the sources that did arrive', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Thinking.' } }] })}\n\n`,
+      );
+      res.write(citationsFrame([{ title: 'Alpha Guide', url: '/guides/alpha' }]));
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        '',
+        'there is no answer text to render',
+      );
+      assert.equal(
+        await page.locator('[data-chat-empty-answer]').textContent(),
+        'empty-answer',
+        'the reader must be told the answer never arrived',
+      );
+      assert.equal(
+        await page.locator('[data-chat-sources] .source-card').count(),
+        1,
+        'the sources that did arrive still render',
+      );
+      assert.equal(
+        await page.locator('[data-chat-error]').count(),
+        0,
+        'the citations frame arrived, so the broken-contract note must not also fire',
+      );
+    },
+  );
+});
+
+// The two unanswered-turn states are distinct and a turn gets one note, never both:
+// this stream broke its citations contract as well, and the generic error is the more
+// accurate thing to say about it.
+test('a turn with neither answer text nor a citations frame reports only the error', async () => {
+  await withPage(
+    (res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Thinking.' } }] })}\n\n`,
+      );
+      res.end();
+    },
+    async (page) => {
+      await ask(page);
+      await settled(page);
+
+      assert.equal(await page.locator('[data-chat-error]').textContent(), 'error');
+      assert.equal(
+        await page.locator('[data-chat-empty-answer]').count(),
+        0,
+        'one note per turn: the error already covers this state',
       );
     },
   );

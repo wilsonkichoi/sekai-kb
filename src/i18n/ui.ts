@@ -103,6 +103,10 @@ export const ui = {
     'chat.error.rateLimited': 'Too many questions from this network. Please try again later.',
     'chat.error.unavailable': 'The answering service is unavailable right now. Please try again later.',
     'chat.error.generic': 'Could not get an answer. Please try again later.',
+    // A turn whose sources arrived but whose answer text never did. The turn is not
+    // kept, so the invitation to ask again is a promise the page can make.
+    'chat.error.emptyAnswer':
+      'No answer came back for this question, though the sources below were found. This turn was not kept, so asking again is safe.',
     'chat.noscript': 'Asking questions needs JavaScript. Browse the articles instead:',
     // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
     'soundscape.meta.title': 'Soundscape',

@@ -120,8 +120,9 @@ tags, never framework `main`** (ADR 004, SPEC
   way to the worker, and clears when the tab closes. Only messages the worker accepts are
   stored or sent: a turn that produced no answer text is not remembered, so a stream that
   carries reasoning but never an answer cannot leave the tab sending an entry the worker
-  refuses. A 429, a 503, or a stream that dies mid-answer renders inline and
-  keeps whatever text already arrived.
+  refuses; that turn also says so inline, since a blank body under a row of source cards
+  otherwise reads as an answer the model declined to give. A 429, a 503, or a stream that
+  dies mid-answer renders inline and keeps whatever text already arrived.
 - **The chat surface has one gate, in `src/lib/chat.ts`.** It needs BOTH `features.chat`
   and a non-empty `workers.chat`. The page always builds; with either half missing it
   renders a static "chat is not enabled here" state carrying no endpoint and no script,
