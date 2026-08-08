@@ -20,18 +20,54 @@
  * model that invents a plausible-looking URL mid-sentence must not be able to get it
  * rendered as a link (`workers/chat/` DoD 5, LB-84).
  *
+ * `?ctx=<slug>` is the QR flow's half of this page. A code on a wall carries the slug
+ * of a context declared in `knowledge/chat/_contexts.md`, and a reader who scans it
+ * lands here already greeted by name for the spot they are standing in. The contexts
+ * are baked into the page as an attribute at build time and matched client-side,
+ * because this is a static build with no server to read a query string. An instance
+ * that declares none ships no attribute and no matching code path at all, so the page
+ * is byte-identical to the one without a manifest.
+ *
  * All copy comes from src/i18n/ui.ts; the endpoint comes from place.config.ts. Every
  * colour resolves through the theme tokens in src/styles/tokens.css.
  */
+import { getCollection } from 'astro:content';
 import Layout from '../layouts/Layout.astro';
 import { getLangFromUrl, useTranslations } from '../i18n/utils';
+import { builtRoutes } from '../lib/built-routes';
 import { resolveChat } from '../lib/chat';
+import { readChatContexts } from '../lib/chat-contexts';
 import placeConfig from '../../place.config';
 
 const lang = getLangFromUrl(Astro.url);
 const t = useTranslations(lang);
 
 const { enabled, endpoint } = resolveChat(placeConfig);
+
+/**
+ * Build-time read. A context's `article` is checked against the routes this build
+ * produces, so a stale link is dropped with a build-time warning (emitted by the
+ * reader itself, into the astro build output) instead of putting a 404 under a
+ * greeting — which is also what keeps the post-build internal-link check green.
+ *
+ * The read is skipped entirely when chat is off: the disabled state carries no
+ * script and no endpoint, so a context could not do anything there but sit in the
+ * markup.
+ */
+const contexts = enabled
+  ? readChatContexts(process.cwd(), {
+      knownRoutes: builtRoutes(placeConfig, await getCollection('en')),
+    }).contexts
+  : [];
+
+/**
+ * The contexts as one attribute value rather than a `<script type="application/json">`
+ * island: Astro escapes an attribute, so a greeting containing `</script>` cannot
+ * break out of it, and there is no second escaping rule to remember
+ * (`.agent-toolkit/rules/astro-json-island-escape.md`). Undefined when there are no
+ * contexts, which omits the attribute rather than emitting an empty one.
+ */
+const contextData = contexts.length > 0 ? JSON.stringify(contexts) : undefined;
 
 /**
  * The client, injected with `set:html` because an inline `<script>` body inside an
@@ -53,6 +89,12 @@ const { enabled, endpoint } = resolveChat(placeConfig);
  *     request appends nothing and so an unusable entry would never slide back out of
  *     the window. sessionStorage is what clears it on tab close, with no unload handler.
  *   - A worker failure renders inline and leaves the transcript standing.
+ *   - The `?ctx=` context, when the page was built with any: its greeting opens the
+ *     transcript, and its retrieval hint rides the FIRST question and no other. A hint
+ *     pulls retrieval toward one location, which is what a reader standing there wants
+ *     for the question they scanned the code to ask -- and is exactly wrong for the
+ *     third question, which has moved on. An unknown or absent `ctx` is not an error
+ *     state: the page opens the way it does for a reader who typed the URL.
  */
 const CHAT_SCRIPT = `
 (function () {
@@ -69,6 +111,35 @@ const CHAT_SCRIPT = `
   var STORE = 'chat-history';
   var MAX_HISTORY_MESSAGES = 4;
   var sending = false;
+
+  // Contexts are baked in at build time; an instance that declares none ships no
+  // attribute, so everything below collapses to "no context" without a branch.
+  var contexts = [];
+  try {
+    var declared = JSON.parse(form.getAttribute('data-contexts') || '[]');
+    if (Object.prototype.toString.call(declared) === '[object Array]') contexts = declared;
+  } catch (e) {
+    contexts = [];
+  }
+
+  // The context named by ?ctx=, or null. An unknown slug returns null rather than
+  // reporting anything: a code outlives the manifest entry that made it, and a
+  // reader standing in front of a retired sign should get the ordinary page, not an
+  // error about a slug they have no way to understand.
+  function activeContext() {
+    if (!contexts.length) return null;
+    var slug;
+    try {
+      slug = new URLSearchParams(location.search).get('ctx');
+    } catch (e) {
+      return null;
+    }
+    if (!slug) return null;
+    for (var i = 0; i < contexts.length; i++) {
+      if (contexts[i] && contexts[i].slug === slug) return contexts[i];
+    }
+    return null;
+  }
 
   function msg(name) {
     return form.getAttribute('data-msg-' + name) || '';
@@ -285,6 +356,25 @@ const CHAT_SCRIPT = `
     button.textContent = msg('send');
   }
 
+  // The greeting opens the transcript as an ordinary answer turn, so a reader sees
+  // the conversation already started rather than an empty box with a label on it.
+  var context = activeContext();
+  var pendingHint = context && typeof context.hint === 'string' ? context.hint : '';
+  if (context) {
+    var opening = addTurn('assistant', context.greeting);
+    opening.setAttribute('data-chat-greeting', context.slug);
+    if (isLinkable(context.article)) {
+      var readMore = document.createElement('p');
+      readMore.className = 'greeting-article';
+      var readLink = document.createElement('a');
+      readLink.setAttribute('data-chat-greeting-article', '');
+      readLink.href = context.article;
+      readLink.textContent = msg('context-article');
+      readMore.appendChild(readLink);
+      opening.appendChild(readMore);
+    }
+  }
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     if (sending) return;
@@ -306,10 +396,17 @@ const CHAT_SCRIPT = `
       body: turn.querySelector('[data-turn-body]'),
     };
 
+    var request = { message: question, history: history.slice(-MAX_HISTORY_MESSAGES) };
+    // Spent on the first question and not carried further: see the header note.
+    if (pendingHint) {
+      request.hint = pendingHint;
+      pendingHint = '';
+    }
+
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: question, history: history.slice(-MAX_HISTORY_MESSAGES) }),
+      body: JSON.stringify(request),
     })
       .then(function (response) {
         if (!response.ok || !response.body) {
@@ -440,6 +537,8 @@ const CHAT_SCRIPT = `
             data-msg-error={t('chat.error.generic')}
             data-msg-empty-answer={t('chat.error.emptyAnswer')}
             data-msg-empty-answer-no-sources={t('chat.error.emptyAnswerNoSources')}
+            data-msg-context-article={t('chat.context.article')}
+            data-contexts={contextData}
           >
             <label class="composer-label" for="chat-input">
               {t('chat.input.label')}
@@ -576,6 +675,17 @@ const CHAT_SCRIPT = `
     font-size: 0.9rem;
     line-height: 1.5;
     color: var(--color-danger, #a8321f);
+  }
+
+  .log :global(.greeting-article) {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .log :global(.greeting-article a) {
+    font-weight: 600;
+    color: var(--color-accent, var(--color-ink));
   }
 
   .log :global(.sources) {

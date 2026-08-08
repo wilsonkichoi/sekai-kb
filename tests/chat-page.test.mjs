@@ -54,7 +54,31 @@ assert.ok(MSG_NAMES.includes('empty-answer-no-sources'), 'the template must pass
 
 const msgAttrs = MSG_NAMES.map((name) => `data-msg-${name}="${name}"`).join('\n            ');
 
-function fixtureHtml(endpoint) {
+// `?ctx=` contexts are baked into the page as one attribute at build time (an
+// attribute rather than a JSON island, so Astro's own escaping is the only escaping
+// rule). Omitting it is what an instance with no `knowledge/chat/_contexts.md`
+// ships, and every context test below drives the same script the no-context tests do.
+const CONTEXTS = [
+  {
+    slug: 'north-dock',
+    label: 'North Dock',
+    greeting: 'You are at the north dock. Ask about the boats.',
+    hint: 'the north dock and the water around it',
+    article: '/guides/alpha',
+  },
+  {
+    slug: 'ridge-gate',
+    label: 'Ridge Gate',
+    greeting: 'You are at the ridge gate.',
+    hint: null,
+    article: null,
+  },
+];
+
+function fixtureHtml(endpoint, contexts) {
+  const contextAttr = contexts
+    ? `\n            data-contexts="${JSON.stringify(contexts).replace(/"/g, '&quot;')}"`
+    : '';
   return `<!doctype html>
 <html>
   <body>
@@ -65,7 +89,7 @@ function fixtureHtml(endpoint) {
       <form
             data-chat-form
             data-endpoint="${endpoint}"
-            ${msgAttrs}
+            ${msgAttrs}${contextAttr}
       >
         <textarea data-chat-input rows="2" required maxlength="1000"></textarea>
         <button type="submit">send</button>
@@ -95,12 +119,12 @@ after(async () => {
  * `respond(res, requestBody)` owns the endpoint response, so a test can stream,
  * stall, or destroy the connection as it needs.
  */
-async function withPage(respond, body) {
+async function withPage(respond, body, { contexts = null, search = '' } = {}) {
   const requests = [];
   const server = createServer((req, res) => {
     if (req.method !== 'POST') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(fixtureHtml('/ask'));
+      res.end(fixtureHtml('/ask', contexts));
       return;
     }
     let raw = '';
@@ -118,7 +142,7 @@ async function withPage(respond, body) {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
-    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.goto(`http://127.0.0.1:${port}/${search}`);
     return await body(page, requests);
   } finally {
     await context.close();
@@ -677,6 +701,175 @@ test('a corrupt session store is ignored rather than breaking the conversation',
       'Answer.',
     );
   });
+});
+
+/* -- ?ctx= location contexts (the QR flow) ---------------------------------- */
+
+test('a known ctx opens with that context greeting and links its article', async () => {
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page) => {
+      const greeting = page.locator('[data-chat-greeting]');
+      assert.equal(await greeting.getAttribute('data-chat-greeting'), 'north-dock');
+      assert.equal(
+        await greeting.locator('[data-turn-body]').textContent(),
+        CONTEXTS[0].greeting,
+      );
+      assert.equal(
+        await page.locator('[data-chat-empty]').isVisible(),
+        false,
+        'the transcript has an opening message, so the empty state must be gone',
+      );
+      assert.equal(
+        await page.locator('[data-chat-greeting-article]').getAttribute('href'),
+        '/guides/alpha',
+      );
+    },
+    { contexts: CONTEXTS, search: '?ctx=north-dock' },
+  );
+});
+
+test('a context greeting sends its hint with the first question and with no other', async () => {
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page, requests) => {
+      await ask(page, 'First question.');
+      await settled(page);
+      assert.equal(requests[0].hint, CONTEXTS[0].hint, 'the first question carries the hint');
+
+      await ask(page, 'Second question.');
+      await settled(page);
+      assert.equal(requests.length, 2);
+      assert.equal(
+        'hint' in requests[1],
+        false,
+        'a hint aims retrieval at one place; by the second question the reader has moved on',
+      );
+    },
+    { contexts: CONTEXTS, search: '?ctx=north-dock' },
+  );
+});
+
+test('a context with no hint and no article greets and sends no hint field', async () => {
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page, requests) => {
+      assert.equal(
+        await page.locator('[data-chat-greeting] [data-turn-body]').textContent(),
+        CONTEXTS[1].greeting,
+      );
+      assert.equal(await page.locator('[data-chat-greeting-article]').count(), 0);
+
+      await ask(page);
+      await settled(page);
+      assert.equal('hint' in requests[0], false);
+    },
+    { contexts: CONTEXTS, search: '?ctx=ridge-gate' },
+  );
+});
+
+// A printed code outlives the manifest entry that made it. A reader standing in front
+// of a retired sign gets the ordinary page, never an error about a slug they have no
+// way to understand.
+for (const [label, search] of [
+  ['an unknown ctx', '?ctx=nowhere-at-all'],
+  ['an empty ctx', '?ctx='],
+  ['no ctx at all', ''],
+]) {
+  test(`${label} renders the default greeting with no error and sends no hint`, async () => {
+    await withPage(
+      streamAnswer('Answer.', []),
+      async (page, requests) => {
+        assert.equal(await page.locator('[data-chat-greeting]').count(), 0);
+        assert.equal(
+          await page.locator('[data-chat-empty]').isVisible(),
+          true,
+          'the default empty-state greeting stands',
+        );
+        assert.equal(await page.locator('[data-chat-error]').count(), 0);
+
+        await ask(page);
+        await settled(page);
+        assert.equal('hint' in requests[0], false);
+      },
+      { contexts: CONTEXTS, search },
+    );
+  });
+}
+
+// An instance with no knowledge/chat/_contexts.md ships no attribute at all. The page
+// then behaves exactly as it did before contexts existed, ctx or no ctx.
+test('a page built with no contexts ignores ctx entirely', async () => {
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page, requests) => {
+      assert.equal(
+        await page.locator('[data-chat-form]').getAttribute('data-contexts'),
+        null,
+        'no manifest means no attribute, not an empty one',
+      );
+      assert.equal(await page.locator('[data-chat-greeting]').count(), 0);
+      assert.equal(await page.locator('[data-chat-empty]').isVisible(), true);
+      assert.equal(await page.locator('[data-chat-error]').count(), 0);
+
+      await ask(page);
+      await settled(page);
+      assert.equal('hint' in requests[0], false);
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'Answer.',
+      );
+    },
+    { search: '?ctx=north-dock' },
+  );
+});
+
+test('a malformed contexts attribute is ignored rather than breaking the page', async () => {
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page, requests) => {
+      assert.equal(await page.locator('[data-chat-greeting]').count(), 0);
+      await ask(page);
+      await settled(page);
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        'Answer.',
+        'the conversation still works',
+      );
+      assert.equal('hint' in requests[0], false);
+    },
+    { contexts: 'not-an-array', search: '?ctx=north-dock' },
+  );
+});
+
+// A greeting is prose an adopter writes, and prose contains angle brackets. The value
+// travels as an attribute, so the browser's own attribute parsing is the escaping --
+// there is no second rule to get wrong, and nothing in a greeting can become markup.
+test('a greeting containing markup renders as text, never as markup', async () => {
+  const hostile = [
+    {
+      slug: 'north-dock',
+      label: 'North Dock',
+      greeting: 'Ask about the <script>alert(1)</script> boats & the birds.',
+      hint: null,
+      article: null,
+    },
+  ];
+  await withPage(
+    streamAnswer('Answer.', []),
+    async (page) => {
+      assert.equal(
+        await page.locator('[data-chat-greeting] [data-turn-body]').textContent(),
+        hostile[0].greeting,
+      );
+      assert.equal(
+        await page.evaluate(() => document.querySelectorAll('[data-chat-log] script').length),
+        0,
+        'nothing in a greeting may become an element',
+      );
+    },
+    { contexts: hostile, search: '?ctx=north-dock' },
+  );
 });
 
 test('an empty question is not sent', async () => {

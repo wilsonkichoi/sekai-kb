@@ -139,8 +139,14 @@ jobs:
       # and the page client driven in Chromium against a real streaming server. The
       # runner is the Phase 7 feature proof's machine half, so the suite that pins its
       # failure classes is a CI gate rather than one someone may remember to run.
-      - name: Chat page, gate, and evaluation runner contract
+      - name: Chat page, gate, contexts, and evaluation runner contract
         run: npm run test:chat
+      # The printable QR sheet: the URL a scanned code resolves to, and the round trip
+      # proving each card's own inline code decodes back to that URL. A wrong code is
+      # invisible until somebody prints it, mounts it, and scans it, so the encoding is
+      # gated here rather than left to the manual scan at deploy time.
+      - name: QR sheet contract
+        run: npm run test:qr
       # Cloudflare Worker unit suites (node:test, no runtime dependency). The runner
       # walks workers/ for *.test.mjs, so a worker added in a later phase is gated
       # here the moment its first suite lands — no second edit to this workflow. It

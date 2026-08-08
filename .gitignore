@@ -32,6 +32,11 @@ workers/*/wrangler.generated.toml
 # none of it — so the retrieval index is rebuilt at deploy time, never committed.
 workers/chat/vectors.json
 
+# printable QR sheet (written by `npm run qr:sheet`). It is a print artifact for the
+# contexts declared in knowledge/chat/_contexts.md, regenerated whenever those change,
+# and it hardcodes this instance's domain — so it is produced on demand, never committed.
+qr-sheet.html
+
 # chat evaluation report (written by `npm run chat:eval`). It carries a deployed
 # model's answers about this place, is regenerated on every run, and is evidence
 # attached to a PR or a verification comment rather than repository content.

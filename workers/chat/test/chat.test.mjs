@@ -182,6 +182,54 @@ describe('retrieval, prompting, and SSE', () => {
     );
   });
 
+  // The QR flow's safety property. A `hint` arrives from `/chat?ctx=<slug>`, which is
+  // a URL any stranger can retype, so it is allowed to move the query vector and
+  // nothing else: reaching the prompt would make a scanned link a way to write
+  // instructions into the model's context ("ignore the excerpts", "you may guess").
+  // Both halves are asserted, because only the first one passing is the bug.
+  test('a hint is appended to the embedded query text and never reaches the prompt', async () => {
+    const message = 'What is worth seeing here?';
+    const hint = 'the north dock and the water around it';
+    const AI = createAiStub({ query: [10, 0, 0] });
+    const { response } = await accepted({ AI }, { message, history: [], hint });
+
+    assert.equal(response.status, 200);
+    assert.equal(AI.calls[0].model, EMBED_MODEL);
+    assert.deepEqual(
+      AI.calls[0].input,
+      { text: [`${message} ${hint}`] },
+      'the hint must ride the text that gets embedded',
+    );
+
+    const generation = JSON.stringify(AI.calls[1].input);
+    assert.equal(
+      generation.includes(hint),
+      false,
+      `the hint must not appear anywhere in the generation call: ${generation}`,
+    );
+    assert.deepEqual(
+      AI.calls[1].input.messages.at(-1),
+      { role: 'user', content: message },
+      'the model sees the reader\'s question, not the question plus the hint',
+    );
+  });
+
+  test('an absent, blank, or whitespace-only hint leaves the embedded text exactly the message', async () => {
+    const message = 'What is worth seeing here?';
+    for (const hint of [undefined, '', '   ']) {
+      const AI = createAiStub({ query: [10, 0, 0] });
+      const payload = { message, history: [] };
+      if (hint !== undefined) payload.hint = hint;
+      const { response } = await accepted({ AI }, payload);
+      assert.equal(response.status, 200);
+      assert.deepEqual(
+        AI.calls[0].input,
+        { text: [message] },
+        `hint ${JSON.stringify(hint)} must not pad the embedded text`,
+      );
+    }
+  });
+
   test('passes upstream data frames, removes [DONE], and ends with citations for every prompted chunk', async () => {
     const AI = createAiStub({
       streamParts: ['data: {"response":"Guide "}\n', '\ndata: {"response":"answer"}\n\n', 'data: [DONE]\n\n'],
@@ -470,6 +518,19 @@ describe('request validation', () => {
     for (const message of ['xy', 'x'.repeat(1000)]) {
       const { response } = await accepted({}, validPayload({ message }));
       assert.equal(response.status, 200, `message length ${message.length} must be accepted`);
+    }
+  });
+
+  test('rejects a non-string hint and one over 200 characters', async () => {
+    for (const hint of [3, {}, [], true, 'x'.repeat(201)]) {
+      await reject(postJson(validPayload({ hint })), 'hint');
+    }
+  });
+
+  test('accepts an absent, null, empty, and exactly-200-character hint', async () => {
+    for (const hint of [OMIT, null, '', 'x'.repeat(200)]) {
+      const { response } = await accepted({}, validPayload({ hint }));
+      assert.equal(response.status, 200, `hint ${JSON.stringify(hint)} must be accepted`);
     }
   });
 

@@ -42,6 +42,44 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **QR flow: location contexts and printable codes.** `/chat?ctx=<slug>` opens with a
+  greeting written for somebody standing at that spot and steers their first question
+  toward the articles about it. A visitor at a trailhead has no app and no account, so a
+  printed code is the whole onboarding — which is the reason this framework hosts its own
+  chat instead of pointing at a vendor assistant.
+- **`knowledge/chat/_contexts.md`, a new optional manifest.** Gray-matter frontmatter, an
+  ordered `contexts` list, body free for human notes; the leading `_` keeps it invisible to
+  the three scanners that walk `knowledge/`. A context requires `slug`, `label`, `greeting`
+  and optionally carries `hint`, `article`. Greetings are prose about places, which is
+  content, so they live here rather than in `place.config.ts`. `src/lib/chat-contexts.ts`
+  reads it absent-safely: no manifest leaves `/chat` exactly as it was, and a duplicate
+  `slug`, a missing required field, an unusable `slug`, or an `article` that resolves to no
+  built route each drop that one context with a build-time warning naming it while every
+  other code keeps working. An unknown or absent `ctx` is not an error either — a code that
+  outlives its sign falls back to the ordinary page.
+- **A context's `hint` reaches retrieval and never generation.** It is appended to the
+  embedded query text and is absent from the prompt, so a context can change which articles
+  are found and cannot instruct the model. A scanned URL is editable by anyone holding a
+  phone; the prompt is the one place it may not reach. `workers/chat/` accepts `hint` as an
+  optional bounded string, and a worker test asserts both halves.
+- **`npm run qr:sheet`.** Renders the declared contexts as `qr-sheet.html` at the repository
+  root — gitignored, a print artifact rather than repository content. One card per context:
+  the code as inline SVG, the place's name, and the URL as text for anyone who would rather
+  type it. Everything is inline, so it prints from a `file://` URL with no network, and the
+  layout fits A4 and US Letter without choosing a paper size. With no manifest it exits 0
+  saying no contexts are declared. It is a script and not a `/qr` route: a public page would
+  publish the internal context map for no visitor benefit.
+- **`@paulmillr/qr` (dev dependency).** Pure JS, zero runtime dependencies, no native
+  bindings. It also ships a decoder, which `npm run test:qr` uses to round-trip every card's
+  own inline SVG back to the URL it should encode — a wrong code is otherwise invisible until
+  somebody prints it, mounts it, and scans it.
+- **`scripts/ci/check-chat-context-schema-docs.mjs`** (folded into `npm run schema-docs`)
+  derives the context field lists from the reader and fails CI when `dev_docs/SPEC.md`, the
+  manifest body, or `docs/runbook/DEPLOY.md` disagrees with it. Its engine is now shared with
+  the soundscape gate in `scripts/lib/schema-docs.mjs`.
+- **Runbook:** `docs/runbook/DEPLOY.md` gains a QR-codes section covering how to declare a
+  context, what each field does, how contexts are dropped one at a time, and how to print.
+
 - **On-demand OG image worker (`workers/og/`).** Per-article social-preview cards
   rendered with Satori and resvg-wasm, cached at the Cloudflare edge. The worker
   fetches article metadata from the site's own `topics.json` and renders title,

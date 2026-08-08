@@ -788,6 +788,72 @@ the report and confirm each answer is grounded in what it cites and that the ref
 questions refused. An absent manifest exits 0 with "no evaluation set", so an instance
 that never writes one is not broken.
 
+### QR codes for physical places
+
+A visitor standing at a trailhead has no app, no account, and no reason to search. A
+printed code is the whole onboarding: it opens `/chat?ctx=<slug>`, which greets them for
+the spot they are standing in and steers the first question toward the articles about it.
+
+Declare the places in `knowledge/chat/_contexts.md` — optional, gray-matter frontmatter,
+an ordered `contexts` list, body free for your own notes. The leading `_` is what keeps
+the file invisible to the three scanners that walk `knowledge/` looking for articles;
+never rename it without the prefix.
+
+A context requires `slug`, `label`, `greeting`. A context also accepts optional `hint`,
+`article`.
+
+```yaml
+---
+contexts:
+  - slug: north-dock
+    label: North Dock
+    greeting: >-
+      You are at the north dock. Ask about the boats, the birds, or how this
+      stretch of water got its name.
+    hint: the north dock and the water around it
+    article: /places/north-dock
+---
+```
+
+- **`slug`** is the `ctx` query value and goes into a printed URL, so it is restricted to
+  lowercase letters, digits, and single hyphens.
+- **`greeting`** is the opening message. Write it for somebody holding a phone in the
+  wind, not for a reader at a desk.
+- **`hint`** biases *retrieval* toward this location. It is appended to the text that gets
+  embedded for the reader's first question and is never shown to the model as an
+  instruction, so a hint changes which articles are found and cannot change how the
+  answer is written. It rides the first question only: by the third, the reader has moved
+  on.
+- **`article`** is a site-root-absolute route your build produces, rendered as a link
+  under the greeting. A route that resolves to nothing drops that whole context with a
+  build-time warning, because a greeting that sends a reader at a 404 is worse than one
+  code that does nothing.
+
+Contexts are dropped one at a time. A duplicate `slug`, a missing required field, an
+unusable `slug`, and an unresolvable `article` each take out that one entry with a named
+warning in the build log and leave every other code working. An `unknown` or absent `ctx`
+in a URL is not an error either: the page opens exactly as it does for a reader who typed
+it, which is what makes a code outliving its sign harmless.
+
+Print the codes:
+
+```bash
+npm run qr:sheet
+```
+
+That writes `qr-sheet.html` at the repository root — gitignored, because it is a print
+artifact regenerated on demand, not repository content. Open it in a browser and print.
+Each card carries the code, the place's name, and the URL in plain text for anyone who
+would rather type it; the sheet is laid out to fit both A4 and US Letter without choosing
+a paper size, and everything including the codes is inline, so it prints correctly from a
+`file://` URL with no network. `--domain` overrides `place.domain`, and `--out` the
+output path. With no manifest it exits 0 saying no contexts are declared.
+
+Run it after a build when your contexts declare `article` links: the runner reads
+`public/kb/topics.json` to check them. Without that file it cannot verify a link, so it
+omits the links and prints every card anyway rather than dropping cards off a sheet
+because the site had not been built.
+
 **Model and free-tier contract.** `CHAT_MODEL` in `workers/chat/src/index.mjs` is
 the single generation-model constant. On 2026-08-07 it was verified against the
 [Workers AI model catalog](https://developers.cloudflare.com/workers-ai/models/)

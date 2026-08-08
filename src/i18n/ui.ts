@@ -112,6 +112,10 @@ export const ui = {
     'chat.error.emptyAnswerNoSources':
       'No answer came back for this question. This turn was not kept, so asking again is safe.',
     'chat.noscript': 'Asking questions needs JavaScript. Browse the articles instead:',
+    // The link under a `?ctx=` greeting, when that context declares an `article`.
+    // Deliberately says nothing about the place: which place it is, is the greeting's
+    // job, and this string ships to every instance.
+    'chat.context.article': 'Read the article about this spot',
     // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
     'soundscape.meta.title': 'Soundscape',
     // Says how the audio plays, never where it came from: provenance is per clip,

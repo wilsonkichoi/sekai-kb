@@ -22,10 +22,10 @@
  * src/styles/tokens.css, so both themes are legible from one set of rules and
  * no hex is written here.
  */
-import { readdirSync } from 'node:fs';
 import { getCollection } from 'astro:content';
 import Layout from '../layouts/Layout.astro';
 import { getLangFromUrl, useTranslations } from '../i18n/utils';
+import { builtRoutes } from '../lib/built-routes';
 import { readSoundscape } from '../lib/sounds';
 import placeConfig from '../../place.config';
 
@@ -33,38 +33,17 @@ const lang = getLangFromUrl(Astro.url);
 const t = useTranslations(lang);
 
 /**
- * The routes this build produces, assembled the way the build itself derives
- * them: the file-based static pages, one hub per configured category, and one
- * article route per collection entry whose category is configured (the same
- * filter `src/pages/[category]/[slug].astro` applies in getStaticPaths).
- *
- * A category's manifest `article` is checked against this set, so a stale link
- * is dropped with a build-time warning instead of shipping a 404 — which is
- * also what keeps the post-build internal-link check green.
+ * A category's manifest `article` is checked against the routes this build
+ * produces (`src/lib/built-routes.ts`), so a stale link is dropped with a
+ * build-time warning instead of shipping a 404 — which is also what keeps the
+ * post-build internal-link check green.
  */
-const categorySlugs = new Set(placeConfig.categories.map((c) => c.slug));
-
-const staticRoutes = readdirSync('src/pages', { withFileTypes: true })
-  .filter((e) => e.isFile() && e.name.endsWith('.astro') && !e.name.startsWith('['))
-  .map((e) => e.name.replace(/\.astro$/, ''))
-  .map((name) => (name === 'index' ? '/' : `/${name}`));
-
-const hubRoutes = [...categorySlugs].map((slug) => `/${slug}`);
-
-const articleRoutes = (await getCollection('en'))
-  .map((article) => {
-    const parts = article.id.split('/');
-    if (parts.length < 2) return null;
-    return `/${parts[0]}/${parts.slice(1).join('/').replace(/\.md$/, '')}`;
-  })
-  .filter((route): route is string => route !== null && categorySlugs.has(route.split('/')[1]));
+const knownRoutes = builtRoutes(placeConfig, await getCollection('en'));
 
 // Build-time read. Warnings (a missing asset, a malformed entry, an `article`
 // that resolves to nothing) are emitted to the build log by the reader itself,
 // so they show up in the astro build output.
-const { categories, entries } = readSoundscape(process.cwd(), {
-  knownRoutes: [...staticRoutes, ...hubRoutes, ...articleRoutes],
-});
+const { categories, entries } = readSoundscape(process.cwd(), { knownRoutes });
 
 const wantedCount = categories.reduce((n, category) => n + category.wishlist.length, 0);
 

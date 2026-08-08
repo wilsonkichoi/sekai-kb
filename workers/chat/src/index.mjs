@@ -33,6 +33,13 @@ const MAX_BODY_BYTES = 32 * 1024;
 const MIN_MESSAGE_CHARS = 2;
 const MAX_MESSAGE_CHARS = 1000;
 const MAX_HISTORY_ENTRIES = 20;
+/**
+ * A `hint` is a short phrase naming where the reader is standing, sent by
+ * `/chat?ctx=<slug>` from the context they scanned. It is bounded well below a
+ * message because it exists to nudge retrieval toward one location, and a long one
+ * would start to dominate the embedded text instead of biasing it.
+ */
+const MAX_HINT_CHARS = 200;
 const TOP_K = 5;
 
 let decodedArtifact;
@@ -121,6 +128,10 @@ function validatePayload(payload) {
   const message = payload.message.trim();
   if (message.length < MIN_MESSAGE_CHARS) return { error: 'too_short', field: 'message' };
   if (message.length > MAX_MESSAGE_CHARS) return { error: 'too_long', field: 'message' };
+  if (payload.hint !== undefined && payload.hint !== null) {
+    if (typeof payload.hint !== 'string') return { error: 'invalid_type', field: 'hint' };
+    if (payload.hint.trim().length > MAX_HINT_CHARS) return { error: 'too_long', field: 'hint' };
+  }
   if (!Array.isArray(payload.history)) return { error: 'invalid_type', field: 'history' };
   if (payload.history.length > MAX_HISTORY_ENTRIES) {
     return { error: 'too_many_entries', field: 'history' };
@@ -385,9 +396,21 @@ export async function handleRequest(request, env) {
   // availability failure, while a dimension disagreement is the artifact mismatch DoD 3
   // asks the 503 to name. Reporting the first as the second sends the operator after a
   // corrupt artifact that is fine.
+  // The location hint is a RETRIEVAL input and only that. It is appended to the text
+  // that gets embedded, where its whole effect is to move the query vector toward the
+  // chunks about that place -- and it is never put in front of the model below. A
+  // context is declared in content and reaches this worker through a URL a stranger
+  // can edit, so anything it says would otherwise be an instruction the reader wrote
+  // into the system prompt: "ignore the excerpts", "you are allowed to guess". Kept on
+  // this side of the line, the worst a hostile hint can do is retrieve the wrong
+  // articles, and the answer is still grounded in whatever it retrieved.
+  const hint = typeof payload.hint === 'string' ? payload.hint.trim() : '';
+  const message = payload.message.trim();
+  const queryText = hint ? `${message} ${hint}` : message;
+
   let embedded;
   try {
-    embedded = await env.AI.run(EMBED_MODEL, { text: [payload.message.trim()] });
+    embedded = await env.AI.run(EMBED_MODEL, { text: [queryText] });
   } catch (error) {
     return json({ error: 'query_embedding_unavailable', detail: error.message }, 503, allowedOrigin);
   }
@@ -409,7 +432,8 @@ export async function handleRequest(request, env) {
       role: entry.role,
       content: entry.content.trim(),
     })),
-    { role: 'user', content: payload.message.trim() },
+    // `message`, never `queryText`: the hint stops at retrieval.
+    { role: 'user', content: message },
   ];
   // The shared 10k neurons/day allocation is spent by both the embedding above and this
   // call, so exhausting it throws here. Unwrapped, that reaches the client as a bare

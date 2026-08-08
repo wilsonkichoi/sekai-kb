@@ -320,7 +320,23 @@ sentence fails CI.
    `##` boundaries and embeds them with bge-m3 at 1024 dimensions. `workers/chat/` embeds
    queries with Workers AI `@cf/baai/bge-m3`, performs in-worker cosine retrieval over
    static JSON vectors, and calls free-tier Workers AI with citation-required prompting. QR codes deep
-   link to `/chat?ctx=<location>`.
+   link to `/chat?ctx=<location>`. Those locations are declared in the optional
+   `knowledge/chat/_contexts.md`: gray-matter frontmatter, an ordered `contexts` list, body
+   free for human notes. A context requires `slug`, `label`, `greeting`. A context also
+   accepts optional `hint`, `article`. `src/lib/chat-contexts.ts` reads it with
+   `readFileSync` + `try/catch`, so an absent manifest leaves `/chat` exactly as it is
+   without one, and a duplicate `slug`, a missing required field, an unusable `slug`, or an
+   `article` that resolves to no built route each drop that one context with a build-time
+   warning naming it while every other code keeps working.
+   `scripts/ci/check-chat-context-schema-docs.mjs` derives both field lists in this
+   paragraph from that reader and fails CI when the prose disagrees with it. A context's
+   `hint` is appended to the **embedded query text** and never to the generation prompt, so
+   a context can steer which articles are retrieved and cannot instruct the model — a
+   scanned URL is attacker-editable, and the prompt is the one place it may not reach.
+   `npm run qr:sheet` renders the declared contexts as a gitignored `qr-sheet.html`, one
+   printable card each, laid out to fit A4 and US Letter. It is a script and not a route:
+   a public `/qr` page would publish the internal context map for no visitor benefit and
+   would change the gated route list below.
    Retrieval applies a cosine **relevance floor** before top-k, so a question the corpus
    cannot support retrieves nothing, cites nothing, and is answered with a refusal. Top-k
    alone cannot express that: it returns a fixed count off a sorted list, so an
