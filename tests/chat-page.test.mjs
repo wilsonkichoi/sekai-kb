@@ -479,6 +479,93 @@ test('only the last four history messages are sent to the worker', async () => {
   });
 });
 
+// The store is the window sent to the worker, and `workers/chat/` answers a blank
+// history entry with a 400. A refused request appends nothing, so an unusable entry
+// written once would never age out of the window: every later question in the tab
+// would fail until the tab was closed. Both directions of that are pinned here.
+test('a turn with no answer text is not stored, so the next question still works', async () => {
+  let turn = 0;
+  await withPage(
+    (res) => {
+      turn += 1;
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      // Turn 1 is the shape the deployed worker produced: private reasoning, a normal
+      // citations frame, and no answer text at all.
+      if (turn === 1) {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Thinking.' } }] })}\n\n`,
+        );
+      } else {
+        res.write(frame('The second answer.'));
+      }
+      res.write(citationsFrame([{ title: 'Alpha Guide', url: '/guides/alpha' }]));
+      res.end();
+    },
+    async (page, requests) => {
+      await ask(page, 'First question.');
+      await settled(page);
+
+      assert.equal(
+        await page.locator('[data-turn="assistant"] [data-turn-body]').textContent(),
+        '',
+        'the turn itself renders, empty, with its sources',
+      );
+      assert.equal(
+        await page.evaluate(() => sessionStorage.getItem('chat-history')),
+        null,
+        'a turn the worker would refuse is never written to the store',
+      );
+
+      await ask(page, 'Second question.');
+      await settled(page);
+
+      assert.equal(requests.length, 2, 'the second question must reach the worker');
+      assert.deepEqual(requests[1].history, [], 'no blank entry may be sent');
+      assert.deepEqual(
+        JSON.parse(await page.evaluate(() => sessionStorage.getItem('chat-history'))),
+        [
+          { role: 'user', content: 'Second question.' },
+          { role: 'assistant', content: 'The second answer.' },
+        ],
+        'the turn that did answer is stored normally',
+      );
+    },
+  );
+});
+
+test('a blank history entry already in the store is dropped rather than sent', async () => {
+  await withPage(streamAnswer('Answer.', []), async (page, requests) => {
+    await page.evaluate(() =>
+      sessionStorage.setItem(
+        'chat-history',
+        JSON.stringify([
+          { role: 'user', content: 'an earlier question' },
+          { role: 'assistant', content: '   ' },
+          { role: 'moderator', content: 'a role the worker does not model' },
+        ]),
+      ),
+    );
+
+    await ask(page, 'The newest question.');
+    await settled(page);
+
+    assert.deepEqual(
+      requests[0].history,
+      [{ role: 'user', content: 'an earlier question' }],
+      'only entries the worker accepts may be sent',
+    );
+    assert.deepEqual(
+      JSON.parse(await page.evaluate(() => sessionStorage.getItem('chat-history'))),
+      [
+        { role: 'user', content: 'an earlier question' },
+        { role: 'user', content: 'The newest question.' },
+        { role: 'assistant', content: 'Answer.' },
+      ],
+      'the store is rewritten without the unusable entries',
+    );
+  });
+});
+
 test('a corrupt session store is ignored rather than breaking the conversation', async () => {
   await withPage(streamAnswer('Answer.', []), async (page, requests) => {
     await page.evaluate(() => sessionStorage.setItem('chat-history', 'not json'));

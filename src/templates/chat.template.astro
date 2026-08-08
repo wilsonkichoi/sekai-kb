@@ -49,7 +49,9 @@ const { enabled, endpoint } = resolveChat(placeConfig);
  *     MESSAGES -- two prior exchanges, since a question and its answer are one entry
  *     each. That is the same window `workers/chat/` applies to whatever it receives,
  *     and the two must agree or the cap is whichever side is stricter by accident.
- *     sessionStorage is what clears it on tab close, with no unload handler.
+ *     Only entries the worker will accept are ever stored or sent, because a rejected
+ *     request appends nothing and so an unusable entry would never slide back out of
+ *     the window. sessionStorage is what clears it on tab close, with no unload handler.
  *   - A worker failure renders inline and leaves the transcript standing.
  */
 const CHAT_SCRIPT = `
@@ -72,11 +74,26 @@ const CHAT_SCRIPT = `
     return form.getAttribute('data-msg-' + name) || '';
   }
 
+  // What workers/chat/ will accept: one of the two roles it models, and content that
+  // is not blank -- it answers anything else with a 400 naming the entry. The store is
+  // client-visible and its contents are what get sent, so an entry from any source (an
+  // older shape, a devtools edit, a hand-written value) is dropped on the way in rather
+  // than failing every request the tab makes from then on.
+  function isSendable(entry) {
+    return (
+      !!entry &&
+      (entry.role === 'user' || entry.role === 'assistant') &&
+      typeof entry.content === 'string' &&
+      entry.content.trim() !== ''
+    );
+  }
+
   function loadHistory() {
     try {
       var raw = sessionStorage.getItem(STORE);
       var parsed = raw ? JSON.parse(raw) : [];
-      return Object.prototype.toString.call(parsed) === '[object Array]' ? parsed : [];
+      if (Object.prototype.toString.call(parsed) !== '[object Array]') return [];
+      return parsed.filter(isSendable);
     } catch (e) {
       return [];
     }
@@ -310,9 +327,19 @@ const CHAT_SCRIPT = `
               // draws the same line, so both consumers of this stream agree.
               if (state.sawCitations) renderCitations(turn, state.citations);
               else showError(turn, msg('error'));
-              history.push({ role: 'user', content: question });
-              history.push({ role: 'assistant', content: state.answer });
-              saveHistory(history);
+              // A turn that produced no answer text is a failed turn, and a failed turn
+              // is not remembered -- the same thing the !response.ok branch above does
+              // by returning early. The answer is empty whenever no frame yielded text:
+              // a reasoning model that spends its output budget before answering, or a
+              // frame shape answerDelta does not model. Storing it would put a blank
+              // assistant entry in the window, which the worker refuses, and since a
+              // refused request appends nothing the blank would never age out: every
+              // later question in the tab would fail until the tab was closed.
+              if (state.answer.trim()) {
+                history.push({ role: 'user', content: question });
+                history.push({ role: 'assistant', content: state.answer });
+                saveHistory(history);
+              }
               finish();
               return;
             }

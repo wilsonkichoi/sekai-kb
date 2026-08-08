@@ -117,7 +117,10 @@ tags, never framework `main`** (ADR 004, SPEC
   model that invents a plausible-looking link mid-sentence cannot get it rendered.
   Several retrieved chunks of one article collapse into one card. Conversation lives in
   `sessionStorage`, is capped to the last four messages — two prior exchanges — on the
-  way to the worker, and clears when the tab closes. A 429, a 503, or a stream that dies mid-answer renders inline and
+  way to the worker, and clears when the tab closes. Only messages the worker accepts are
+  stored or sent: a turn that produced no answer text is not remembered, so a stream that
+  carries reasoning but never an answer cannot leave the tab sending an entry the worker
+  refuses. A 429, a 503, or a stream that dies mid-answer renders inline and
   keeps whatever text already arrived.
 - **The chat surface has one gate, in `src/lib/chat.ts`.** It needs BOTH `features.chat`
   and a non-empty `workers.chat`. The page always builds; with either half missing it
