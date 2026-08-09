@@ -505,7 +505,20 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   restores it immediately after the merge (amending the merge commit when git
   auto-committed), so the file still reads the old version until the explicit bump after
   successful verification — which asserts the result rather than assuming its write took
-  effect. `scripts/upgrade/check-upgrade-state.sh` is the gate for that contract.
+  effect. **That mechanic is a property of every `merge=ours` path, not of this one
+  file** (corrected 2026-08-09, LB-88): an instance that kept a framework document
+  verbatim has `ours == base` there too, so the attribute cannot fire, and keeping a
+  framework document verbatim is the common adopter state. Both helpers therefore
+  restore rather than assert — `package-state.mjs` for the version files,
+  `maintainer-docs-state.mjs` for the `dev_docs/**` tree, which restores the pre-merge
+  content of any file the merge moved under a path `git check-attr merge` reports as
+  `ours` and amends the merge commit the same way. It still stops for an owned path the
+  instance never marked `merge=ours`, because claiming a path is the instance's
+  decision, and that diagnostic reports the attribute value and driver state it
+  observed rather than assuming both are missing.
+  `scripts/upgrade/check-upgrade-state.sh` is the gate for that contract: case 12 pins
+  the version files and case 14 the maintainer-doc tree, with case 8 holding the
+  `ours != base` half where the driver does fire.
 - **2026-07-19, LB-44 delta:** added the dev-plugin state-persistence
   contract for framework upgrades. This corrects the false assumption that
   `.gitattributes merge=ours` preserves a deleted `.agent-toolkit/` path.

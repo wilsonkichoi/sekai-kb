@@ -37,8 +37,17 @@
 // legitimately own some and not others. A partial set is a normal state, never a
 // stop.
 //
-//   owned    = present before the merge -> never deleted, asserted unchanged
+//   owned    = present before the merge -> never deleted; a change the merge made is
+//              RESTORED where the instance marked the path `merge=ours`, and stops
+//              the upgrade where it did not
 //   stripped = absent  before the merge -> whatever the merge introduced is removed
+//
+// The restore exists because `merge=ours` names a driver git runs only on a
+// three-way CONTENT merge: an instance whose copy still equals the merge base has
+// `ours == base`, so git resolves to theirs and the attribute never fires. That is
+// a property of every `merge=ours` path, not of one file — `package-state.mjs`
+// applies the same capture-and-restore to `FRAMEWORK-VERSION`, and this helper
+// applies it to the maintainer-doc tree.
 //
 // `classify` runs in preflight, BEFORE the merge, on a clean working tree, and
 // writes its answer into the git directory (never the working tree). `reconcile`
@@ -251,6 +260,28 @@ function existedAt(repo, rev, rel) {
   return gitLines(repo, ['ls-tree', '-r', '--name-only', rev, '--', rel]).length > 0;
 }
 
+/**
+ * The `merge` attribute git resolves for a path — `ours` when the instance claimed
+ * it, `unspecified` when nothing does. Read per FILE, not per declared path: the
+ * declaration is a directory and the attribute is a glob under it. `check-attr`
+ * answers from the pattern set rather than the file, so it still answers for a path
+ * the merge deleted.
+ */
+function mergeAttribute(repo, path) {
+  // `<path>: merge: <value>`, and a path may itself contain `: ` — read the tail.
+  const out = git(repo, ['check-attr', 'merge', '--', path]);
+  const cut = out.lastIndexOf(': ');
+  return cut === -1 ? 'unspecified' : out.slice(cut + 2);
+}
+
+/**
+ * Is the `ours` driver defined in this clone? It is per-clone and not
+ * version-controlled, so it is observed rather than assumed.
+ */
+function oursDriverConfigured(repo) {
+  return git(repo, ['config', '--get', 'merge.ours.driver'], { allowFailure: true }) !== null;
+}
+
 function reconcile(repo, override) {
   const notes = [];
   const failures = [];
@@ -269,6 +300,8 @@ function reconcile(repo, override) {
   const removed = [];
   const kept = [];
   const added = [];
+  const restored = [];
+  const driverConfigured = oursDriverConfigured(repo);
 
   for (const rel of all) {
     const owned = captured.owned.includes(rel)
@@ -295,19 +328,34 @@ function reconcile(repo, override) {
       continue;
     }
 
-    // Owned: `merge=ours` must have kept it byte-for-byte. A conflict or any
-    // non-addition change means the attribute or the driver is missing — the
-    // framework's copy must never win over a document the instance wrote.
+    // Owned: the instance's own document must come out of the merge intact, and
+    // `merge=ours` is not on its own enough to make that happen. The driver runs
+    // only on a three-way CONTENT merge, so an instance whose copy still equals the
+    // merge base has `ours == base` and git resolves to theirs without consulting
+    // it. Restoring the pre-merge content is therefore the normal outcome wherever
+    // the instance CLAIMED the path (`check-attr merge` reports `ours`); where it
+    // did not, this stops instead, because reverting the framework's edit on an
+    // unclaimed path would be the framework deciding ownership for the instance.
     const unmerged = distinctPaths(gitLines(repo, ['ls-files', '-u', '--', rel]));
-    if (unmerged.length > 0) {
-      failures.push(`${rel} conflicted: ${unmerged.join(', ')}`);
-      continue;
-    }
-    for (const line of gitLines(repo, ['diff', '--name-status', rev, '--', rel])) {
+    const moved = unmerged.map((path) => ({ path, status: 'conflicted' }));
+    // `--no-renames`: a rename status carries TWO tab-separated paths on one line,
+    // and every path below is fed straight back to git.
+    for (const line of gitLines(repo, ['diff', '--name-status', '--no-renames', rev, '--', rel])) {
       const [status, ...pathParts] = line.split('\t');
       const path = pathParts.join('\t');
+      if (unmerged.includes(path)) continue;
       if (status.startsWith('A')) added.push(path);
-      else failures.push(`${path} changed (${status}) against the pre-merge tree`);
+      else moved.push({ path, status: `changed (${status}) against the pre-merge tree` });
+    }
+    for (const { path, status } of moved) {
+      const attribute = mergeAttribute(repo, path);
+      if (attribute !== 'ours') {
+        failures.push({ path, status, attribute });
+        continue;
+      }
+      git(repo, ['checkout', rev, '--', path]);
+      staged = true;
+      restored.push(`${path} (${status})`);
     }
     kept.push(rel);
   }
@@ -324,27 +372,47 @@ function reconcile(repo, override) {
     const undo = mergeInProgress
       ? '`git merge --abort`'
       : '`git reset --hard ORIG_HEAD` (ORIG_HEAD is the commit this merge started from)';
+    // Both observations are reported, and only the repairs they support are
+    // prescribed. Telling a reader to mark a path that `check-attr` already reports
+    // as `ours`, or to configure a driver that is already configured, is a remedy
+    // that cannot fix anything and leaves re-running as the only visible move.
+    const driverObservation = driverConfigured
+      ? '  observed: `merge.ours.driver` IS configured in this clone, so the driver is not what'
+        + '\n            went wrong here.'
+      : '  observed: `merge.ours.driver` is NOT configured in this clone (it is per-clone and not'
+        + '\n            version-controlled), so the attribute could not protect any path here.';
+    const remedy = driverConfigured
+      ? [
+        `  remedy: ${undo}, mark those paths \`merge=ours\` in \`.gitattributes\`, then re-run`,
+        '          the upgrade.',
+      ]
+      : [
+        `  remedy: ${undo}, mark those paths \`merge=ours\` in \`.gitattributes\`, run`,
+        '          `git config merge.ours.driver true`, then re-run the upgrade.',
+      ];
     throw new UpgradeStateError(
       [
         'maintainer-doc state was not preserved:',
-        ...failures.map((f) => `  - ${f}`),
-        '  These paths hold documents this instance owns, so the merge must not have touched',
-        '  them. Either `.gitattributes` does not mark them `merge=ours`, or the `ours` driver',
-        '  is not configured in this clone (it is per-clone and not version-controlled).',
+        ...failures.map((f) => `  - ${f.path} ${f.status}; \`git check-attr merge\` reports \`${f.attribute}\``),
+        '  These paths hold documents this instance owns, but nothing in `.gitattributes` claims',
+        '  them as instance-owned, so the upgrade will not revert the framework\'s edits for you:',
+        '  deciding that a path belongs to the instance is the instance\'s call, not the',
+        '  framework\'s. A path that IS marked `merge=ours` is restored automatically instead.',
+        driverObservation,
         state,
-        `  remedy: ${undo}, mark the paths \`merge=ours\` in \`.gitattributes\`, run`,
-        '          `git config merge.ours.driver true`, then re-run the upgrade.',
+        ...remedy,
       ].join('\n'),
       EXIT_FAILURE,
     );
   }
 
-  // The merge already committed (nothing conflicted to stop it), so the framework
-  // copies are in the merge commit. Amend it — both parents are preserved, and the
-  // finalized merge never carries maintainer docs the instance does not own.
+  // The merge already committed (nothing conflicted to stop it), so whatever this
+  // pass removed or restored is otherwise in the merge commit. Amend it — both
+  // parents are preserved, and the finalized merge carries neither a maintainer doc
+  // the instance does not own nor the framework's copy of one it does.
   if (!mergeInProgress && staged) {
     git(repo, ['commit', '--amend', '--no-edit', '--quiet']);
-    notes.push('amended the merge commit so no framework maintainer doc is committed');
+    notes.push('amended the merge commit so the reconciled maintainer-doc state is what it carries');
   }
 
   const postconditions = [];
@@ -368,8 +436,23 @@ function reconcile(repo, override) {
   if (removed.length > 0) {
     notes.push(`removed framework maintainer docs this instance does not own: ${removed.join(', ')}`);
   }
+  if (restored.length > 0) {
+    notes.push(
+      `restored ${restored.length} instance-owned maintainer-doc file(s) the merge had moved: ${restored.join(', ')}.`,
+      'Those paths are marked `merge=ours`, but git consults a merge driver only on a three-way'
+        + ' content merge — an instance whose copy still equals the merge base gets theirs'
+        + ' fast-forwarded in, so the attribute never fired. Your pre-merge content is back.',
+    );
+    if (!driverConfigured) {
+      notes.push(
+        '`merge.ours.driver` is NOT configured in this clone, so the attribute protected nothing'
+          + ' here at all. `/sekai-upgrade` sets it before merging (`git config merge.ours.driver'
+          + ' true`, per docs/runbook/UPGRADE.md); configure it in this clone.',
+      );
+    }
+  }
   if (kept.length > 0) {
-    notes.push(`instance-owned and unchanged against ${rev}: ${kept.join(', ')}`);
+    notes.push(`instance-owned, holding this instance's ${rev} content: ${kept.join(', ')}`);
   }
   if (added.length > 0) {
     notes.push(

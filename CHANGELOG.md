@@ -36,9 +36,50 @@ tags, never framework `main`** (ADR 004, SPEC
    *content on a path that exists on both sides and differs from the merge base*;
    it does not preserve an absent path (the upgrade's classify/reconcile pass owns
    that), and it does not fire on a file the instance has not edited since the
-   merge base (which is why `FRAMEWORK-VERSION` is captured and restored instead).
+   merge base. That last gap is a property of every `merge=ours` path, so the
+   upgrade restores rather than trusts the attribute: `package-state.mjs` for
+   `FRAMEWORK-VERSION` and the npm manifests, `maintainer-docs-state.mjs` for the
+   `dev_docs/**` tree.
 
 ## [Unreleased]
+
+### Fixed
+
+- **A tag merge no longer stops the upgrade over a maintainer document you kept
+  verbatim.** `scripts/upgrade/maintainer-docs-state.mjs reconcile` used to assert that
+  `merge=ours` had held every owned `dev_docs/**` path byte-for-byte, and to stop when it
+  had not, prescribing two repairs: mark the path `merge=ours` and run
+  `git config merge.ours.driver true`. On the instance that hit this both were already
+  in place, so the prescribed remedy was a no-op and re-running reproduced the stop. The
+  cause is the mechanic this changelog already records one file over: a merge driver runs
+  only on a three-way **content** merge, so an instance whose copy still equals the merge
+  base has git resolve to theirs without ever consulting the driver. Keeping a framework
+  document unedited is the ordinary adopter state, not an edge case. `reconcile` now
+  **restores** the pre-merge content of every file the merge modified or deleted under a
+  path `git check-attr merge` reports as `ours`, staging it and amending the merge commit
+  when git had already auto-committed — the same capture-and-restore treatment
+  `package-state.mjs` gives `FRAMEWORK-VERSION`. A clone whose `merge.ours.driver` is
+  unset takes the same restore and is told the driver is missing, instead of halting.
+- **The remaining hard stop is narrower, and its diagnostic reports what it observed.**
+  `reconcile` still stops for an owned path the instance never claimed — one
+  `check-attr` reports as anything but `ours` — because reverting the framework's edit
+  there would be the upgrade deciding ownership on the instance's behalf. That diagnostic
+  now prints, per failing path, the attribute value git actually resolved and whether
+  `merge.ours.driver` is configured in this clone, and prescribes only the repairs those
+  observations support. It never tells a reader to mark a path that is already marked, or
+  to configure a driver that is already configured.
+- Files the merge **added** under an owned path are still reported and never deleted, and
+  an instance that wrote its own content at a maintainer-doc path (`ours != base`, where
+  the driver does fire) is unaffected. `scripts/upgrade/check-upgrade-state.sh` gains
+  case 14 for the `ours == base` restore, including the amend path, and splits case 10
+  into the unclaimed-path stop and the unconfigured-driver restore; both new shapes are in
+  the `--selftest` non-vacuity run. `docs/runbook/UPGRADE.md`, the `/sekai-upgrade` skill,
+  and the SPEC change log are corrected to state the mechanic as a property of every
+  `merge=ours` path and to name both helpers.
+
+No **Upgrade note**: this changes no adopter-visible configuration, no
+`place.config.ts` key, and no file an instance owns. It changes what the upgrade does
+when it meets a state it previously refused to proceed from.
 
 ## [1.1.2] — 2026-08-08
 

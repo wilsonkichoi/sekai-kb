@@ -155,10 +155,12 @@ for step 5; unlike the dev-plugin helper, the classification itself is recorded 
 the git directory, so `reconcile` takes no state argument and no `--from-tag` —
 after the merge the framework-owned wizard is the tag's.
 
-- **owned** (the instance has a document at that path) → it is never deleted and
-  must come through the merge byte-for-byte. If the user's instance owns any of
-  these paths and has not marked them `merge=ours`, say so now: adding the
-  attribute is a pre-merge action, and step 5 will otherwise stop the upgrade.
+- **owned** (the instance has a document at that path) → it is never deleted, and
+  step 5 restores its pre-merge content if the merge changed it. If the user's
+  instance owns any of these paths and has not marked them `merge=ours`, say so now:
+  adding the attribute is a pre-merge action, and step 5 will otherwise stop the
+  upgrade, because claiming a path is the instance's decision and not the
+  framework's.
 - **stripped** (absent) → the absence is preserved through the merge, exactly like
   dev-plugin state.
 
@@ -232,14 +234,20 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 - **Maintainer docs** → per path: an absent path has whatever the merge introduced
   removed (resolving both the modify/delete conflict and the theirs-only addition,
   amending the merge commit if the merge already committed), and a path the
-  instance owns is asserted byte-for-byte unchanged and never deleted. Framework
-  files the merge added *under* an owned path are **reported** for the user to
-  decide, the same rule the installed dev-plugin case follows. A partially owned
-  set is normal and does not stop the upgrade; an owned path the merge changed or
-  conflicted **does** stop it, because that means the attribute or the driver is
-  missing and the framework's copy would otherwise overwrite the user's document.
-- A nonzero exit is a stop, not a warning. The commonest cause is the `ours`
-  driver missing from this clone (step 0); the diagnostic names the repair.
+  instance owns is never deleted. Where the merge changed or deleted a file under an
+  owned path that `git check-attr merge` reports as `ours`, the pre-merge content is
+  **restored** and the merge commit amended the same way. That is the normal outcome,
+  not a repair: a merge driver runs only on a three-way content merge, so an instance
+  that kept the framework's document verbatim has `ours == base` and the attribute
+  never fires — the same reason `FRAMEWORK-VERSION` needs the capture above.
+  Framework files the merge added *under* an owned path are **reported** for the user
+  to decide, the same rule the installed dev-plugin case follows. A partially owned
+  set is normal and does not stop the upgrade; an owned path the instance never
+  **claimed** (no `ours` attribute) **does** stop it, because reverting the
+  framework's edit there would be the upgrade deciding ownership for the instance.
+- A nonzero exit is a stop, not a warning. The diagnostic prints the attribute value
+  and driver state it observed per failing path, and prescribes only the repairs
+  those observations support — read it rather than assuming which one applies.
 - Package reconciliation takes the incoming framework manifests, then restores
   the captured adopter name, description, privacy flag, and `VERSION` mirror. It
   resolves recurring version-line conflicts without discarding new framework

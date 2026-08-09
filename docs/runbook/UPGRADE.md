@@ -402,16 +402,32 @@ state to stop on:
 | Per-path state | Means | The upgrade does |
 | -------------- | ----- | ---------------- |
 | `stripped` | you have no document at that path (every wizard-adopted instance, for every path) | Keeps it absent. `reconcile` removes whatever the merge introduced there — conflicted or cleanly added — and amends the merge commit if the merge already committed. You never resolve one of these conflicts by hand. |
-| `owned` | you keep your own document at that path | Keeps yours. `reconcile` asserts it came through byte-for-byte and never deletes it, then reports any framework file the merge *added* underneath it for you to keep or `git rm -f`. |
+| `owned` | you keep your own document at that path | Keeps yours. If the merge changed or deleted a file there, `reconcile` **restores** your pre-merge content — amending the merge commit if git already committed it — and never deletes anything, then reports any framework file the merge *added* underneath it for you to keep or `git rm -f`. |
 
 Owning some of these paths and not others is a normal state and never stops the
-upgrade. What does stop it is an owned path the merge **changed or conflicted**:
-that means the path is not marked `merge=ours` in your `.gitattributes`, or
-`merge.ours.driver` is not set in this clone. Both repairs are named in the
-diagnostic, along with the undo that works from where you are: `git merge --abort`
-while the merge is still in progress, `git reset --hard ORIG_HEAD` once git has
-committed it (which it does when the framework's edits applied without a conflict).
-The upgrade never lets the framework's copy overwrite a document you wrote.
+upgrade.
+
+The restore is not a fallback for a misconfigured clone; it is the normal path.
+`merge=ours` names a driver git runs **only on a three-way content merge**, so if
+you kept the framework's document at one of these paths verbatim, your copy still
+equals the merge base, git resolves to theirs, and the attribute never fires — with
+the attribute set and the driver configured, both. Keeping a framework document
+unedited is the common case, so the upgrade puts your pre-merge content back rather
+than stopping. This is the same mechanic that makes `FRAMEWORK-VERSION` need an
+explicit capture and restore, and it applies to every `merge=ours` path.
+
+What does stop the upgrade is an owned path you never **claimed**: the merge changed
+a document you keep, and `git check-attr merge` reports no `ours` for it, so nothing
+in your `.gitattributes` says that path is yours. Reverting the framework's edit
+there would be the upgrade deciding ownership on your behalf, so it stops and tells
+you to mark the path. The diagnostic prints what it observed — the attribute value
+git resolved for each failing path, and whether `merge.ours.driver` is configured in
+this clone — and prescribes only the repairs those observations support, so it never
+sends you to fix something already in place. It also names the undo that works from
+where you are: `git merge --abort` while the merge is still in progress,
+`git reset --hard ORIG_HEAD` once git has committed it (which it does when the
+framework's edits applied without a conflict). The upgrade never lets the framework's
+copy overwrite a document you wrote.
 
 The path set is derived from the init wizard's own strip list at runtime rather
 than restated, so the upgrade cannot disagree with what adoption removed; if that
