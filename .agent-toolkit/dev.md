@@ -89,6 +89,24 @@ governs its own — and the disagreement is a defect to report, not a choice to 
 - **Upgrade mechanics:** `docs/runbook/UPGRADE.md` + the `/sekai-upgrade` skill; ADR 004
   (tagged-release topology).
 
+## Intent sources
+
+- dev_docs/PRD.md
+- dev_docs/SPEC.md
+
+The dev plugin's `dev:backlog` triage reads product intent from `docs/PRD.md` and
+`docs/SPEC.md` by default. Neither exists here: ADR 008 put the framework's product
+and engineering SSOTs beside the code they govern, and ADR 009 relocated that tree to
+`dev_docs/`. Without this section every triage run stops before its first mutation and
+asks a human to approve the same two files again, which is a prompt, not a check. The
+paths above are the same two documents the **Binding docs** section names; that section
+is the human-facing statement of authority and this one is the machine-readable form
+the plugin reads. Keep them in step: a document that becomes an intent source belongs
+in both.
+
+`.agent-toolkit/dev.md` is stripped from adopter clones by the init wizard (ADR 006), so
+this section never reaches an instance. Each instance declares its own.
+
 ## Conventions
 
 - **Genericity is machine-gated whole-tree in template mode.** The `.sekai-template`
