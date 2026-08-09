@@ -68,12 +68,21 @@ tags, never framework `main`** (ADR 004, SPEC
   `merge.ours.driver` is configured in this clone, and prescribes only the repairs those
   observations support. It never tells a reader to mark a path that is already marked, or
   to configure a driver that is already configured.
+- **A maintainer document whose filename is not pure ASCII no longer stops the upgrade.**
+  `reconcile` reads the paths it restores out of `git diff --name-status` and
+  `git ls-files -u`, and git C-quotes any path holding a byte above 0x7f
+  (`core.quotePath` defaults to true). The quoted literal is neither a pathspec git
+  accepts nor a path `git check-attr` resolves, so a file such as `dev_docs/café.md` was
+  read as unclaimed and hit the hard stop above with the one remedy that cannot fix it.
+  Both producers now use `-z`, which writes every path verbatim.
 - Files the merge **added** under an owned path are still reported and never deleted, and
   an instance that wrote its own content at a maintainer-doc path (`ours != base`, where
   the driver does fire) is unaffected. `scripts/upgrade/check-upgrade-state.sh` gains
   case 14 for the `ours == base` restore, including the amend path, and splits case 10
   into the unclaimed-path stop and the unconfigured-driver restore; both new shapes are in
-  the `--selftest` non-vacuity run. `docs/runbook/UPGRADE.md`, the `/sekai-upgrade` skill,
+  the `--selftest` non-vacuity run. Every seeded maintainer-doc directory now carries a
+  record with a non-ASCII filename, so case 14 pins the cleanly-merged path producer and
+  case 10 the conflicted one. `docs/runbook/UPGRADE.md`, the `/sekai-upgrade` skill,
   and the SPEC change log are corrected to state the mechanic as a property of every
   `merge=ours` path and to name both helpers.
 

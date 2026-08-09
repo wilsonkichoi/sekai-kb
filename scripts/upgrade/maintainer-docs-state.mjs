@@ -97,9 +97,10 @@ export function deriveMaintainerDocs(src) {
   return docs.length > 0 ? docs : null;
 }
 
-function git(repo, args, { allowFailure = false } = {}) {
+function git(repo, args, { allowFailure = false, raw = false } = {}) {
   try {
-    return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+    const out = execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+    return raw ? out : out.trim();
   } catch (err) {
     if (allowFailure) return null;
     const detail = (err.stderr ?? '').toString().trim() || err.message;
@@ -114,12 +115,38 @@ function gitLines(repo, args, options) {
 }
 
 /**
- * Distinct paths from a `git ls-files` listing. `git ls-files -u` prefixes each
- * line with `<mode> <sha> <stage>\t` and repeats a conflicted path once per stage,
- * so counting raw lines overstates how many paths are involved.
+ * Records from a NUL-separated (`-z`) git listing. Every path this helper hands
+ * back to git — as a `check-attr` argument or a `checkout` pathspec — is read this
+ * way, because git's LINE-based output is not a path: `core.quotePath` defaults to
+ * true, so any path carrying a byte above 0x7f comes back C-quoted
+ * (`"caf\303\251.md"` for a file named `café.md`). That is neither a pathspec git accepts nor
+ * a path `check-attr` resolves, so a maintainer doc whose name is not pure ASCII
+ * would be read as unclaimed and stop the upgrade with the one remedy that cannot
+ * fix it — the exact defect this helper exists to remove. `-z` writes every path
+ * verbatim, whatever bytes it holds.
+ *
+ * The trailing NUL terminates the last record rather than separating another, so
+ * the empty tail is dropped. Read raw: `trim()` would be harmless on NUL-delimited
+ * output (NUL is not JavaScript whitespace) but the guarantee this needs is that
+ * nothing between the delimiters is touched.
  */
-function distinctPaths(lines) {
-  return [...new Set(lines.map((line) => (line.includes('\t') ? line.split('\t').pop() : line)))];
+function gitRecords(repo, args, options) {
+  const out = git(repo, args, { ...options, raw: true });
+  if (!out) return [];
+  return out.split('\0').filter((record) => record !== '');
+}
+
+/**
+ * Distinct paths from a `git ls-files -z` listing. `git ls-files -u` prefixes each
+ * record with `<mode> <sha> <stage>\t` and repeats a conflicted path once per stage,
+ * so counting raw records overstates how many paths are involved. Split on the FIRST
+ * tab: the prefix contains none, and a path may contain one.
+ */
+function distinctPaths(records) {
+  return [...new Set(records.map((record) => {
+    const cut = record.indexOf('\t');
+    return cut === -1 ? record : record.slice(cut + 1);
+  }))];
 }
 
 /**
@@ -308,8 +335,8 @@ function reconcile(repo, override) {
       || (!captured.stripped.includes(rel) && existedAt(repo, rev, rel));
 
     if (!owned) {
-      const tracked = distinctPaths(gitLines(repo, ['ls-files', '--', rel]));
-      const unmerged = distinctPaths(gitLines(repo, ['ls-files', '-u', '--', rel]));
+      const tracked = distinctPaths(gitRecords(repo, ['ls-files', '-z', '--', rel]));
+      const unmerged = distinctPaths(gitRecords(repo, ['ls-files', '-u', '-z', '--', rel]));
       if (tracked.length > 0 || unmerged.length > 0) {
         // Resolves both shapes in one step: the modify/delete conflict on shared
         // history and the clean theirs-only addition on an unrelated-history merge.
@@ -336,13 +363,15 @@ function reconcile(repo, override) {
     // the instance CLAIMED the path (`check-attr merge` reports `ours`); where it
     // did not, this stops instead, because reverting the framework's edit on an
     // unclaimed path would be the framework deciding ownership for the instance.
-    const unmerged = distinctPaths(gitLines(repo, ['ls-files', '-u', '--', rel]));
+    const unmerged = distinctPaths(gitRecords(repo, ['ls-files', '-u', '-z', '--', rel]));
     const moved = unmerged.map((path) => ({ path, status: 'conflicted' }));
-    // `--no-renames`: a rename status carries TWO tab-separated paths on one line,
-    // and every path below is fed straight back to git.
-    for (const line of gitLines(repo, ['diff', '--name-status', '--no-renames', rev, '--', rel])) {
-      const [status, ...pathParts] = line.split('\t');
-      const path = pathParts.join('\t');
+    // `-z` because every path below is fed straight back to git, and `--no-renames`
+    // because a rename status carries TWO paths per entry. Together they make each
+    // entry exactly one status record followed by one verbatim path record.
+    const changes = gitRecords(repo, ['diff', '--name-status', '--no-renames', '-z', rev, '--', rel]);
+    for (let i = 0; i + 1 < changes.length; i += 2) {
+      const status = changes[i];
+      const path = changes[i + 1];
       if (unmerged.includes(path)) continue;
       if (status.startsWith('A')) added.push(path);
       else moved.push({ path, status: `changed (${status}) against the pre-merge tree` });
