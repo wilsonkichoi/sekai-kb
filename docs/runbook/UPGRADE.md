@@ -349,7 +349,10 @@ which walks the framework-owned trees — `src/`, `scripts/`, `workers/`, and
 the target, prints your value beside the framework's incoming one: key by key for a
 `wrangler.toml` (`[vars] RELEVANCE_FLOOR`, yours, the framework's), as the differing
 region for anything else. It names how each path meets the merge (yours kept, both
-sides changed, modify/delete) so a file git will merge silently is visible too. It
+sides changed, a modify/delete, or already settled — your side and the framework's
+incoming side now being the same content, which is where upstreaming an edit leaves
+you on the release that ships it back) so a file git will merge silently is visible
+too. It
 writes nothing, stages nothing, and resolves nothing in either direction: the decision
 is yours, and it is made with both values in front of you rather than reconstructed
 from two revisions afterwards. On the very first merge there is no common ancestor to
