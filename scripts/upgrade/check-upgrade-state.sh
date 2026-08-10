@@ -135,7 +135,7 @@
 # the file as unclaimed and stops the upgrade with the remedy that cannot fix it. Case
 # 14 pins the cleanly-merged producer and case 10b the conflicted one.
 #
-# Cases 15a-15e cover the fourth helper, `scripts/upgrade/framework-divergence.mjs`
+# Cases 15a-15f cover the fourth helper, `scripts/upgrade/framework-divergence.mjs`
 # (ADR 010 (e)). Its contract:
 #
 #   node scripts/upgrade/framework-divergence.mjs report --target <tag> [--repo <dir>]
@@ -166,6 +166,13 @@
 #       over every committed worker template. The helper cannot import that module —
 #       it runs as a lone file extracted from a release tag — so the two readers are
 #       held to one answer here instead.
+#  15f. A CONVERGED path: the instance changed a file and the release ships that exact
+#       content, so the path differs from the merge base but not from the target. It
+#       is reported as settled with no conflict, and no value pair or "differing
+#       region" header is printed over the empty diff between two identical blobs.
+#       This is not an exotic shape — it is the success state of the route ADR 010 (g)
+#       recommends, so an instance that upstreamed its edit meets it on the very
+#       release that brings the edit back.
 #
 # Three option-contract checks close the loop from the other side:
 #
@@ -185,7 +192,7 @@
 #     an adopter reading a list missing the tree their edit is in.
 #
 # `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9,
-# 10, 11, 12, 12c, 13, 14 and 15a with their load-bearing step DELIBERATELY SKIPPED and
+# 10, 11, 12, 12c, 13, 14, 15a and 15f with their load-bearing step DELIBERATELY SKIPPED and
 # requires each
 # case's own assertions to FAIL. A skipped run that passes means the case
 # cannot detect the regression it exists to guard, and --selftest exits nonzero. No
@@ -199,7 +206,7 @@
 # and everything it writes into scripts/.
 #
 # Usage:
-#   bash scripts/upgrade/check-upgrade-state.sh             all nineteen cases
+#   bash scripts/upgrade/check-upgrade-state.sh             every case listed above
 #   bash scripts/upgrade/check-upgrade-state.sh --selftest  non-vacuity proof
 #
 # Portability: macOS bash 3.2 + CI bash 5 (no mapfile/readarray, no associative
@@ -2607,7 +2614,9 @@ build_divergence_framework() { # dir
   mkdir -p "$fw/src" "$fw/workers/example" "$fw/.agents/skills/example" "$fw/scripts/upgrade"
   write_gitattributes "$fw"
   printf 'marker\n' > "$fw/.sekai-template"
-  printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  # The blank line is fixture, not formatting: it puts an empty CONTEXT line inside
+  # the hunk the report renders, which is what case 15a's blank-line assertion needs.
+  printf 'export const FRAMEWORK_APP = "fw-v1";\n\nexport const FRAMEWORK_TAIL = "shared";\n' > "$fw/src/app.js"
   printf 'export const FRAMEWORK_STABLE = "unchanged in both releases";\n' > "$fw/src/untouched.js"
   write_divergence_worker "$fw/workers/example/wrangler.toml" "0.46"
   printf '# Example skill (framework-owned, fw-v1)\n' > "$fw/.agents/skills/example/SKILL.md"
@@ -2616,22 +2625,33 @@ build_divergence_framework() { # dir
   git -C "$fw" commit -q -m "Example framework fw-v1"
   git -C "$fw" tag fw-v1
 
-  printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
+  printf 'export const FRAMEWORK_APP = "fw-v2";\n\nexport const FRAMEWORK_TAIL = "shared";\n' > "$fw/src/app.js"
   write_divergence_worker "$fw/workers/example/wrangler.toml" "0.50"
   git -C "$fw" add -A
   git -C "$fw" commit -q -m "Example framework fw-v2"
   git -C "$fw" tag fw-v2
 }
 
-build_divergence_instance() { # fw dir label [edits|clean]
+build_divergence_instance() { # fw dir label [edits|clean|converged]
   local inst="$2" label="$3" variant="${4:-edits}"
   git clone -q "$1" "$inst"
   configure_repo "$inst"
+  # A legal reader-side git setting, turned on deliberately: with it, git prints a
+  # blank CONTEXT line as a truly empty line instead of a bare prefix space. The
+  # report has no say over the config of the repository it runs in, so the fixture
+  # uses the setting that makes an empty diff line indistinguishable from padding —
+  # which is what a renderer that filters empty lines silently deletes.
+  git -C "$inst" config diff.suppressBlankEmpty true
   git -C "$inst" checkout -q -B main fw-v1
   git -C "$inst" rm -q -f .sekai-template
   if [ "$variant" = "edits" ]; then
     write_divergence_worker "$inst/workers/example/wrangler.toml" "0.61"
-    printf 'export const FRAMEWORK_APP = "fw-v1";\n// instance edit\n' > "$inst/src/app.js"
+    printf 'export const FRAMEWORK_APP = "fw-v1";\n// instance edit\n\nexport const FRAMEWORK_TAIL = "shared";\n' > "$inst/src/app.js"
+  elif [ "$variant" = "converged" ]; then
+    # The instance made exactly the change fw-v2 ships. This is what upstreaming
+    # looks like from the instance's side one release later: diverged from the merge
+    # base, identical to the target.
+    printf 'export const FRAMEWORK_APP = "fw-v2";\n\nexport const FRAMEWORK_TAIL = "shared";\n' > "$inst/src/app.js"
   fi
   git -C "$inst" add -A
   git -C "$inst" commit -q -m "Adopt the Example framework at fw-v1"
@@ -2645,6 +2665,15 @@ build_divergence_instance() { # fw dir label [edits|clean]
     git -C "$inst" diff --quiet HEAD fw-v1 -- workers/example/wrangler.toml \
       && fail "$label: fixture guard — the instance did not retune the worker template"
     ok "$label: instance carries a retuned worker value and an edited source file"
+  elif [ "$variant" = "converged" ]; then
+    # Both halves of "converged" are guarded, because either one alone is a
+    # different fixture: differing from the base is what puts the path in the
+    # report at all, and matching the target is the shape under test.
+    git -C "$inst" diff --quiet HEAD fw-v1 -- src/app.js \
+      && fail "$label: fixture guard — the instance did not change src/app.js, so nothing diverged from the merge base"
+    git -C "$inst" diff --quiet HEAD fw-v2 -- src/app.js \
+      || fail "$label: fixture guard — the instance's src/app.js does not equal the target's, so this is not the converged shape"
+    ok "$label: instance changed src/app.js to exactly the content fw-v2 ships"
   else
     git -C "$inst" diff --quiet HEAD fw-v1 -- src workers .agents \
       || fail "$label: fixture guard — the clean instance is not clean under the framework-owned roots"
@@ -2685,6 +2714,18 @@ $HELPER_OUT"
 
   assert_report_names "case 15a" '+export const FRAMEWORK_APP = "fw-v2";' \
     "the framework's incoming side for the edited source file"
+
+  # The rendered hunk must keep the file's blank line. Non-vacuity first: under this
+  # instance's config git really does emit that context line as an empty one, so a
+  # renderer that drops empty lines joins text the file separates and the reader is
+  # shown a region that is not what either side contains.
+  git -C "$inst" diff --no-color --unified=2 HEAD:src/app.js fw-v2:src/app.js \
+    | grep -qx '' \
+    || fail "case 15a: fixture guard — git emitted no empty line for the file's blank line, so the assertion below proves nothing"
+  printf '%s\n' "$HELPER_OUT" | grep -qx '      ' \
+    || fail "case 15a: the rendered hunk dropped the blank line inside it, so it shows lines as adjacent that the file separates. Report was:
+$HELPER_OUT"
+  ok "case 15a: the rendered hunk keeps a blank line git emitted as an empty one"
   assert_report_silent_about "case 15a" "src/untouched.js" \
     "a framework-owned file neither side changed"
   assert_report_silent_about "case 15a" ".agents/skills/example/SKILL.md" \
@@ -2749,6 +2790,41 @@ case_divergence_unrelated_history() { # workdir
 $HELPER_OUT"
   fi
   assert_report_silent_about "case 15d" "src/app.js" "a path as diverged with no merge base"
+}
+
+# --- 15f: a path both sides moved to the same content is settled, not a conflict
+#
+# The instance changed src/app.js and fw-v2 ships that exact content, so the path
+# differs from the merge base (which is why it is in the report) and not from the
+# target. A report that reads only "changed here AND changed in the framework" calls
+# this a place a content conflict can land and then prints a "differing region"
+# header over the empty diff between two identical blobs — advice that is wrong and a
+# block that is blank, on the success state of the route ADR 010 (g) recommends.
+case_divergence_converged() { # workdir
+  local work="$1" fw inst
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_divergence_framework "$fw"
+  build_divergence_instance "$fw" "$inst" "case 15f" converged
+
+  assert_divergence_report_ok "$inst" fw-v2 "case 15f"
+
+  # The path is still listed: it IS a divergence from the merge base, and an adopter
+  # reading the report should see that this file is one of the ones they touched.
+  assert_report_names "case 15f" "src/app.js" "the path the instance changed"
+  assert_report_names "case 15f" "no conflict" "the settled outcome"
+
+  # The two defects, asserted separately: the wrong claim, and the empty block.
+  assert_report_silent_about "case 15f" "content conflict can land" \
+    "a content conflict on a path whose two sides are identical"
+  assert_report_silent_about "case 15f" "differing region" \
+    "a differing region between two identical blobs"
+  # The value pair is the indented `yours:` / `framework:` block; the leading spaces
+  # are what tell it apart from the outlook sentence, which ends "identical to yours:".
+  assert_report_silent_about "case 15f" "  yours:" \
+    "a value pair for a path with no differing value"
+  ok "case 15f: a converged path reports as settled, with no conflict claim and no empty differing region"
 }
 
 # --- 15e: the report's TOML key view and the deploy-time parser agree
@@ -3087,6 +3163,9 @@ run_all_cases() {
   echo "── case 15e: divergence report — the TOML key view matches the deploy-time parser ──"
   case_divergence_toml_key_view
   echo ""
+  echo "── case 15f: divergence report — a converged path is settled, not a conflict ──"
+  case_divergence_converged "$TMP/case15f"
+  echo ""
   echo "── option contract: the divergence report refuses rather than guessing ──"
   case_divergence_usage "$TMP/case15-usage"
   echo ""
@@ -3099,7 +3178,7 @@ run_all_cases() {
   echo "── documented roots: the docs name every framework-owned root the report walks ──"
   case_divergence_roots_documented
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, and the pre-merge divergence report (both values, no writes, clean and unrelated-history shapes) hold on all nineteen fixtures."
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, and the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes) hold on every fixture above."
 }
 
 # Run one case with its load-bearing step skipped, in a subshell whose EXIT trap is
@@ -3135,7 +3214,12 @@ run_selftest() {
   expect_case_to_fail case_helper_bootstrap_version_skew "$TMP/selftest-case13" "case 13 (helper version skew)"
   expect_case_to_fail case_mdocs_owned_ours_equals_base "$TMP/selftest-case14" "case 14 (maintainer docs, ours == base)"
   expect_case_to_fail case_divergence_report "$TMP/selftest-case15a" "case 15a (divergence report, planted divergence)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14 and 15a all fail when their load-bearing step is skipped."
+  # 15f asserts mostly ABSENCES (no conflict claim, no empty differing region), and an
+  # empty report satisfies every absence trivially. Running it here proves the case
+  # still rests on what the report must SAY, so it cannot decay into a test that a
+  # helper printing nothing at all would pass.
+  expect_case_to_fail case_divergence_converged "$TMP/selftest-case15f" "case 15f (divergence report, converged path)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a and 15f all fail when their load-bearing step is skipped."
 }
 
 main() {

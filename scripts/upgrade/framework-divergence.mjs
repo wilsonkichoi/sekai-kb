@@ -31,7 +31,7 @@
 // Exit codes: 0 = a report was produced, which includes "nothing diverged" and "these
 // histories have no merge base"; 1 = the report could not be produced; 2 = usage.
 //
-// `scripts/upgrade/check-upgrade-state.sh` is the regression gate (cases 15a-15e).
+// `scripts/upgrade/check-upgrade-state.sh` is the regression gate (cases 15a-15f).
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
@@ -137,7 +137,7 @@ function stripTrailingComment(raw) {
  * expected values and no override registry (ADR 010 (c) -- the classification lives in
  * WORKER_VAR_OVERRIDES and is not duplicated). It cannot import
  * scripts/deploy/wrangler-config.mjs, because every upgrade helper runs as a lone file
- * extracted from a release tag into the git directory. Case 15d holds the two readers
+ * extracted from a release tag into the git directory. Case 15e holds the two readers
  * to the same key view over every committed worker template.
  */
 export function tomlEntries(text) {
@@ -218,9 +218,16 @@ function diffHunks(repo, path, target) {
     { allowFailure: true, raw: true },
   );
   if (raw === null) return ['(git could not diff the two sides of this path)'];
+  // Drop only the empty element the trailing newline leaves behind, never every
+  // empty line: git prints a blank context line as a bare prefix space by default,
+  // but `diff.suppressBlankEmpty` -- a setting in the reader's own git config, which
+  // this report has no say over -- prints it as a truly empty line. Filtering those
+  // would delete blank lines out of the middle of a hunk and render text as adjacent
+  // that is not adjacent in the file.
   const lines = raw.split('\n');
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
   const start = lines.findIndex((line) => line.startsWith('@@'));
-  const hunks = (start === -1 ? lines : lines.slice(start)).filter((line) => line !== '');
+  const hunks = start === -1 ? lines : lines.slice(start);
   if (hunks.length <= MAX_DIFF_LINES) return hunks;
   return [
     ...hunks.slice(0, MAX_DIFF_LINES),
@@ -233,11 +240,24 @@ function diffHunks(repo, path, target) {
  * has to work with rather than as a prediction of the conflict text: git merges two
  * changed sides cleanly when their hunks do not overlap, and claiming a conflict that
  * does not happen would teach a reader to discount the whole report.
+ *
+ * `converged` -- the two sides are the same blob, or the path is absent from both --
+ * is the first branch because it is the success state of the route the framework
+ * recommends: an instance whose edit was upstreamed meets it in the very release that
+ * ships the edit back. Reporting that as a place a conflict can land, with an empty
+ * differing region under it, is the "claiming a conflict that does not happen" the
+ * paragraph above rules out.
  */
-function mergeOutlook({ frameworkChanged, atBase, atHead, atTarget }) {
+function mergeOutlook({ frameworkChanged, atBase, atHead, atTarget, converged }) {
   let mine = 'changed here';
   if (!atBase) mine = 'added here';
   else if (!atHead) mine = 'deleted here';
+  if (converged) {
+    if (!atHead) {
+      return `${mine}, and the framework has deleted this path too: the two sides already agree, so the merge settles this with no conflict and nothing to decide`;
+    }
+    return `${mine}, and the framework's incoming content is now identical to yours: the merge settles this with no conflict and nothing to decide`;
+  }
   if (!frameworkChanged) {
     return `${mine}; the framework has not touched this path since the merge base, so the merge keeps your side`;
   }
@@ -328,10 +348,17 @@ function report(repo, target) {
     const frameworkChanged = targetBlob !== baseBlob;
     const atHead = headBlob !== null;
     const atTarget = targetBlob !== null;
+    // Same object id on both sides, or absent from both. The path diverged from the
+    // merge base -- that is how it got into this list -- but it does not diverge from
+    // the release being merged, so there is no value pair to print and no decision
+    // under it.
+    const converged = headBlob === targetBlob;
     lines.push(`  ${path}`);
-    lines.push(`      ${mergeOutlook({ frameworkChanged, atBase: baseBlob !== null, atHead, atTarget })}`);
+    lines.push(`      ${mergeOutlook({ frameworkChanged, atBase: baseBlob !== null, atHead, atTarget, converged })}`);
 
-    if (!atHead) {
+    if (converged) {
+      // No differing region exists, so no "differing region" header goes over it.
+    } else if (!atHead) {
       lines.push(`      yours:     (deleted in this instance)`);
       lines.push(`      framework: ${target}:${path}`);
     } else if (!atTarget) {

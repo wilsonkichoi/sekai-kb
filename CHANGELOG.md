@@ -62,7 +62,12 @@ tags, never framework `main`** (ADR 004, SPEC
   the framework's incoming one — key by key for a `wrangler.toml` (the key with its
   table, `[vars] RELEVANCE_FLOOR`, your value, the framework's), as the differing region
   for anything else — plus how that path meets the merge: kept as yours, changed on both
-  sides, or a modify/delete. Reading the merge base rather than `--diff-filter=U` is what
+  sides, a modify/delete, or already settled. *Settled* is the case where your side and
+  the framework's incoming side are now the same content, which is where upstreaming an
+  edit leaves you on the release that ships it back: the path is still listed as one you
+  changed, and the report says there is no conflict and nothing to decide rather than
+  printing a value pair with the same value twice.
+  Reading the merge base rather than `--diff-filter=U` is what
   makes it a report and not an echo of the conflict list: the conflict list holds only
   what git could not settle by itself, so a file you changed that the framework did not
   is merged silently and never appears there at all. It is bootstrapped from the target
