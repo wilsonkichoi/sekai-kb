@@ -734,7 +734,8 @@ generated config. Editing the committed template directly is not forbidden — i
 repository, and `npm run worker-config:check` warns rather than failing your build for
 it — but the override key is the cheaper home: it is instance-owned, so it never
 conflicts on a framework upgrade, while a retuned template value conflicts on every
-release until you and the framework agree again (`UPGRADE.md` §Framework-owned files). Leave a key unset and the template default is carried through
+release until you and the framework agree again (`UPGRADE.md` §Framework-owned
+files). Leave a key unset and the template default is carried through
 unchanged, so an instance that sets none behaves exactly as it did before these keys
 existed. A value the worker could not use is rejected at generation time by name — a
 rate limit below `1`, a floor outside `0..1`, a fractional count, anything non-numeric —

@@ -97,7 +97,7 @@
 # TEMPLATE-mode class: each of those fixture copies is marked with a
 # .sekai-template file, which is what the framework's own tree carries. (The
 # generator classes 12-20 read no marker; that path has one behavior.) Classes
-# 21-33 below are the instance-mode half --
+# 21-34 below are the instance-mode half --
 # the same tree with no marker, standing in for an adopter's repository, where a
 # framework gate may fail the build only for something that harms a party other
 # than the person editing. There the identity classes must still exit 1 and the
@@ -137,6 +137,14 @@
 #                         adopter's tree, where both the runbook and the template are
 #                         their own files, and stays fatal in the framework's, which
 #                         is what ships the table.
+#  34. DELETED ORIGIN  -- ALLOWED_ORIGIN reached through the MISSING-key branch
+#                         rather than the changed-value one of class 25. The two are
+#                         separate branches in the gate, so class 25 leaves this one
+#                         unguarded: with it absent, widening the tuning relaxation
+#                         one branch too far would let an adopter delete their CORS
+#                         boundary with a warning only, and every other class here
+#                         would stay green. Fatal in both modes, so both are
+#                         asserted.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -158,7 +166,7 @@
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
 # exit 1 when the guard fails to catch a planted defect, classifies one into the
 # wrong mode, or the generator mishandles an override; exit 0 when all
-# thirty-three classes hold)
+# thirty-four classes hold)
 
 set -euo pipefail
 
@@ -378,6 +386,19 @@ insert_after() {
     $0 == after && done != 1 { print line; done = 1 }
   ' "$target" > "$WORK_DIR/plant.tmp"
   commit_plant "$target" "$after"
+}
+
+# Delete the first line equal to $2 from the copied template. Deleting a key is a
+# different defect from changing one -- the gate reaches each on its own branch --
+# so a class that plants a deletion cannot be written with `plant` above.
+drop_line() {
+  copy="$1"; line="$2"
+  target="$copy/$REL"
+  awk -v line="$line" '
+    $0 == line && dropped != 1 { dropped = 1; next }
+    { print }
+  ' "$target" > "$WORK_DIR/plant.tmp"
+  commit_plant "$target" "$line"
 }
 
 # Delete a whole [[table]] block from the copied template: the header line and
@@ -830,5 +851,23 @@ plant_runbook "$COPY" 'a retuned default' \
   sed 's|template (`0.46`)|template (`0.9`)|'
 assert_guard_warns "$COPY" "a drifted runbook default in an instance" \
   "$RUNBOOK_REL" '/sekai-upgrade'
+
+# 34. DELETED ALLOWED_ORIGIN: the same security boundary as class 25, reached
+# through the missing-key branch instead of the changed-value one. They are separate
+# branches in the gate, and the relaxation that lets a [vars] key warn was written on
+# both -- so without this class, widening the missing-key one by a line would let an
+# adopter delete their CORS boundary with a warning only and leave this suite green.
+# Deleting the key is not a way to pass either: the generator rewrites only keys the
+# template already carries, so the deployed worker gets whatever its compiled-in
+# fallback is rather than the origin the instance meant to allow. Fatal in both
+# modes, and neither had a class for the deletion, so both are asserted here.
+COPY="$(fresh_copy instance-deleted-origin)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+drop_line "$COPY" 'ALLOWED_ORIGIN = ""'
+assert_guard_catches "$COPY" "a deleted ALLOWED_ORIGIN in an instance"
+COPY="$(fresh_copy_template template-deleted-origin)"
+assert_guard_passes "$COPY" "an unmutated copy carrying .sekai-template"
+drop_line "$COPY" 'ALLOWED_ORIGIN = ""'
+assert_guard_catches "$COPY" "a deleted ALLOWED_ORIGIN in the template"
 
 echo "OK: worker config self-test passed -- in template mode the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, an unparseable config, and a runbook that has drifted from the shipped defaults; in instance mode it still fails on all of the identity and structural classes and warns, with both values and the upgrade cost, on the divergences that cost only the adopter; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"

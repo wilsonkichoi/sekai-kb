@@ -258,10 +258,14 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 
 ## 6. Conflict report — walk each file WITH the user
 
-Whatever is left after step 5 can only be a framework-owned file the instance
-edited locally against the ownership rule (`src/`, `scripts/`), or a file the
-instance chose to fork and manage locally. A clean list here means the merge is
-ready for step 7.
+Whatever is left after step 5 can only be a framework-owned file (`src/`,
+`scripts/`, `workers/`, `.agents/skills/`) the instance edited locally, or a file
+the instance chose to fork and manage locally. Neither is a rule the instance
+broke: framework-owned states where the file comes from and that every release
+replaces it wholesale, not what the instance may edit (ADR 010). A conflict here
+is the cost that ownership predicts, and this step is where it gets paid — one
+file at a time, with the user. A clean list here means the merge is ready for
+step 7.
 
 Do **not** blindly take one side. For each conflicted path, present a short
 report and a proposal, then let the user decide:
