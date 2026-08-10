@@ -87,6 +87,27 @@ export interface PlaceConfig {
     chat?: string;
     /** D1 `database_id` for the chat worker's rolling rate-limit state. */
     chatDatabaseId?: string;
+    /**
+     * Accepted chat requests per hashed address in the rolling window. Template
+     * default `20`. The limit is keyed on a hash of the caller's public address, so
+     * everyone behind one NAT — a hotspot, a cafe, a school — shares one budget.
+     * Raise it for busier placements. `docs/runbook/DEPLOY.md` §Deploying the chat
+     * worker.
+     */
+    chatRateLimitMax?: number;
+    /**
+     * Length of that rolling window, in seconds. Template default `3600`.
+     * `docs/runbook/DEPLOY.md` §Deploying the chat worker.
+     */
+    chatRateLimitWindowSeconds?: number;
+    /**
+     * Cosine score a corpus chunk must reach to be retrieved by the chat worker,
+     * within `0..1`. Template default `0.46`, measured against the demo corpus —
+     * a separating value is a property of YOUR corpus, so re-measure it and record
+     * the answer here. `docs/runbook/DEPLOY.md` §Tuning the relevance floor has
+     * the procedure.
+     */
+    chatRelevanceFloor?: number;
     /** URL of this instance's deployed `workers/og/` worker. */
     og?: string;
   };

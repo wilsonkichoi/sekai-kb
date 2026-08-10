@@ -723,9 +723,32 @@ is derived from `place.domain` and exact-match CORS rejects every other origin.
 | `ALLOWED_ORIGIN` | yes | `place.domain` | The only accepted browser origin. Unset or mismatched requests receive 403. |
 | `SITE_NAME` | yes | `place.name` | Site identity injected into the system prompt. |
 | `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the stored address hash. Missing or blank requests receive 500. |
-| `RATE_LIMIT_MAX` | no | template (`20`) | Accepted requests per hashed address in the rolling window. |
-| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`) | Exact rolling-window duration in seconds. |
-| `RELEVANCE_FLOOR` | no | template (`0.46`) | Cosine score a chunk must reach to be retrieved. Nothing clears it means nothing is cited and the answer refuses. See below. |
+| `RATE_LIMIT_MAX` | no | template (`20`), override `workers.chatRateLimitMax` | Accepted requests per hashed address in the rolling window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`), override `workers.chatRateLimitWindowSeconds` | Exact rolling-window duration in seconds. |
+| `RELEVANCE_FLOOR` | no | template (`0.46`), override `workers.chatRelevanceFloor` | Cosine score a chunk must reach to be retrieved. Nothing clears it means nothing is cited and the answer refuses. See below. |
+
+The three rows above carry an **override**: the committed `workers/chat/wrangler.toml`
+is framework-owned and ships the default, but you can set a different value in
+`place.config.ts` under `workers` and `npm run worker-config` writes it into the
+generated config. Leave a key unset and the template default is carried through
+unchanged, so an instance that sets none behaves exactly as it did before these keys
+existed. A value the worker could not use is rejected at generation time by name — a
+rate limit below `1`, a floor outside `0..1`, a fractional count, anything non-numeric —
+rather than deploying and silently falling back to the default.
+
+```ts
+workers: {
+  // ...
+  chatRateLimitMax: 60,
+  chatRelevanceFloor: 0.52,
+},
+```
+
+The rate limit is keyed on `sha256(address + salt)`, which is **per public address, not
+per person**: everyone behind one NAT shares one budget. A hotspot, a cafe, a hotel, a
+school, and a QR code that puts the chat in front of a group standing in one place all
+land on the same key. Raise `chatRateLimitMax` for placements busier than the default
+assumes.
 
 ### Tuning the relevance floor
 
@@ -749,6 +772,20 @@ corpus, and your corpus is not that corpus.** Re-measure it after your content s
    take its dot product with each stored vector divided by 127.
 4. Compare the best score per question across the two lists. Set the floor in the gap
    between them.
+5. Record that value in `place.config.ts` as `workers.chatRelevanceFloor`, then
+   `npm run worker-config` and redeploy. That key is the supported home for a measured
+   floor: it is instance-owned, it survives every `/sekai-upgrade`, and the generated
+   config it feeds is what `wrangler deploy` reads. Editing
+   `workers/chat/wrangler.toml` instead forks a framework-owned file and re-conflicts on
+   each release, and a value typed into the Cloudflare dashboard is overwritten by the
+   next deploy.
+
+```ts
+workers: {
+  // ...
+  chatRelevanceFloor: 0.52,
+},
+```
 
 On the demo corpus, measured 2026-08-08, that gap runs from 0.435 (the best score any
 never-mentioned place reached) to 0.484 (the worst score a real question reached), and

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
 # check-worker-config-selftest.sh -- non-vacuity proof for the worker config
-# gate (scripts/ci/check-worker-config.mjs).
+# gate (scripts/ci/check-worker-config.mjs) and behavioral proof for the config
+# generator (scripts/deploy/gen-worker-config.mjs).
 #
 # A guard that only ever asserts the green path proves nothing: it would pass
 # just as happily with an empty file list or an unreachable comparison. This
-# test plants ten defect classes -- every kind of deployment identity that
+# test plants eleven defect classes -- every kind of deployment identity that
 # must never be committed, plus the worker the guard has never heard of, the
 # template that lost a whole block, the derived artifacts that must never be
-# tracked, and the three ways the runbook can stop telling the truth about a
+# tracked, and the four ways the runbook can stop telling the truth about a
 # shipped default -- and requires the guard to FAIL each time:
 #
 #   1. ORIGIN        -- a real https origin in [vars] ALLOWED_ORIGIN. The
@@ -48,10 +49,36 @@
 #  10. DROPPED ANCHOR-- the <!-- worker-vars: --> comment removed. It is what
 #                       ties a table to this gate, so deleting it must fail
 #                       rather than quietly exempt the table.
+#  11. DROPPED OVERRIDE -- the ", override `workers.<key>`" clause removed from a
+#                       Source cell whose var an instance may retune. The runbook
+#                       is where an operator is told to measure a value; a table
+#                       that states the default and not where the answer goes
+#                       sends them back to editing a framework-owned file.
 #
-# Classes 8-10 need a fixture carrying the runbook as well as workers/; the
+# Classes 8-11 need a fixture carrying the runbook as well as workers/; the
 # copies used by 1-7 have no docs/ tree, which also exercises the guard's
 # skip-when-absent path.
+#
+# The classes after those cover the other half of the same contract: the
+# GENERATOR (scripts/deploy/gen-worker-config.mjs) writing the deploy-time
+# tuning vars an instance may override from place.config.ts. Six more:
+#
+#  12. UNSET       -- a place.config.ts setting none of the override keys must
+#                     generate a config byte-identical to the one recorded in
+#                     scripts/ci/fixtures/worker-config-chat-unset.toml, which
+#                     was produced before the override path existed. That is
+#                     what makes the absent-safe claim checkable rather than
+#                     asserted: a stray formatting change, a reordered key, or
+#                     an override that fires when its key is unset all fail here.
+#  13. SET         -- all three keys set to non-default values must reach the
+#                     generated [vars] block quoted the way the template writes
+#                     them, and must change NOTHING else: exactly three lines
+#                     differ from the recorded unset output.
+#  14-17. REJECTED -- a non-numeric value, a floor outside 0..1, and each rate
+#                     limit below 1 must fail generation by name. The worker
+#                     parses these vars leniently and falls back to its own
+#                     defaults, so a value it cannot use would otherwise deploy
+#                     clean and behave as if the instance had configured nothing.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -71,8 +98,8 @@
 # scripts/, which both gates scan; the planted place names are invented.
 #
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
-# exit 1 when the guard fails to catch a planted defect, exit 0 when it catches
-# all ten)
+# exit 1 when the guard fails to catch a planted defect or the generator
+# mishandles an override, exit 0 when all seventeen classes hold)
 
 set -euo pipefail
 
@@ -81,6 +108,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)"
 cd "$ROOT"
 
 GUARD="$ROOT/scripts/ci/check-worker-config.mjs"
+GENERATOR="$ROOT/scripts/deploy/gen-worker-config.mjs"
+
+# The chat config the generator produces from the fixture place.config.ts below
+# with none of the tuning keys set. Recorded from the generator as it stood
+# before the override path existed, which is the only thing that makes class 12
+# a regression test rather than a restatement of current behavior.
+EXPECTED_UNSET="$ROOT/scripts/ci/fixtures/worker-config-chat-unset.toml"
+GENERATED_REL="workers/chat/wrangler.generated.toml"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/worker-config-selftest.XXXXXX")"
 cleanup() {
@@ -310,4 +345,141 @@ assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
 plant_runbook "$COPY" 'a deleted table anchor' grep -v 'worker-vars: chat'
 assert_guard_catches "$COPY" "a deleted worker-vars anchor" "$RUNBOOK_REL"
 
-echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, and a runbook that has drifted from the shipped defaults"
+# 11. DROPPED OVERRIDE: the Source cell still states the right default, but no
+# longer says where a retuned value goes. Only the override cross-check catches
+# it; every value comparison above still passes.
+COPY="$(fresh_copy_with_runbook dropped-override)"
+assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
+plant_runbook "$COPY" 'a deleted override key' \
+  sed 's|template (`0.46`), override `workers.chatRelevanceFloor`|template (`0.46`)|'
+assert_guard_catches "$COPY" "a Source cell that no longer names its override key" "$RUNBOOK_REL"
+
+# -- The generator's override path ------------------------------------------
+#
+# Everything above points the GATE at a mutated tree. Everything below runs the
+# GENERATOR against a fixture place.config.ts and reads what it wrote.
+
+# A fixture root: the committed workers/ tree plus a place.config.ts whose
+# `workers` block is exactly the lines passed as $2 (empty for none). The place
+# name and domain are invented -- this file lives under scripts/, which both
+# machine gates scan.
+fresh_copy_with_place_config() {
+  label="$1"; workers_body="$2"
+  copy="$(fresh_copy "$label")"
+  {
+    echo 'const config = {'
+    echo "  place: { name: 'Selftest Place', domain: 'selftest.example' },"
+    echo '  categories: [],'
+    echo '  workers: {'
+    if [ -n "$workers_body" ]; then printf '%s\n' "$workers_body"; fi
+    echo '  },'
+    echo '};'
+    echo 'export default config;'
+  } > "$copy/place.config.ts"
+  echo "$copy"
+}
+
+# Node needs the type-stripping flag to import a .ts config, the same way the
+# `npm run worker-config` script passes it.
+run_generator() {
+  where="$1"
+  node --experimental-strip-types "$GENERATOR" --root "$where" > "$OUT" 2>&1
+}
+
+assert_generator_succeeds() {
+  where="$1"; label="$2"
+  if ! run_generator "$where"; then
+    echo "worker config self-test: the generator failed on $label -- cannot trust the" >&2
+    echo "  assertions that read its output:" >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+}
+
+# The generator must FAIL and name both the offending place.config.ts key and
+# the value it rejected. Naming only one leaves an operator guessing which of
+# three keys they mistyped.
+assert_generator_rejects() {
+  where="$1"; what="$2"; want_key="$3"; want_value="$4"
+  if run_generator "$where"; then
+    echo "FAIL: worker config self-test -- the generator ACCEPTED $what. The worker falls" >&2
+    echo "  back to its own default for a value it cannot parse, so this would deploy" >&2
+    echo "  clean and behave as if nothing had been configured." >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+  for want in "$want_key" "$want_value"; do
+    if ! grep -q -- "$want" "$OUT"; then
+      echo "FAIL: worker config self-test -- the generator rejected $what but its output" >&2
+      echo "  never names $want:" >&2
+      cat "$OUT" >&2
+      exit 1
+    fi
+  done
+}
+
+assert_generated_var() {
+  where="$1"; key="$2"; want="$3"
+  if ! grep -q "^$key = $want\$" "$where/$GENERATED_REL"; then
+    echo "FAIL: worker config self-test -- $GENERATED_REL does not carry" >&2
+    echo "  $key = $want. The override never reached the generated [vars] block:" >&2
+    cat "$where/$GENERATED_REL" >&2
+    exit 1
+  fi
+}
+
+# 12. UNSET: the absent-safe case, proven byte for byte against output recorded
+# before these keys existed. An override that fires on an unset key, or any
+# incidental formatting drift, fails here rather than in someone's deploy.
+COPY="$(fresh_copy_with_place_config generate-unset "")"
+assert_generator_succeeds "$COPY" "a place.config.ts setting no tuning overrides"
+if ! cmp -s "$COPY/$GENERATED_REL" "$EXPECTED_UNSET"; then
+  echo "FAIL: worker config self-test -- with no tuning key set, the generated chat config" >&2
+  echo "  is no longer byte-identical to the recorded pre-override output. Adding these" >&2
+  echo "  keys must change nothing for an instance that sets none of them." >&2
+  diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" >&2 || true
+  echo "  If the committed template legitimately changed, re-record the expectation:" >&2
+  echo "    cp <a generated chat config from this fixture> $EXPECTED_UNSET" >&2
+  exit 1
+fi
+
+# 13. SET: all three reach [vars] with their exact values, quoted as TOML
+# strings the way the template writes them, and nothing else moves.
+COPY="$(fresh_copy_with_place_config generate-set "    chatRateLimitMax: 60,
+    chatRateLimitWindowSeconds: 900,
+    chatRelevanceFloor: 0.52,")"
+assert_generator_succeeds "$COPY" "a place.config.ts setting all three tuning overrides"
+assert_generated_var "$COPY" 'RATE_LIMIT_MAX' '"60"'
+assert_generated_var "$COPY" 'RATE_LIMIT_WINDOW_SECONDS' '"900"'
+assert_generated_var "$COPY" 'RELEVANCE_FLOOR' '"0.52"'
+CHANGED="$(diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" | grep -c '^>' || true)"
+if [ "$CHANGED" != "3" ]; then
+  echo "FAIL: worker config self-test -- setting the three tuning keys changed $CHANGED line(s)" >&2
+  echo "  in the generated chat config; exactly 3 must change." >&2
+  diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" >&2 || true
+  exit 1
+fi
+
+# 14. NON-NUMERIC: the declared type is a number; anything else is a typo that
+# must not survive to a deploy.
+COPY="$(fresh_copy_with_place_config generate-bad-type "    chatRateLimitMax: 'sixty',")"
+assert_generator_rejects "$COPY" "a non-numeric override value" \
+  'workers.chatRateLimitMax' 'sixty'
+
+# 15. FLOOR OUT OF RANGE: it is compared against a cosine score, so a value
+# above 1 is one no chunk can ever clear.
+COPY="$(fresh_copy_with_place_config generate-bad-floor "    chatRelevanceFloor: 1.5,")"
+assert_generator_rejects "$COPY" "a relevance floor outside 0..1" \
+  'workers.chatRelevanceFloor' '1.5'
+
+# 16. RATE LIMIT BELOW 1: not a smaller budget, a worker that rejects everyone.
+COPY="$(fresh_copy_with_place_config generate-bad-max "    chatRateLimitMax: 0,")"
+assert_generator_rejects "$COPY" "a rate-limit ceiling below 1" \
+  'workers.chatRateLimitMax' '0'
+
+# 17. WINDOW BELOW 1: the same, one key over.
+COPY="$(fresh_copy_with_place_config generate-bad-window "    chatRateLimitWindowSeconds: 0,")"
+assert_generator_rejects "$COPY" "a rate-limit window below 1 second" \
+  'workers.chatRateLimitWindowSeconds' '0'
+
+echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, and a runbook that has drifted from the shipped defaults; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, and rejects a value the worker could not use"

@@ -50,6 +50,85 @@ export const PLACEHOLDER = 'REPLACE_VIA_NPM_RUN_WORKER_CONFIG';
 /** Longest <place-slug> the derivation emits, before the `-<worker>` suffix. */
 export const PLACE_SLUG_MAX = 40;
 
+/* -- Instance-overridable deploy vars ---------------------------------------
+ *
+ * A committed template's [vars] value is a framework constant, and workers/ is
+ * framework-owned (AGENTS.md iron rule 3), so an instance that needs a different
+ * one has nowhere to put it: editing the template forks a framework file and
+ * re-conflicts on every upgrade, and a dashboard edit is overwritten by the next
+ * `wrangler deploy` from the generated config. The vars registered below are the
+ * ones the framework asks an instance to retune -- docs/runbook/DEPLOY.md ships a
+ * measurement procedure for RELEVANCE_FLOOR, and the rate limit is keyed on a
+ * hashed public address, so everyone behind one NAT shares one budget.
+ *
+ * One entry per worker directory, one row per var. `configKey` is the key under
+ * `workers` in place.config.ts; `kind` is the range the value must fall in. A
+ * second worker joining this list is another row here: the generator iterates the
+ * table and the gate reads it, so neither grows a per-worker branch.
+ *
+ * Absent-safe by construction (SPEC invariant, "new place.config keys must be
+ * absent-safe"): an unset key pushes no override, so the template constant is
+ * carried through byte for byte and an instance that sets none behaves as before.
+ * The committed template stays the default carrier and stays gated -- an override
+ * exists only in the generated, gitignored config.
+ */
+export const WORKER_VAR_OVERRIDES = {
+  chat: {
+    RATE_LIMIT_MAX: { configKey: 'chatRateLimitMax', kind: 'count' },
+    RATE_LIMIT_WINDOW_SECONDS: { configKey: 'chatRateLimitWindowSeconds', kind: 'count' },
+    RELEVANCE_FLOOR: { configKey: 'chatRelevanceFloor', kind: 'unitInterval' },
+  },
+};
+
+/**
+ * The TOML string form of one override value, or a thrown Error naming the config
+ * key and the value that failed.
+ *
+ * Validating here rather than in the worker is deliberate. The worker parses these
+ * vars leniently on purpose -- `positiveIntVar` and `unitIntervalVar` in
+ * workers/chat/src/index.mjs fall back to their compiled-in defaults rather than
+ * failing a reader's request -- so a mistyped value deploys cleanly and then behaves
+ * exactly as if the instance had never configured it. Generation time is the only
+ * point where saying no is still cheap and still visible.
+ *
+ * `count` rejects a fractional value because the worker floors it: generating
+ * "20.7" would deploy a limit of 20 while place.config.ts says something else.
+ */
+export function overrideVarValue(configKey, value, kind) {
+  const shown = JSON.stringify(value) ?? String(value);
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(
+      `workers.${configKey} must be a finite number, but place.config.ts sets ${shown}.`,
+    );
+  }
+  if (kind === 'count') {
+    if (!Number.isInteger(value)) {
+      throw new Error(
+        `workers.${configKey} must be a whole number, but place.config.ts sets ${shown}. ` +
+          'The worker floors a fractional value, so the deployed limit would not be the ' +
+          'configured one.',
+      );
+    }
+    if (value < 1) {
+      throw new Error(
+        `workers.${configKey} must be at least 1, but place.config.ts sets ${shown}. ` +
+          'A value below 1 is not a smaller budget; it is a worker that rejects every request.',
+      );
+    }
+  } else if (kind === 'unitInterval') {
+    if (value < 0 || value > 1) {
+      throw new Error(
+        `workers.${configKey} must be within 0..1, but place.config.ts sets ${shown}. ` +
+          'It is compared against a cosine similarity score, which cannot fall outside ' +
+          'that range, so no chunk would ever clear it (or every chunk always would).',
+      );
+    }
+  } else {
+    throw new Error(`workers.${configKey} is registered with an unknown override kind "${kind}".`);
+  }
+  return String(value);
+}
+
 /* -- Derivation ----------------------------------------------------------- */
 
 /**

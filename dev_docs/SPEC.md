@@ -173,7 +173,8 @@ Schema: `place {name, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`workers? {feedback?, feedbackDatabaseId?, chat?, chatDatabaseId?, og?}`,
+`workers? {feedback?, feedbackDatabaseId?, chat?, chatDatabaseId?, chatRateLimitMax?,
+chatRateLimitWindowSeconds?, chatRelevanceFloor?, og?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
 Init-time: written only by the `npm run init`
@@ -201,6 +202,22 @@ Both the top-level section list and the `features` flag list are derived from
 > a consumer requires both its `features` flag and a non-empty endpoint, so a missing
 > `workers` block leaves the capability off, and an unset database id generates an
 > empty value with a note rather than failing.
+>
+> This block carries a third role, added in LB-89: a **deploy-time tuning override**
+> (`workers.chatRateLimitMax`, `chatRateLimitWindowSeconds`, `chatRelevanceFloor`).
+> Unlike the first two roles these are not place identity — the framework ships a real
+> default for each in `workers/chat/wrangler.toml`, and the committed template remains
+> the default carrier and stays gated at those constants. They live here because the
+> framework *asks* an instance to retune them (§New builds (6) sends an adopter to
+> `docs/runbook/DEPLOY.md` to re-measure the floor against their own corpus) and iron
+> rule 3 makes `workers/` framework-owned, so there was no supported place to record the
+> answer. The registry is `WORKER_VAR_OVERRIDES` in `scripts/deploy/wrangler-config.mjs`,
+> shared by the generator and the gate; a second worker's vars are another entry in it,
+> not a second mechanism. Absent-safe: an unset key pushes no override, so the generated
+> config is byte-identical to one produced before the keys existed. Values are validated
+> at generation time and rejected by name, because the worker parses these vars leniently
+> and would otherwise fall back to its own defaults on a typo, deploying clean and
+> behaving as if nothing had been configured.
 
 > **`categories[].color?` / `colorLight?`:** optional hex color strings
 > for category display (hero tints, tag badges, sidebar accents). Absent-safe: when

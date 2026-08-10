@@ -34,6 +34,14 @@
 //     the only place an operator reads these values, and it ships to every adopter on
 //     the next tag merge, so a retuned constant with a stale table is a wrong number
 //     with no way for its reader to know;
+//   - a runbook row whose Source cell disagrees with WORKER_VAR_OVERRIDES about where
+//     an instance records a retuned value: an overridable var whose row names no
+//     `workers.<key>`, a row naming a key no override is registered for, or a row
+//     naming the wrong one. Telling an operator to measure a value and not telling them
+//     where to put the answer is the defect this whole override path exists to fix, and
+//     it comes back the moment the two drift;
+//   - an override registered for a [vars] key the committed template does not carry
+//     (the generator would fail on it the first time an instance set the key);
 //   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
 //     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
 //     embeddings:build`). Both are gitignored and both are skipped by name in the two
@@ -57,6 +65,7 @@ import {
   GENERATED_BASENAME,
   PLACEHOLDER,
   TEMPLATE_BASENAME,
+  WORKER_VAR_OVERRIDES,
   parseWranglerToml,
 } from '../deploy/wrangler-config.mjs';
 
@@ -196,6 +205,19 @@ for (const dir of workerDirs) {
     }
   }
 
+  // An override is a promise that setting `workers.<key>` changes a real deploy var.
+  // If the template drops the var, that promise fails only for the instance that set
+  // the key, at generation time, long after the change that broke it.
+  for (const [key, spec] of Object.entries(WORKER_VAR_OVERRIDES[dir] ?? {})) {
+    if (!(key in vars)) {
+      failures.push(
+        `${rel}: scripts/deploy/wrangler-config.mjs registers \`workers.${spec.configKey}\` as an ` +
+          `override for [vars] ${key}, but the template carries no such key. Restore it, or drop ` +
+          'the registration.',
+      );
+    }
+  }
+
   const ai = config.tables.ai;
   if (expected.aiBinding) {
     if (!ai || ai.binding !== expected.aiBinding) {
@@ -253,6 +275,13 @@ for (const dir of workerDirs) {
  * directions: a documented value that has drifted, and a shipped default the runbook
  * never mentions, are the same defect seen from either end.
  *
+ * A shipped constant an instance may retune carries a second clause,
+ * "template (`X`), override `workers.<key>`", and that clause is checked against
+ * WORKER_VAR_OVERRIDES the same way in both directions. The runbook is where an
+ * operator is told to measure a value; a table that states the default without stating
+ * where the answer goes sends them back to editing a framework-owned file, which is the
+ * state this override path was added to end.
+ *
  * What this cannot cover: the measured scores in the "Tuning the relevance floor"
  * section (0.435, 0.484, 0.512, 0.595). Those are experimental results produced by
  * running an embedding model over the demo corpus, not values any source in this
@@ -261,6 +290,14 @@ for (const dir of workerDirs) {
  * order to distrust them once the corpus has moved.
  */
 const RUNBOOK_REL = 'docs/runbook/DEPLOY.md';
+
+/**
+ * A Source cell claiming a shipped constant, optionally naming the place.config.ts
+ * key that overrides it: "template (`0.46`), override `workers.chatRelevanceFloor`".
+ * A cell in any other shape is a row about something else and is not checked here.
+ */
+const SOURCE_RE = /^template \(`([^`]*)`\)(?:, override `workers\.([A-Za-z0-9_]+)`)?$/;
+
 const runbookAbs = join(root, RUNBOOK_REL);
 const runbookPresent = existsSync(runbookAbs);
 
@@ -297,8 +334,8 @@ if (runbookPresent) {
     for (const row of rows) {
       const cells = row.split('|').slice(1, -1).map((cell) => cell.trim());
       const name = cells[0]?.match(/^`([A-Za-z0-9_]+)`$/);
-      const value = cells[2]?.match(/^template \(`([^`]*)`\)$/);
-      if (name && value) defaults.set(name[1], value[1]);
+      const source = cells[2]?.match(SOURCE_RE);
+      if (name && source) defaults.set(name[1], { value: source[1], overrideKey: source[2] });
     }
     documented.set(worker, defaults);
   }
@@ -312,7 +349,8 @@ if (runbookPresent) {
       );
       continue;
     }
-    for (const [key, value] of defaults) {
+    const overridable = WORKER_VAR_OVERRIDES[worker] ?? {};
+    for (const [key, { value, overrideKey }] of defaults) {
       if (!(key in expected.vars)) {
         failures.push(
           `${RUNBOOK_REL}: documents ${worker} [vars] ${key} as a shipped default, but the ` +
@@ -328,6 +366,18 @@ if (runbookPresent) {
           `${RUNBOOK_REL}: ${worker} [vars] ${key}\n` +
             `      documented: ${JSON.stringify(value)}\n` +
             `      shipped:    ${JSON.stringify(expected.vars[key])} (workers/${worker}/${TEMPLATE_BASENAME})`,
+        );
+      }
+
+      const wantKey = overridable[key]?.configKey;
+      if (wantKey !== overrideKey) {
+        failures.push(
+          `${RUNBOOK_REL}: ${worker} [vars] ${key} Source cell\n` +
+            `      documents override: ${overrideKey ? `\`workers.${overrideKey}\`` : 'none'}\n` +
+            `      registered:         ${wantKey ? `\`workers.${wantKey}\`` : 'none'} ` +
+            '(WORKER_VAR_OVERRIDES in scripts/deploy/wrangler-config.mjs)\n' +
+            '      The Source cell is where an operator reads whether a value can be retuned ' +
+            'and where the answer goes.',
         );
       }
     }

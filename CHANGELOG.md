@@ -43,6 +43,42 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **The chat worker's three deploy-time tuning vars are now settable from
+  `place.config.ts`.** `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SECONDS`, and
+  `RELEVANCE_FLOOR` had no instance-owned override path: `workers/chat/wrangler.toml`
+  is framework-owned (`AGENTS.md` iron rule 3), so editing it forks a framework file
+  that re-conflicts on every `/sekai-upgrade`, and a value typed into the Cloudflare
+  dashboard is overwritten by the next `wrangler deploy` from the generated config.
+  That left `RELEVANCE_FLOOR` in a contradiction: `docs/runbook/DEPLOY.md` §Tuning the
+  relevance floor ships a procedure for re-measuring it against your own corpus, and
+  the framework provided nowhere to record the answer. The rate limit is the
+  reader-facing half — it is keyed on a hash of the caller's public address, so
+  everyone behind one NAT (a hotspot, a cafe, a school, a group standing at one QR
+  code) shares a single budget of 20 requests per hour.
+
+  Three optional keys under `workers` now carry them: `chatRateLimitMax`,
+  `chatRateLimitWindowSeconds`, and `chatRelevanceFloor`. `npm run worker-config`
+  writes each one that is set into the generated config; the committed template keeps
+  its framework constants, stays the default carrier, and stays gated at them. A value
+  the worker could not use is rejected at generation time by name — a rate limit below
+  `1`, a floor outside `0..1`, a fractional count, anything non-numeric — because the
+  worker parses these vars leniently and would otherwise deploy clean while silently
+  falling back to its own defaults. The runbook's `chat` var table now names the
+  override key beside each default, and `npm run worker-config:check` fails when that
+  table and the override registry disagree.
+
+> **Upgrade note:** `workers.chatRateLimitMax`, `workers.chatRateLimitWindowSeconds`,
+> and `workers.chatRelevanceFloor` are optional, absent-safe config-schema additions.
+> An instance that sets none of them behaves exactly as before: no key set means no
+> override, and the generated worker config is byte-identical to the one the previous
+> release produced from the same `place.config.ts` (a self-test case now holds that
+> byte-for-byte). No edit is required at merge time. Set them only when you have a
+> reason: a re-measured relevance floor for your own corpus, or a rate ceiling for
+> placements busier than the template's default assumes. Regenerate with
+> `npm run worker-config` and redeploy after changing one.
+
 ### Fixed
 
 - **A tag merge no longer stops the upgrade over a maintainer document you kept
