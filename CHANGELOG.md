@@ -45,6 +45,35 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Added
 
+- **`/sekai-upgrade` now names the framework-owned files you have diverged on, with the
+  framework's incoming value beside yours, before the merge.** The previous release made
+  editing a framework-owned file a warning rather than a build failure, and rewrote
+  `docs/runbook/UPGRADE.md` so no instruction discards your side without naming it. That
+  left the naming itself as manual work: at merge time you got a bare conflict list and
+  had to reconstruct, by reading two revisions of each file, what you had changed and
+  why. A new helper, `scripts/upgrade/framework-divergence.mjs`, does it for you:
+
+  ```bash
+  node "$DIVERGENCE_HELPER" report --target "$TARGET"
+  ```
+
+  It walks `src/`, `scripts/`, `workers/`, and `.agents/skills/`, and for every path
+  whose content differs from your merge base with the target it prints your value and
+  the framework's incoming one — key by key for a `wrangler.toml` (the key with its
+  table, `[vars] RELEVANCE_FLOOR`, your value, the framework's), as the differing region
+  for anything else — plus how that path meets the merge: kept as yours, changed on both
+  sides, or a modify/delete. Reading the merge base rather than `--diff-filter=U` is what
+  makes it a report and not an echo of the conflict list: the conflict list holds only
+  what git could not settle by itself, so a file you changed that the framework did not
+  is merged silently and never appears there at all. It is bootstrapped from the target
+  tag like every other upgrade helper, runs before the merge, and **writes nothing** —
+  no state file, no staged path, no side taken. There is no reconcile step for it, and
+  every decision it reports stays yours. An instance carrying no local edits gets a
+  three-line clean report; a first, unrelated-history merge has no common ancestor to
+  measure against, so it says so and claims nothing rather than listing your whole tree.
+  `docs/runbook/UPGRADE.md` step 4d and the `/sekai-upgrade` skill's step 3c are the same
+  command, and `scripts/upgrade/check-upgrade-state.sh` holds them to it.
+
 - **The chat worker's three deploy-time tuning vars are now settable from
   `place.config.ts`.** `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SECONDS`, and
   `RELEVANCE_FLOOR` had no instance-owned override path: `workers/chat/wrangler.toml`

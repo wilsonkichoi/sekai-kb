@@ -243,10 +243,14 @@ jobs:
       # and only the explicit post-verification bump moves it. Case 13 covers the
       # bootstrap itself: every helper is run from the target tag, never from the
       # instance's tree copy, which shipped with the release being left and would
-      # otherwise deny a release its own helper fix. The harness builds
+      # otherwise deny a release its own helper fix. It also covers the pre-merge
+      # divergence report (ADR 010 (e)): the framework-owned paths an instance
+      # changed since its merge base are enumerated with both values before the
+      # merge, nothing is auto-resolved, and an unrelated-history first merge
+      # claims no divergence at all. The harness builds
       # disposable git repos and drives the same scripts/upgrade/ helpers users run,
       # so it is framework-owned and never guarded away on an adopter.
-      - name: Upgrade state regressions (dev-plugin, maintainer docs, FRAMEWORK-VERSION, tag-first bootstrap)
+      - name: Upgrade state regressions (dev-plugin, maintainer docs, FRAMEWORK-VERSION, tag-first bootstrap, divergence report)
         run: |
           git config --global user.email "ci@example.invalid"
           git config --global user.name "CI"

@@ -135,7 +135,39 @@
 # the file as unclaimed and stops the upgrade with the remedy that cannot fix it. Case
 # 14 pins the cleanly-merged producer and case 10b the conflicted one.
 #
-# Two option-contract checks close the loop from the other side:
+# Cases 15a-15e cover the fourth helper, `scripts/upgrade/framework-divergence.mjs`
+# (ADR 010 (e)). Its contract:
+#
+#   node scripts/upgrade/framework-divergence.mjs report --target <tag> [--repo <dir>]
+#   node scripts/upgrade/framework-divergence.mjs roots [--repo <dir>]
+#
+#   BEFORE the merge, every framework-owned path (the roots `roots` prints, from
+#   which this harness derives its fixtures) whose content at HEAD differs from the
+#   same path at `git merge-base HEAD <target>` is reported with the instance's value
+#   and the incoming framework value: key by key for a `.toml`, as the differing
+#   region otherwise. Reading the merge base rather than `--diff-filter=U` afterwards
+#   is the point — the conflict list holds only what git could not resolve, so an
+#   edit the framework never collided with is merged silently and never appears in
+#   it. Exit 0 report / 1 not producible / 2 usage.
+#
+#  15a. A planted divergence is enumerated with BOTH values, and only it: a worker
+#       template the instance retuned (three distinct floors across merge base,
+#       target, and instance, so presenting the wrong side is caught), an edited
+#       source file, and two framework-owned paths neither side touched that must
+#       NOT appear.
+#  15b. The same run writes nothing: HEAD, the porcelain status, the index, and every
+#       file in the working tree and the git directory are identical afterwards. No
+#       path is resolved in either direction, which is the whole difference between
+#       this report and the `--theirs` sweep ADR 010 (f) removed.
+#  15c. An instance with no framework-owned edit gets a clean report and no extra step.
+#  15d. An unrelated-history first merge has no common ancestor: the report says so
+#       and claims no divergence, rather than declaring every framework file drifted.
+#  15e. The report's TOML key view agrees with `scripts/deploy/wrangler-config.mjs`
+#       over every committed worker template. The helper cannot import that module —
+#       it runs as a lone file extracted from a release tag — so the two readers are
+#       held to one answer here instead.
+#
+# Three option-contract checks close the loop from the other side:
 #
 #   - `reconcile` must REJECT `--from-tag` (exit 2). Reconciliation derives from the
 #     MERGED tree on purpose: that is how a merge which did not bring the wizard
@@ -147,20 +179,27 @@
 #     non-vacuity probe, because the helper's source is full of single-quoted git
 #     arguments (`--quiet`, `--ignore-unmatch`, ...) that a whole-file grep would
 #     wrongly report as accepted CLI options.
+#   - The framework-owned roots the divergence report walks are derived from that
+#     helper and required to appear in both documents, with a probe proving the
+#     pattern can fail. A root the report covers and the runbook does not name leaves
+#     an adopter reading a list missing the tree their edit is in.
 #
 # `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9,
-# 10, 11, 12, 12c, 13 and 14 with the reconcile step DELIBERATELY SKIPPED and requires each
-# case's own assertions to FAIL. A skipped-reconcile run that passes means the case
+# 10, 11, 12, 12c, 13, 14 and 15a with their load-bearing step DELIBERATELY SKIPPED and
+# requires each
+# case's own assertions to FAIL. A skipped run that passes means the case
 # cannot detect the regression it exists to guard, and --selftest exits nonzero. No
-# reconcile-dependent assertion is gated on the skip toggle, because gating one out
-# is how a case silently becomes vacuous.
+# assertion that depends on that step is gated on the skip toggle, because gating one
+# out is how a case silently becomes vacuous. For the reconcile helpers the skipped
+# step is `reconcile`; for the report-only divergence helper it is the report itself,
+# which the toggle replaces with an empty one.
 #
 # Fixtures use only generic names (Example / Instance / fw-v1) — this repo is in
 # whole-tree template mode, so the genericity + English-only gates scan this file
 # and everything it writes into scripts/.
 #
 # Usage:
-#   bash scripts/upgrade/check-upgrade-state.sh             all fifteen cases
+#   bash scripts/upgrade/check-upgrade-state.sh             all nineteen cases
 #   bash scripts/upgrade/check-upgrade-state.sh --selftest  non-vacuity proof
 #
 # Portability: macOS bash 3.2 + CI bash 5 (no mapfile/readarray, no associative
@@ -202,6 +241,26 @@ if [ ! -f "$PACKAGE_HELPER_SRC" ]; then
 fi
 PACKAGE_HELPER="$TMP/helper/package-state.mjs"
 cp "$PACKAGE_HELPER_SRC" "$PACKAGE_HELPER"
+
+DIVERGENCE_HELPER_SRC="$ROOT/scripts/upgrade/framework-divergence.mjs"
+if [ ! -f "$DIVERGENCE_HELPER_SRC" ]; then
+  echo "❌ upgrade-state check FAILED: helper not found at $DIVERGENCE_HELPER_SRC" >&2
+  exit 1
+fi
+DIVERGENCE_HELPER="$TMP/helper/framework-divergence.mjs"
+cp "$DIVERGENCE_HELPER_SRC" "$DIVERGENCE_HELPER"
+
+# The framework-owned roots the divergence report walks are DERIVED from the helper,
+# never restated here: a hardcoded fixture list would keep passing after the helper
+# gained a root, which is the drift this suite exists to catch one tree over.
+FRAMEWORK_OWNED_ROOTS="$(node "$DIVERGENCE_HELPER" roots --repo "$ROOT")" || {
+  echo "❌ upgrade-state check FAILED: could not derive the framework-owned root set" >&2
+  exit 1
+}
+if [ -z "$FRAMEWORK_OWNED_ROOTS" ]; then
+  echo "❌ upgrade-state check FAILED: the derived framework-owned root set is empty" >&2
+  exit 1
+fi
 
 # The maintainer-doc path set under test is DERIVED from the init wizard by the
 # helper itself, never restated here — a hardcoded fixture list would keep passing
@@ -469,6 +528,69 @@ assert_mdocs_reconcile_stops() { # dir label failing-file
     fail "$2: the diagnostic prescribes configuring a driver that IS already configured in this clone — a remedy that cannot fix the stop: $HELPER_ERR"
   fi
   ok "$2: reconcile stops, reports both observations (attribute \`$observed\`), and prescribes only the repair they support"
+}
+
+# ---------------------------------------------------------------------------
+# Divergence-report helper invocation (ADR 010 (e))
+# ---------------------------------------------------------------------------
+
+run_divergence() { # dir subcommand [args...]
+  local dir="$1"
+  shift
+  HELPER_STATUS=0
+  node "$DIVERGENCE_HELPER" "$@" --repo "$dir" > "$TMP/stdout.txt" 2> "$TMP/stderr.txt" || HELPER_STATUS=$?
+  HELPER_OUT="$(cat "$TMP/stdout.txt")"
+  HELPER_ERR="$(cat "$TMP/stderr.txt")"
+}
+
+# The report, honoring the --selftest skip toggle. SKIP_RECONCILE is this harness's
+# generic "skip the load-bearing step" switch; this helper has no reconcile, so the
+# load-bearing step IS the report, and skipping it means substituting an empty one.
+# Every assertion that reads the report stays ungated, which is what makes the
+# selftest run prove the case detects a report that omits a real divergence.
+run_divergence_report() { # dir target label
+  if [ "${SKIP_RECONCILE:-0}" = "1" ]; then
+    echo "   (selftest: the divergence report is DELIBERATELY SKIPPED)"
+    HELPER_STATUS=0
+    HELPER_OUT=""
+    HELPER_ERR=""
+    return 0
+  fi
+  run_divergence "$1" report --target "$2"
+}
+
+assert_divergence_report_ok() { # dir target label
+  run_divergence_report "$1" "$2" "$3"
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "$3: report --target $2 exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  [ "${SKIP_RECONCILE:-0}" = "1" ] || ok "$3: report --target $2 exited 0"
+}
+
+assert_report_names() { # label needle noun-phrase
+  printf '%s\n' "$HELPER_OUT" | grep -Fq "$2" \
+    || fail "$1: the report does not name $3 (looked for '$2'). Report was:
+$HELPER_OUT"
+  ok "$1: the report names $3"
+}
+
+assert_report_silent_about() { # label needle noun-phrase
+  if printf '%s\n' "$HELPER_OUT" | grep -Fq "$2"; then
+    fail "$1: the report names $3 ('$2'), so it is not scoped to what actually diverged. Report was:
+$HELPER_OUT"
+  fi
+  ok "$1: the report does not name $3"
+}
+
+# Everything the repository is, as one comparable string: the committed head, the
+# porcelain status, and every file in the working tree AND the git directory. A
+# report that wrote a state file, staged a path, or resolved a conflict changes one
+# of these. `find` rather than `git ls-files` on purpose — an untracked artifact
+# inside .git is exactly the write a git-only listing would miss.
+repo_snapshot() { # dir
+  git -C "$1" rev-parse HEAD
+  git -C "$1" status --porcelain
+  ( cd "$1" && find . -type f | LC_ALL=C sort )
+  git -C "$1" ls-files -s
 }
 
 # ---------------------------------------------------------------------------
@@ -2261,8 +2383,9 @@ case_helper_bootstrap_version_skew() { # workdir
 dev-plugin-state:HELPER
 maintainer-docs-state:MDOCS_HELPER
 package-state:PACKAGE_HELPER
+framework-divergence:DIVERGENCE_HELPER
 EOF
-    ok "case 13a: $(basename "$doc") bootstraps all three helpers from the target tag"
+    ok "case 13a: $(basename "$doc") bootstraps all four helpers from the target tag"
   done
 
   # --- 13b: the skew itself, end to end ---------------------------------------
@@ -2439,6 +2562,304 @@ case_mdocs_owned_ours_equals_base() { # workdir
 }
 
 # ---------------------------------------------------------------------------
+# Cases 15a-15e — the pre-merge divergence report
+# (`scripts/upgrade/framework-divergence.mjs`, ADR 010 (e)).
+#
+#   node scripts/upgrade/framework-divergence.mjs report --target <tag> [--repo <dir>]
+#   node scripts/upgrade/framework-divergence.mjs roots [--repo <dir>]
+#
+# The contract: BEFORE the merge, every framework-owned path whose content at HEAD
+# differs from the same path at `git merge-base HEAD <target>` is listed with the
+# instance's value and the incoming framework value. The set is read from the merge
+# base rather than from `--diff-filter=U` afterwards, which is not the same list read
+# at a different time: the conflict list holds only what git could not resolve, so a
+# path the framework never touched is merged silently and never appears in it.
+# Nothing is written and no path is resolved in either direction.
+# ---------------------------------------------------------------------------
+
+# A worker deploy template with one tuning value the fixture varies. Three distinct
+# floors across merge base / framework target / instance is what lets case 15a tell
+# "the framework's incoming value" apart from "the merge base value" — a report that
+# compared against the wrong side would still print two different numbers.
+write_divergence_worker() { # file relevance-floor
+  cat > "$1" <<EOF
+# Example worker deploy template (framework-owned).
+name = "REPLACE_VIA_WORKER_CONFIG"
+main = "src/index.mjs"
+
+[vars]
+RATE_LIMIT_MAX = "20"
+# Tuned per corpus.
+RELEVANCE_FLOOR = "$2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "REPLACE_VIA_WORKER_CONFIG"
+EOF
+}
+
+# fw-v1 -> fw-v2 changes src/app.js and the worker's floor, and deliberately leaves
+# src/untouched.js and the skill alone, so a report that lists everything under the
+# roots fails the precision assertions.
+build_divergence_framework() { # dir
+  local fw="$1"
+  init_repo "$fw"
+  mkdir -p "$fw/src" "$fw/workers/example" "$fw/.agents/skills/example" "$fw/scripts/upgrade"
+  write_gitattributes "$fw"
+  printf 'marker\n' > "$fw/.sekai-template"
+  printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  printf 'export const FRAMEWORK_STABLE = "unchanged in both releases";\n' > "$fw/src/untouched.js"
+  write_divergence_worker "$fw/workers/example/wrangler.toml" "0.46"
+  printf '# Example skill (framework-owned, fw-v1)\n' > "$fw/.agents/skills/example/SKILL.md"
+  cp "$DIVERGENCE_HELPER_SRC" "$fw/scripts/upgrade/framework-divergence.mjs"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v1"
+  git -C "$fw" tag fw-v1
+
+  printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
+  write_divergence_worker "$fw/workers/example/wrangler.toml" "0.50"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v2"
+  git -C "$fw" tag fw-v2
+}
+
+build_divergence_instance() { # fw dir label [edits|clean]
+  local inst="$2" label="$3" variant="${4:-edits}"
+  git clone -q "$1" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  if [ "$variant" = "edits" ]; then
+    write_divergence_worker "$inst/workers/example/wrangler.toml" "0.61"
+    printf 'export const FRAMEWORK_APP = "fw-v1";\n// instance edit\n' > "$inst/src/app.js"
+  fi
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt the Example framework at fw-v1"
+
+  # Fixture guards: without these the assertions below could pass on a broken helper.
+  git -C "$inst" diff --quiet fw-v1 fw-v2 -- src/untouched.js \
+    || fail "$label: fixture guard — src/untouched.js differs between the tags, so it cannot prove precision"
+  if [ "$variant" = "edits" ]; then
+    git -C "$inst" diff --quiet HEAD fw-v2 -- workers/example/wrangler.toml \
+      && fail "$label: fixture guard — the instance's worker template equals the target's, so nothing diverged"
+    git -C "$inst" diff --quiet HEAD fw-v1 -- workers/example/wrangler.toml \
+      && fail "$label: fixture guard — the instance did not retune the worker template"
+    ok "$label: instance carries a retuned worker value and an edited source file"
+  else
+    git -C "$inst" diff --quiet HEAD fw-v1 -- src workers .agents \
+      || fail "$label: fixture guard — the clean instance is not clean under the framework-owned roots"
+    ok "$label: instance carries no framework-owned edit"
+  fi
+}
+
+# --- 15a/15b: a planted divergence is enumerated with both values, and nothing is written
+case_divergence_report() { # workdir
+  local work="$1" fw inst before after
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_divergence_framework "$fw"
+  build_divergence_instance "$fw" "$inst" "case 15a" edits
+
+  before="$(repo_snapshot "$inst")"
+  assert_divergence_report_ok "$inst" fw-v2 "case 15a"
+
+  assert_report_names "case 15a" "workers/example/wrangler.toml" "the worker template the instance retuned"
+  assert_report_names "case 15a" "src/app.js" "the source file the instance edited"
+  assert_report_names "case 15a" "[vars] RELEVANCE_FLOOR" "the diverged key with its table"
+
+  # Both values, per DoD 2 — and they must be the two values that are actually in
+  # play. Asserting only that two numbers appear would pass on a report echoing the
+  # merge base at the instance, which is the mistake worth catching.
+  printf '%s\n' "$HELPER_OUT" | grep -F 'yours:' | grep -Fq '"0.61"' \
+    || fail "case 15a: the report does not present the instance's own value (\"0.61\") as theirs. Report was:
+$HELPER_OUT"
+  printf '%s\n' "$HELPER_OUT" | grep -F 'framework:' | grep -Fq '"0.50"' \
+    || fail "case 15a: the report does not present the incoming framework value (\"0.50\"). Report was:
+$HELPER_OUT"
+  if printf '%s\n' "$HELPER_OUT" | grep -F 'framework:' | grep -Fq '"0.46"'; then
+    fail "case 15a: the report presents the MERGE BASE value (\"0.46\") as the framework's incoming one. Report was:
+$HELPER_OUT"
+  fi
+  ok "case 15a: the [vars] divergence carries the key, the instance's value, and the framework's incoming value"
+
+  assert_report_names "case 15a" '+export const FRAMEWORK_APP = "fw-v2";' \
+    "the framework's incoming side for the edited source file"
+  assert_report_silent_about "case 15a" "src/untouched.js" \
+    "a framework-owned file neither side changed"
+  assert_report_silent_about "case 15a" ".agents/skills/example/SKILL.md" \
+    "an untouched framework-owned skill"
+  assert_report_silent_about "case 15a" "RATE_LIMIT_MAX" \
+    "a [vars] key both sides agree on"
+
+  # DoD 3: the report names the decision, it does not take one. Nothing in the
+  # working tree, the index, the commit, or the git directory may move.
+  after="$(repo_snapshot "$inst")"
+  [ "$before" = "$after" ] || fail "case 15b: the report changed the repository. Difference:
+$(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)"
+  [ -z "$(git -C "$inst" diff --name-only --diff-filter=U)" ] \
+    || fail "case 15b: the report left unmerged paths behind"
+  [ ! -e "$inst/.git/MERGE_HEAD" ] || fail "case 15b: the report started a merge"
+  ok "case 15b: the report wrote nothing — no state file, no staged path, no resolution"
+}
+
+# --- 15c: an instance with no framework-owned edit gets a clean report
+case_divergence_clean() { # workdir
+  local work="$1" fw inst
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_divergence_framework "$fw"
+  build_divergence_instance "$fw" "$inst" "case 15c" clean
+
+  assert_divergence_report_ok "$inst" fw-v2 "case 15c"
+  assert_report_names "case 15c" "no framework-owned file" "the clean outcome in plain words"
+  assert_report_silent_about "case 15c" "src/app.js" "a path the instance never touched"
+  if printf '%s\n' "$HELPER_OUT" | grep -q '^  [^ ]'; then
+    fail "case 15c: the clean report still carries path entries. Report was:
+$HELPER_OUT"
+  fi
+  ok "case 15c: the clean report lists no path and adds no step to the upgrade"
+}
+
+# --- 15d: the first, unrelated-history merge has no base to measure against
+case_divergence_unrelated_history() { # workdir
+  local work="$1" fw inst
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_divergence_framework "$fw"
+
+  init_repo "$inst"
+  mkdir -p "$inst/src"
+  printf 'export const INSTANCE_APP = "own history";\n' > "$inst/src/app.js"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Example instance, own history"
+  git -C "$inst" remote add framework "$fw"
+  git -C "$inst" fetch -q framework --tags
+  [ -z "$(git -C "$inst" merge-base HEAD fw-v2 2>/dev/null || true)" ] \
+    || fail "case 15d: fixture guard — the histories share a merge base, so this is not the first-merge shape"
+
+  assert_divergence_report_ok "$inst" fw-v2 "case 15d"
+  assert_report_names "case 15d" "no merge base" "the missing common ancestor"
+  # The failure this pins: answering the unrelated-history case by declaring every
+  # framework-owned file diverged, which is true of nothing and useless in practice.
+  if printf '%s\n' "$HELPER_OUT" | grep -q '^  [^ ]'; then
+    fail "case 15d: the report claims divergence on an unrelated-history first merge. Report was:
+$HELPER_OUT"
+  fi
+  assert_report_silent_about "case 15d" "src/app.js" "a path as diverged with no merge base"
+}
+
+# --- 15e: the report's TOML key view and the deploy-time parser agree
+#
+# The report names `[vars] RELEVANCE_FLOOR` rather than a diff hunk because a key is
+# what an operator recognizes. That needs a TOML reader, and the helper cannot import
+# `scripts/deploy/wrangler-config.mjs`: every upgrade helper runs as a lone file
+# extracted from a release tag into the git directory. Two readers over one file
+# format is a drift risk, so this holds them to the same key view over every worker
+# template the repository really ships (guard-or-explain: the guard).
+case_divergence_toml_key_view() {
+  local out
+  cat > "$TMP/toml-key-view.mjs" <<'EOF'
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const [root, helperPath] = process.argv.slice(2);
+const { parseWranglerToml } = await import(pathToFileURL(join(root, 'scripts/deploy/wrangler-config.mjs')).href);
+const { tomlEntries } = await import(pathToFileURL(helperPath).href);
+
+const workersDir = join(root, 'workers');
+if (!existsSync(workersDir)) {
+  process.stderr.write('no workers/ tree to compare\n');
+  process.exit(1);
+}
+let checked = 0;
+let sawVars = false;
+for (const dir of readdirSync(workersDir).sort()) {
+  const rel = `workers/${dir}/wrangler.toml`;
+  const file = join(root, rel);
+  if (!existsSync(file)) continue;
+  const text = readFileSync(file, 'utf8');
+  const parsed = parseWranglerToml(text);
+  const deploy = [];
+  for (const key of Object.keys(parsed.top)) deploy.push(key);
+  for (const [table, keys] of Object.entries(parsed.tables)) {
+    for (const key of Object.keys(keys)) deploy.push(`[${table}] ${key}`);
+  }
+  for (const [table, blocks] of Object.entries(parsed.arrays)) {
+    blocks.forEach((block, i) => {
+      for (const key of Object.keys(block)) deploy.push(`[[${table}]][${i}] ${key}`);
+    });
+  }
+  const report = [...tomlEntries(text).keys()];
+  const a = deploy.slice().sort();
+  const b = report.slice().sort();
+  if (a.join('|') !== b.join('|')) {
+    process.stderr.write(`${rel}: the two readers disagree\n  deploy-time parser: ${a.join(', ')}\n  divergence report:  ${b.join(', ')}\n`);
+    process.exit(1);
+  }
+  if (a.length === 0) {
+    process.stderr.write(`${rel}: the derived key set is empty, so agreement proves nothing\n`);
+    process.exit(1);
+  }
+  if (a.some((label) => label.startsWith('[vars] '))) sawVars = true;
+  checked += 1;
+}
+if (checked === 0) {
+  process.stderr.write('no committed worker template was compared\n');
+  process.exit(1);
+}
+if (!sawVars) {
+  process.stderr.write('no [vars] key was compared, so the table-scoped label form is untested\n');
+  process.exit(1);
+}
+process.stdout.write(`${checked} worker template(s) compared\n`);
+EOF
+  out="$(node "$TMP/toml-key-view.mjs" "$ROOT" "$DIVERGENCE_HELPER_SRC" 2>&1)" \
+    || fail "case 15e: the divergence report's TOML key view disagrees with the deploy-time parser: $out"
+  ok "case 15e: the report's TOML key view matches scripts/deploy/wrangler-config.mjs ($out)"
+}
+
+# --- usage contract: the report refuses rather than guessing
+case_divergence_usage() { # workdir
+  local work="$1" fw inst
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_divergence_framework "$fw"
+  build_divergence_instance "$fw" "$inst" "divergence usage" clean
+
+  run_divergence "$inst" report
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "divergence usage: report with no --target exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+
+  run_divergence "$inst" report --target no-such-tag
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "divergence usage: report --target no-such-tag exited $HELPER_STATUS (expected 1); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -qi 'remedy' \
+    || fail "divergence usage: the unknown-target diagnostic names no remedy: $HELPER_ERR"
+
+  run_divergence "$inst" report --target fw-v2 --state whatever
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "divergence usage: an unknown flag exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+
+  run_divergence "$inst" bogus-subcommand
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "divergence usage: an unknown subcommand exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+
+  # The framework's own tree carries `.sekai-template`; there is no adopter
+  # divergence to report there, and reporting one would be a fiction.
+  run_divergence "$fw" report --target fw-v2
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "divergence usage: report in a template checkout exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -Fq '.sekai-template' \
+    || fail "divergence usage: the template-mode refusal does not name the marker it saw: $HELPER_ERR"
+  ok "divergence usage: missing --target, unknown target, unknown flag, unknown subcommand, and template mode all refuse"
+}
+
+# ---------------------------------------------------------------------------
 # Documented-bootstrap contract — the flags the adopter-facing docs tell a user to
 # run must be flags the helper actually accepts.
 #
@@ -2457,12 +2878,16 @@ UPGRADE_DOCS="$ROOT/.agents/skills/sekai-upgrade/SKILL.md $ROOT/docs/runbook/UPG
 # options, so the guard would pass on a document telling a user to run a command that
 # exits 2. Per command, because `--from-tag` is deliberately not an option of
 # `reconcile`.
-accepted_options_for() { # command
+# The helper source defaults to the maintainer-doc helper, because that is the one
+# most callers here ask about; the divergence report passes its own, since both
+# helpers declare a COMMAND_OPTIONS table in the same shape and both are invoked by
+# the same two documents.
+accepted_options_for() { # command [helper-source]
   awk -v cmd="$1" '
     /^const COMMAND_OPTIONS = \{/ { inblock = 1; next }
     inblock && /^\};/            { inblock = 0 }
     inblock && $0 ~ ("^  " cmd ": \\{")  { print }
-  ' "$MDOCS_HELPER_SRC" | grep -o -- "'--[a-z-]*'" | tr -d "'" | sort -u
+  ' "${2:-$MDOCS_HELPER_SRC}" | grep -o -- "'--[a-z-]*'" | tr -d "'" | sort -u
 }
 
 case_documented_flags_exist() {
@@ -2519,6 +2944,58 @@ EOF
     esac
   done
   ok "documented flags: both upgrade documents pass only options the invoked command accepts, and both still pass --from-tag to classify"
+
+  # The same derivation for the divergence report: both documents invoke it, and
+  # `--target` is the option the whole step depends on, so a rename that left the
+  # prose behind would print a usage error at the one moment it is read.
+  accepted_options_for report "$DIVERGENCE_HELPER_SRC" | grep -qx -- '--target' \
+    || fail "documented flags: the divergence helper's COMMAND_OPTIONS no longer gives report --target"
+  for doc in $UPGRADE_DOCS; do
+    used=""
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      cmd="$(printf '%s' "$line" | sed -n 's/.*node "\$DIVERGENCE_HELPER" *\([a-z][a-z-]*\).*/\1/p')"
+      [ -n "$cmd" ] || fail "documented flags: $(basename "$doc") invokes the divergence helper with no subcommand: $line"
+      accepted="$(accepted_options_for "$cmd" "$DIVERGENCE_HELPER_SRC")"
+      flags="$(printf '%s' "$line" | grep -o -- '--[a-z-]*' || true)"
+      for flag in $flags; do
+        printf '%s\n' "$accepted" | grep -qx -- "$flag" \
+          || fail "documented flags: $(basename "$doc") tells the user to pass $flag to \`$cmd\`, which the divergence helper's option table does not accept"
+      done
+      used="$used $cmd:$(printf '%s' "$flags" | paste -sd ',' -)"
+    done <<EOF
+$(grep -- 'node "$DIVERGENCE_HELPER"' "$doc")
+EOF
+    [ -n "$used" ] || fail "documented flags: $(basename "$doc") never invokes the divergence report, so the pre-merge step ADR 010 (e) requires is undocumented there"
+    case "$used" in
+      *"report:"*"--target"*) ;;
+      *) fail "documented flags: $(basename "$doc") does not pass --target to the divergence report, so it cannot name the release being merged" ;;
+    esac
+  done
+  ok "documented flags: both upgrade documents invoke the divergence report with --target and no option it rejects"
+}
+
+# The framework-owned roots the report walks are a statement the adopter-facing
+# documents also make. Derive it from the helper rather than trusting the prose: a
+# root added to the helper without a document update leaves an adopter reading a list
+# that is missing the tree their edit is in.
+case_divergence_roots_documented() {
+  local doc root
+  [ "$(printf '%s\n' "$FRAMEWORK_OWNED_ROOTS" | wc -l | tr -d ' ')" -ge 2 ] \
+    || fail "divergence roots: fewer than two roots were derived, so this check proves nothing"
+  for doc in $UPGRADE_DOCS; do
+    [ -f "$doc" ] || fail "divergence roots: $doc is missing"
+    # Non-vacuity: the pattern must be able to fail. A root nothing declares must not
+    # be found by the same grep that finds the real ones.
+    if grep -Fq '`no-such-framework-root/`' "$doc"; then
+      fail "divergence roots: $(basename "$doc") matches a root that does not exist, so the probe below is meaningless"
+    fi
+    for root in $FRAMEWORK_OWNED_ROOTS; do
+      grep -Fq "\`$root/\`" "$doc" \
+        || fail "divergence roots: $(basename "$doc") does not name the framework-owned root \`$root/\` the report walks"
+    done
+  done
+  ok "divergence roots: both upgrade documents name every root the helper reports"
 }
 
 # The parser must enforce what the table declares, not merely describe it.
@@ -2598,26 +3075,46 @@ run_all_cases() {
   echo "── case 14: maintainer docs — the instance kept the framework's copy verbatim (ours == base) ──"
   case_mdocs_owned_ours_equals_base "$TMP/case14"
   echo ""
+  echo "── case 15a/15b: divergence report — planted divergence, both values, no writes ──"
+  case_divergence_report "$TMP/case15a"
+  echo ""
+  echo "── case 15c: divergence report — an instance with no framework-owned edit ──"
+  case_divergence_clean "$TMP/case15c"
+  echo ""
+  echo "── case 15d: divergence report — unrelated histories claim no divergence ──"
+  case_divergence_unrelated_history "$TMP/case15d"
+  echo ""
+  echo "── case 15e: divergence report — the TOML key view matches the deploy-time parser ──"
+  case_divergence_toml_key_view
+  echo ""
+  echo "── option contract: the divergence report refuses rather than guessing ──"
+  case_divergence_usage "$TMP/case15-usage"
+  echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
   echo ""
   echo "── documented bootstrap: the docs' helper options are options the parser accepts ──"
   case_documented_flags_exist
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, and the tag-first helper bootstrap hold on all fifteen fixtures."
+  echo "── documented roots: the docs name every framework-owned root the report walks ──"
+  case_divergence_roots_documented
+  echo ""
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, and the pre-merge divergence report (both values, no writes, clean and unrelated-history shapes) hold on all nineteen fixtures."
 }
 
-# Run one case with reconcile skipped, in a subshell whose EXIT trap is cleared
-# (the parent owns $TMP cleanup). The case MUST fail.
+# Run one case with its load-bearing step skipped, in a subshell whose EXIT trap is
+# cleared (the parent owns $TMP cleanup). The case MUST fail. `SKIP_RECONCILE` is the
+# toggle every case reads: `reconcile` for the three state helpers, the report itself
+# for the report-only divergence helper, which has no reconcile.
 expect_case_to_fail() { # fn workdir label
-  echo "── selftest: $3 with reconcile SKIPPED (must FAIL) ──"
+  echo "── selftest: $3 with its load-bearing step SKIPPED (must FAIL) ──"
   local status=0
   ( trap - EXIT; SKIP_RECONCILE=1; "$1" "$2" ) || status=$?
   if [ "$status" -eq 0 ]; then
-    echo "❌ SELFTEST FAILED: $3 PASSED without reconcile — the case cannot detect the regression it guards (vacuous test)." >&2
+    echo "❌ SELFTEST FAILED: $3 PASSED with that step skipped — the case cannot detect the regression it guards (vacuous test)." >&2
     exit 1
   fi
-  echo "✓ selftest: $3 fails without reconcile (exit $status) — the case is non-vacuous"
+  echo "✓ selftest: $3 fails without it (exit $status) — the case is non-vacuous"
   echo ""
 }
 
@@ -2637,7 +3134,8 @@ run_selftest() {
   expect_case_to_fail case_framework_version_absent_stays_absent "$TMP/selftest-case12c" "case 12c (absent FRAMEWORK-VERSION stays absent)"
   expect_case_to_fail case_helper_bootstrap_version_skew "$TMP/selftest-case13" "case 13 (helper version skew)"
   expect_case_to_fail case_mdocs_owned_ours_equals_base "$TMP/selftest-case14" "case 14 (maintainer docs, ours == base)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13 and 14 all fail when reconcile is skipped."
+  expect_case_to_fail case_divergence_report "$TMP/selftest-case15a" "case 15a (divergence report, planted divergence)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14 and 15a all fail when their load-bearing step is skipped."
 }
 
 main() {

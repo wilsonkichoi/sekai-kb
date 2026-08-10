@@ -89,6 +89,17 @@ PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 #    maintainer-doc path set that could not be derived: stop here and repair it
 #    deliberately, as the diagnostic says.
 
+# 4d. Report the framework-owned files you have diverged on, with the framework's
+#     incoming value beside yours (see "Framework-owned files" below). Same
+#     tag-first extraction; the helper writes nothing and resolves nothing.
+#     On THIS flow it has no merge base to measure against — that is what the
+#     --allow-unrelated-histories in step 5 is about — so it says so and claims
+#     nothing. Run it anyway: the answer is the honest one, and every upgrade
+#     after this one gets the full report.
+DIVERGENCE_HELPER="$(git rev-parse --git-dir)/sekai-framework-divergence.mjs"
+git show "$TARGET":scripts/upgrade/framework-divergence.mjs > "$DIVERGENCE_HELPER"
+node "$DIVERGENCE_HELPER" report --target "$TARGET"
+
 # 5. The first merge — the ONLY one that needs --allow-unrelated-histories:
 git merge --allow-unrelated-histories "$TARGET"
 
@@ -141,8 +152,10 @@ git diff --name-only --diff-filter=U | grep -Fxq VERSION \
 git diff --name-only --diff-filter=U
 ```
 
-Then, one file at a time, read both sides before choosing. `:2:` is your version and
-`:3:` is the framework's incoming one; the target's CHANGELOG entry (printed in the
+Then, one file at a time, read both sides before choosing. Step 4d's report already
+named each of these files with your value beside the framework's; `:2:` is your version
+and `:3:` is the framework's incoming one, which is how you read the same pair once the
+merge is in progress. The target's CHANGELOG entry (printed in the
 routine flow's step 3, and readable here with
 `git show "$TARGET":CHANGELOG.md`) is what says why the framework's side changed:
 
@@ -237,6 +250,18 @@ PACKAGE_HELPER="$(git rev-parse --git-dir)/sekai-package-state.mjs"
 git show "$TARGET":scripts/upgrade/package-state.mjs > "$PACKAGE_HELPER"
 PACKAGE_STATE="$(node "$PACKAGE_HELPER" capture)"
 
+# 4d. Report the framework-owned files you have diverged on, BEFORE the merge
+#     generates conflicts. For each one the report names your value and the
+#     framework's incoming value — key by key for a wrangler.toml, as the
+#     differing region for anything else. It writes nothing and resolves nothing;
+#     step 7 is where you decide. Reading it here rather than from the conflict
+#     list is deliberate: the conflict list holds only what git could not resolve
+#     on its own, so an edit git merged silently — yours kept because the
+#     framework never touched that file — never appears in it at all.
+DIVERGENCE_HELPER="$(git rev-parse --git-dir)/sekai-framework-divergence.mjs"
+git show "$TARGET":scripts/upgrade/framework-divergence.mjs > "$DIVERGENCE_HELPER"
+node "$DIVERGENCE_HELPER" report --target "$TARGET"
+
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
 
@@ -259,7 +284,8 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 # 7. If conflicts remain: they can only be framework-owned files you edited locally,
 #    or the one-time VERSION modify/delete conflict when leaving v1.0.8. Keep the
 #    adopter VERSION in that one case. Every other one is a per-file decision, and
-#    nothing here resolves them for you.
+#    nothing here resolves them for you. Step 4d already named these files with both
+#    values; this list is the subset git could not settle by itself.
 git diff --name-only --diff-filter=U
 #    For each file: read the CHANGELOG line for this release (step 3), then read your
 #    side against the framework's incoming side, then choose. Taking the framework's
@@ -310,6 +336,24 @@ credentials, security boundaries. Every other divergence from a framework-owned 
 framework's, and the cost, and your CI run carries it as an annotation rather than a
 failure. The cost is the conflict this document is about: that file conflicts on every
 release until the two sides agree again.
+
+That is said twice, on purpose, and the second time is at the merge. Step 4d of both
+flows above runs:
+
+```bash
+node "$DIVERGENCE_HELPER" report --target "$TARGET"
+```
+
+which walks the framework-owned trees — `src/`, `scripts/`, `workers/`, and
+`.agents/skills/` — and, for every path whose content differs from your merge base with
+the target, prints your value beside the framework's incoming one: key by key for a
+`wrangler.toml` (`[vars] RELEVANCE_FLOOR`, yours, the framework's), as the differing
+region for anything else. It names how each path meets the merge (yours kept, both
+sides changed, modify/delete) so a file git will merge silently is visible too. It
+writes nothing, stages nothing, and resolves nothing in either direction: the decision
+is yours, and it is made with both values in front of you rather than reconstructed
+from two revisions afterwards. On the very first merge there is no common ancestor to
+measure against, so it says that and claims nothing.
 
 Three ways to make it agree, in order of what they cost you later:
 

@@ -188,6 +188,38 @@ The capture accepts the versionless npm manifests produced by v1.0.8 so the
 first migration to the synchronized manifest contract does not require manual
 pre-editing.
 
+## 3c. Report framework-owned divergence — still before merging
+
+Framework-owned (`src/`, `scripts/`, `workers/`, `.agents/skills/`) states where a
+file comes from and that every release replaces it wholesale. It is not a permission
+boundary: the instance may edit any file in its own repository, and what that costs is
+a conflict here (ADR 010). The framework's job is to price that edit twice — once
+continuously, as the `::warning` `npm run worker-config:check` emits in the instance's
+CI, and once now, with the framework's incoming value beside the instance's:
+
+```bash
+# Same tag-first rule as every helper above.
+DIVERGENCE_HELPER="$(git rev-parse --git-dir)/sekai-framework-divergence.mjs"
+git show sekai-kb-vX.Y.Z:scripts/upgrade/framework-divergence.mjs > "$DIVERGENCE_HELPER"
+node "$DIVERGENCE_HELPER" report --target sekai-kb-vX.Y.Z
+```
+
+`docs/runbook/UPGRADE.md` step 4d is the same command in the manual flow; keep the two
+in step. Show the report to the user before merging and keep it for step 6 — it is that
+step's input, not a duplicate of it. What it adds over the post-merge conflict list is
+everything git resolves silently: a file the instance changed that the framework did
+not is kept without a conflict, and the user never learns they are carrying it.
+
+- It reads the merge base, so it runs **before** the merge, on the clean tree
+  preflight already required.
+- It **writes nothing** — no state file, no staged path, no side taken. There is no
+  reconcile step for it, and it is never run after the merge.
+- Exit 0 with a "no merge base" report is the correct answer on the first
+  unrelated-history merge: divergence is measured against a common ancestor and there
+  is none yet. Do not read it as a clean bill of health, and do not work around it.
+- Exit 0 with "no framework-owned file ... differs" means the instance carries no
+  local edit in those trees; say so and move on.
+
 ## 4. Merge the tag (never `main`)
 
 ```bash
@@ -273,6 +305,12 @@ report and a proposal, then let the user decide:
 ```bash
 git diff --name-only --diff-filter=U
 ```
+
+Step 3c's report already named these paths with both values; this list is the subset
+git could not settle on its own, so read the two together rather than starting over.
+A path in 3c's report and not in this list needs no resolution — git kept the
+instance's side — but it is still a divergence the instance carries into the next
+release, and saying so is what keeps it a decision rather than a drift.
 
 For each file, show: the path, the relevant CHANGELOG line for this version, and
 the two sides (`git diff`). Then propose the resolution and its rationale:
@@ -384,7 +422,9 @@ Do not change `package.json.version` here. It mirrors the adopter's unchanged
 Tell the user: the adopted framework version moved from → to, the adopter's
 `VERSION` remained unchanged, the dev-plugin state classified in
 step 3 and what reconcile did with it, the maintainer-doc split classified in step
-3b and what reconcile removed, kept, or reported for their decision, which files
+3b and what reconcile removed, kept, or reported for their decision, the
+framework-owned divergences step 3c reported and which of them the merge settled
+silently rather than as a conflict, which files
 (if any) conflicted and how each was resolved, the build result, and any
 Upgrade-note opt-ins they declined (new feature flags left off). Push is theirs to make — on an instance, pushing
 `main` deploys.
