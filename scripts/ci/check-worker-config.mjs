@@ -40,8 +40,11 @@
 //     naming the wrong one. Telling an operator to measure a value and not telling them
 //     where to put the answer is the defect this whole override path exists to fix, and
 //     it comes back the moment the two drift;
-//   - an override registered for a [vars] key the committed template does not carry
-//     (the generator would fail on it the first time an instance set the key);
+//   - an override registered for a [vars] key the committed template does not carry.
+//     This is the fatal half of that contract: the generator only warns and drops the
+//     value, because an instance that hits it hit it by upgrading and still has to be
+//     able to deploy. Failing here is what keeps the framework from shipping the
+//     mismatch in the first place;
 //   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
 //     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
 //     embeddings:build`). Both are gitignored and both are skipped by name in the two
@@ -206,8 +209,9 @@ for (const dir of workerDirs) {
   }
 
   // An override is a promise that setting `workers.<key>` changes a real deploy var.
-  // If the template drops the var, that promise fails only for the instance that set
-  // the key, at generation time, long after the change that broke it.
+  // If the template drops the var, that promise breaks only for the instance that set
+  // the key, at generation time, long after the change that broke it -- and there it
+  // is a warning, not a stop. This is where it is caught while it is still cheap.
   for (const [key, spec] of Object.entries(WORKER_VAR_OVERRIDES[dir] ?? {})) {
     if (!(key in vars)) {
       failures.push(

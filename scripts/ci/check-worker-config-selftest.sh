@@ -61,7 +61,7 @@
 #
 # The classes after those cover the other half of the same contract: the
 # GENERATOR (scripts/deploy/gen-worker-config.mjs) writing the deploy-time
-# tuning vars an instance may override from place.config.ts. Six more:
+# tuning vars an instance may override from place.config.ts. Nine more:
 #
 #  12. UNSET       -- a place.config.ts setting none of the override keys must
 #                     generate a config byte-identical to the one recorded in
@@ -74,11 +74,24 @@
 #                     generated [vars] block quoted the way the template writes
 #                     them, and must change NOTHING else: exactly three lines
 #                     differ from the recorded unset output.
-#  14-17. REJECTED -- a non-numeric value, a floor outside 0..1, and each rate
-#                     limit below 1 must fail generation by name. The worker
-#                     parses these vars leniently and falls back to its own
-#                     defaults, so a value it cannot use would otherwise deploy
-#                     clean and behave as if the instance had configured nothing.
+#  14-19. REJECTED -- a non-numeric value, a floor outside 0..1, each rate limit
+#                     below 1, a fractional count, and a non-finite number must
+#                     fail generation by name. The worker parses these vars
+#                     leniently and falls back to its own defaults, so a value it
+#                     cannot use would otherwise deploy clean and behave as if the
+#                     instance had configured nothing. Every one of these asserts
+#                     the message names the offending VALUE as well as the key:
+#                     19 exists because Infinity is the one input where the
+#                     obvious way to render it (JSON.stringify) silently reports
+#                     "null" instead, naming a value the config does not contain.
+#  20. DROPPED VAR -- a key set in place.config.ts whose [vars] entry the template
+#                     no longer carries. Generation must SUCCEED, warn naming the
+#                     key, the value, and the var, and leave the var out of the
+#                     generated config. An instance reaches this only by
+#                     upgrading, and stopping generation there would leave it
+#                     unable to deploy any worker over one stale key; the fatal
+#                     half of the contract is check-worker-config.mjs, which
+#                     fails at CI time on the same mismatch.
 #
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
@@ -99,7 +112,7 @@
 #
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
 # exit 1 when the guard fails to catch a planted defect or the generator
-# mishandles an override, exit 0 when all seventeen classes hold)
+# mishandles an override, exit 0 when all twenty classes hold)
 
 set -euo pipefail
 
@@ -418,6 +431,28 @@ assert_generator_rejects() {
   done
 }
 
+# The generator must SUCCEED and say every remaining argument. Used for the path
+# where a value cannot be applied but generation must still finish: a silent drop
+# and a hard stop are both wrong, so both the success and the words are asserted.
+assert_generator_warns() {
+  where="$1"; what="$2"; shift 2
+  if ! run_generator "$where"; then
+    echo "FAIL: worker config self-test -- the generator STOPPED on $what. It must warn," >&2
+    echo "  drop the value, and finish: an instance reaches this by upgrading, and a stop" >&2
+    echo "  leaves it unable to deploy any worker over one stale key." >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+  for want in "$@"; do
+    if ! grep -q -- "$want" "$OUT"; then
+      echo "FAIL: worker config self-test -- the generator continued past $what but its" >&2
+      echo "  output never names $want:" >&2
+      cat "$OUT" >&2
+      exit 1
+    fi
+  done
+}
+
 assert_generated_var() {
   where="$1"; key="$2"; want="$3"
   if ! grep -q "^$key = $want\$" "$where/$GENERATED_REL"; then
@@ -482,4 +517,40 @@ COPY="$(fresh_copy_with_place_config generate-bad-window "    chatRateLimitWindo
 assert_generator_rejects "$COPY" "a rate-limit window below 1 second" \
   'workers.chatRateLimitWindowSeconds' '0'
 
-echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, and a runbook that has drifted from the shipped defaults; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, and rejects a value the worker could not use"
+# 18. FRACTIONAL COUNT: in range and numeric, so every check above passes it. The
+# worker floors it, which means "20.7" deploys a ceiling of 20 while
+# place.config.ts states something else -- the exact silent divergence this
+# validation layer exists to prevent, and the one branch of it that shipped with
+# no class of its own.
+COPY="$(fresh_copy_with_place_config generate-fractional-max "    chatRateLimitMax: 20.7,")"
+assert_generator_rejects "$COPY" "a fractional rate-limit ceiling" \
+  'workers.chatRateLimitMax' '20.7'
+
+# 19. NON-FINITE: Infinity is a number and passes `typeof`, so only the finite
+# check stops it. It is asserted separately because it is the one value whose
+# report is easy to get wrong: JSON.stringify(Infinity) is the string "null", so
+# a message built that way names a value place.config.ts does not contain and
+# sends the operator looking for a key they never set.
+COPY="$(fresh_copy_with_place_config generate-non-finite "    chatRelevanceFloor: Infinity,")"
+assert_generator_rejects "$COPY" "a non-finite override value" \
+  'workers.chatRelevanceFloor' 'Infinity'
+
+# 20. DROPPED VAR: the key is set and valid, but the template no longer carries
+# the [vars] entry it overrides -- the shape of a framework release that removed
+# a var an instance had tuned. Generation must finish, warn by name, and write a
+# config without the var. Both failure modes are real: a silent drop deploys the
+# framework default while place.config.ts says otherwise, and a hard stop blocks
+# every other worker's config over one stale key.
+COPY="$(fresh_copy_with_place_config generate-dropped-var "    chatRelevanceFloor: 0.52,")"
+grep -v '^RELEVANCE_FLOOR' "$COPY/$REL" > "$WORK_DIR/plant.tmp"
+commit_plant "$COPY/$REL" "RELEVANCE_FLOOR"
+assert_generator_warns "$COPY" "a tuning key whose template var was removed" \
+  'WARNING' 'workers.chatRelevanceFloor' '0.52' 'RELEVANCE_FLOOR' 'Generated without it'
+if grep -q '^RELEVANCE_FLOOR' "$COPY/$GENERATED_REL"; then
+  echo "FAIL: worker config self-test -- the generator warned that it dropped the override" >&2
+  echo "  but $GENERATED_REL carries RELEVANCE_FLOOR anyway:" >&2
+  cat "$COPY/$GENERATED_REL" >&2
+  exit 1
+fi
+
+echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, and a runbook that has drifted from the shipped defaults; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"

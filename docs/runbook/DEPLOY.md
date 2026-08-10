@@ -744,6 +744,13 @@ workers: {
 },
 ```
 
+If a later framework release drops one of these vars from the template, the key you set
+has nothing left to override. `npm run worker-config` does not stop for that — it names
+the key and the value, writes every other worker's config as usual, and tells you the
+value was left out, so one stale key never blocks a deploy. Read that release's
+CHANGELOG before going further: a var removed from the template usually means the worker
+stopped reading it.
+
 The rate limit is keyed on `sha256(address + salt)`, which is **per public address, not
 per person**: everyone behind one NAT shares one budget. A hotspot, a cafe, a hotel, a
 school, and a QR code that puts the chat in front of a group standing in one place all

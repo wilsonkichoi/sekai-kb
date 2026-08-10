@@ -67,7 +67,10 @@ tags, never framework `main`** (ADR 004, SPEC
   worker parses these vars leniently and would otherwise deploy clean while silently
   falling back to its own defaults. The runbook's `chat` var table now names the
   override key beside each default, and `npm run worker-config:check` fails when that
-  table and the override registry disagree.
+  table and the override registry disagree. If a future release removes one of these
+  vars from the template, generation does not stop: it names the key and the value it
+  could not apply, writes every config without it, and points you at that release's
+  CHANGELOG.
 
 > **Upgrade note:** `workers.chatRateLimitMax`, `workers.chatRateLimitWindowSeconds`,
 > and `workers.chatRelevanceFloor` are optional, absent-safe config-schema additions.

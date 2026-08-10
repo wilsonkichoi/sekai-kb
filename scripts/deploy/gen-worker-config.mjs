@@ -122,6 +122,7 @@ if (workerDirs.length === 0) {
 }
 
 const notes = [];
+const warnings = [];
 let written = 0;
 
 for (const dir of workerDirs) {
@@ -168,14 +169,27 @@ for (const dir of workerDirs) {
     if (configured === undefined) continue;
     if (!(parsed.tables.vars && varName in parsed.tables.vars)) {
       // Same guard as the five overrides above, opposite branch: those keys are
-      // framework-derived and skipping a template that dropped one is harmless,
-      // but this one was typed by a person who expects it to take effect.
-      fail(
-        `place.config.ts sets \`workers.${spec.configKey}\`, but workers/${dir}/${TEMPLATE_BASENAME} ` +
-          `carries no [vars] ${varName} for it to override, so the value would be silently ` +
-          'dropped. Restore the key in the template, or drop the override registration in ' +
-          'scripts/deploy/wrangler-config.mjs if the worker no longer reads it.',
+      // framework-derived and skipping a template that dropped one is harmless, but
+      // this one was typed by a person who expects it to take effect, so it is said
+      // out loud. Not fatal, though -- an instance reaching this reached it by
+      // upgrading, and refusing to generate would leave them unable to deploy the
+      // other five workers over one stale key. The framework side of the same
+      // contract is fatal at CI time instead: check-worker-config.mjs fails when an
+      // override is registered for a var the committed template does not carry.
+      warnings.push(
+        `WARNING: place.config.ts sets \`workers.${spec.configKey}\` (${configured}), but\n` +
+          `workers/${dir}/${TEMPLATE_BASENAME} no longer carries a [vars] ${varName}.\n` +
+          '\n' +
+          'A framework release removed it, which usually means the worker no longer\n' +
+          'reads it -- your value would have no effect, so it was not written.\n' +
+          '\n' +
+          '  - If you no longer need it: remove the key from place.config.ts.\n' +
+          '  - If you still need the behavior: the worker source changed too, so\n' +
+          "    review that release's CHANGELOG before upgrading further.\n" +
+          '\n' +
+          'Generated without it.',
       );
+      continue;
     }
     let value;
     try {
@@ -230,6 +244,10 @@ for (const dir of workerDirs) {
   console.log(`  workers/${dir}/${GENERATED_BASENAME}  name=${name}`);
 }
 
+// Warnings go to stderr, ahead of the OK summary: generation succeeded, but a value
+// the operator recorded on purpose did not make it into the config, and that must not
+// scroll past inside a list of per-worker success lines.
+for (const warning of warnings) console.error(`\n${warning}\n`);
 for (const note of notes) console.log(`  note: ${note}`);
 console.log(
   `OK: generated ${written} worker config(s). Deploy with ` +

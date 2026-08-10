@@ -95,7 +95,16 @@ export const WORKER_VAR_OVERRIDES = {
  * "20.7" would deploy a limit of 20 while place.config.ts says something else.
  */
 export function overrideVarValue(configKey, value, kind) {
-  const shown = JSON.stringify(value) ?? String(value);
+  // Every message below names the value the operator typed, so the report has to be
+  // the value they typed. JSON.stringify returns the *string* "null" for Infinity and
+  // NaN -- not undefined -- so a `?? String(value)` fallback never fires for them and
+  // the message would name a value place.config.ts does not contain. Non-finite
+  // numbers are reported by String(); everything else keeps JSON's quoting, which is
+  // what distinguishes the string "60" from the number 60 in a type complaint.
+  const shown =
+    typeof value === 'number' && !Number.isFinite(value)
+      ? String(value)
+      : (JSON.stringify(value) ?? String(value));
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(
       `workers.${configKey} must be a finite number, but place.config.ts sets ${shown}.`,
