@@ -21,8 +21,10 @@ instance #1's history).
 
 An adopter goes from a fresh clone of the GitHub template to a configured, seeded,
 deployed site in under an hour, and keeps that site maintainable at a real editorial bar
-with any agent CLI. The framework is generic by construction: no place identity exists in
-any code tree, and the guarantee is machine-enforced rather than asserted.
+with any agent CLI. The framework is generic by construction: nothing sekai-kb ships
+carries place identity in a code tree, and that guarantee is machine-enforced over the
+whole template rather than asserted. It binds what the framework **delivers**, never what
+an adopter subsequently does in their own repository (see Non-goals).
 
 ## Why
 
@@ -46,7 +48,7 @@ sequencing was itself a decision (ADR 002):
 
 | Adopter | What they get |
 |---|---|
-| A person or group publishing knowledge about one place | GitHub template + `/sekai-adopt` AI interview → configured, seeded, deployed site in under an hour (SPEC `New builds`); the editorial playbook and quality tooling that keep it good afterward |
+| A person or group publishing knowledge about one place | GitHub template + `/sekai-adopt` AI interview → configured, seeded, deployed site in under an hour (SPEC `New builds`); the editorial playbook and quality tooling that keep it good afterward; full edit rights over their own clone, with the upgrade cost of an edit stated rather than blocked |
 | Readers of an adopted instance | Curated, fact-checked local knowledge at the inherited editorial bar; graph, map, and client-side search |
 | AI consumers of an adopted instance | `/llms.txt` → `/kb/topics.json` → `/kb/articles/{slug}.md`: a lazy-loading knowledge protocol, one HTTP request per article, no clone required (SPEC `Build pipeline`); tool-using MCP clients reach the same corpus over one remote MCP connection (`workers/mcp/`, Phase 9, ADR 005) |
 | Instance contributors | Plain-Markdown SSOT under `knowledge/`, quality tooling (article-health, link and frontmatter checks), and a tracker-driven contribution workflow |
@@ -107,3 +109,63 @@ to conflict with a non-goal, surface the conflict to the maintainer (per
   identity flows only through `place.config.ts`, `knowledge/`, and `public/media/`; an
   instance's changelog, version, and agent instructions are instance-owned and survive
   every upgrade (ADR 006, ADR 007).
+- **The framework does not police an adopter's own repository.** The complement of the
+  bullet above — `src/`, `scripts/`, `workers/`, `.agents/skills/` — is framework-owned as
+  a **default and an upgrade contract**, never as an access boundary. An adopter may edit
+  any file in their own clone. What the framework owes them is the cost, stated where it
+  applies: a hand-edit to a framework-owned file conflicts at the next tag merge, and
+  `/sekai-upgrade` is what reconciles it. **CI in an adopted instance blocks only what
+  harms someone other than the person editing** — account-scoped collisions (a Worker
+  `name`, a D1 `database_name`), committed credentials, security boundaries. Deploy-time
+  tuning an instance legitimately differs on, such as a retrieval relevance floor or a
+  rate-limit ceiling, warns and names the upgrade cost; it never fails the adopter's
+  build. Upstreaming a change to sekai-kb stays the **recommended** route because it buys
+  conflict-free upgrades, not because the local edit is forbidden.
+
+## Change log
+
+- **2026-08-10, LB-92 adopter edit rights:** "framework-owned" is now stated as a default
+  plus an upgrade contract rather than an access boundary, with a single dividing line for
+  machine enforcement — **block only what harms someone other than the person editing**.
+  Three sections moved: §Goal now scopes the genericity guarantee to what the framework
+  delivers (the North star already scoped its proof to template mode, so the two now
+  agree); §Who adopts it records the edit right as something an adopter gets; §Non-goals
+  gains the policing bullet above.
+
+  **Why.** `scripts/ci/check-worker-config.mjs` holds every committed
+  `workers/*/wrangler.toml` to framework constants, has no template-mode branch, and runs
+  in the `genericity` job of the `deploy.yml` an adopter inherits — so an adopter who
+  retunes `RELEVANCE_FLOOR` in their own repository gets a red build in their own
+  repository, and the workflow comment says that is intended. That gate conflates
+  account-scoped deployment identity, which is a real collision concern, with deploy-time
+  tuning constants, which are numbers an instance may legitimately measure differently. It
+  also charges the cost at the wrong time: the actual cost of a hand-edit is a merge
+  conflict at the next `/sekai-upgrade`, which is later, cheaper, and now LLM-assisted.
+
+  **Scope check performed before this entry.** The other gates in the inherited workflow
+  are not in this class and are unchanged: `check-genericity.sh` reads a static denylist of
+  pre-cut place names and never derives the adopter's own place name, so it is effectively
+  a no-op in an instance (its one instance-owned hook,
+  `scripts/ci/genericity-denylist.local.txt`, is additive by design);
+  `check-framework-docs.mjs` already has an instance-mode branch; the ROADMAP exit-gate
+  guard is template-mode only. `check-english-only.mjs` does block an adopter, but for the
+  separately stated English-only non-goal with its post-roadmap revisit, not for ownership.
+
+  **What it invalidates.** `dev_docs/SPEC.md` §Repo topology ownership rule (d), the
+  §`place.config.ts` `workers?` note (which fuses identity and tuning into one
+  prohibition), §Risk controls 4, and §Negative requirements. `AGENTS.md` iron rule 3 as
+  written. The `dev_docs/ROADMAP.md` blocks are unaffected.
+
+  **Handed to `/dev:architect`** (parked here as product-level, decided there): how the
+  gate splits identity from tuning; where the warning is delivered (CI annotation, upgrade
+  time, or both); what "reconcile intelligently" means concretely in `/sekai-upgrade` and
+  whether that half is its own task; ADR 010 recording the decision. Two delivery
+  constraints travel with it — `AGENTS.md` is instance-owned (`merge=ours`), so a reworded
+  iron rule reaches future adopters only and existing instances need a `CHANGELOG.md`
+  Upgrade note; and `WORKER_VAR_OVERRIDES`, landing with LB-89, already encodes the
+  identity-versus-tuning classification, so it does not need inventing.
+
+  **Downstream tasks.** LB-92 returns to `/dev:backlog` for a packet once `/dev:architect`
+  lands the SPEC delta and ADR 010. LB-91 is parked behind LB-92 in `Backlog`: it argues
+  for a structured `place.config.ts` override on the grounds that a hand-edit is
+  forbidden, and this entry changes that premise.
