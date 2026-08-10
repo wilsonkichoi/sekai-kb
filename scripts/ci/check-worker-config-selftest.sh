@@ -93,6 +93,51 @@
 #                     half of the contract is check-worker-config.mjs, which
 #                     fails at CI time on the same mismatch.
 #
+# The gate is MODE-GATED (ADR 010), so every GATE class above (1-11) is a
+# TEMPLATE-mode class: each of those fixture copies is marked with a
+# .sekai-template file, which is what the framework's own tree carries. (The
+# generator classes 12-20 read no marker; that path has one behavior.) Classes
+# 21-33 below are the instance-mode half --
+# the same tree with no marker, standing in for an adopter's repository, where a
+# framework gate may fail the build only for something that harms a party other
+# than the person editing. There the identity classes must still exit 1 and the
+# tuning classes must exit 0 WITH a warning. They are numbered after the generator
+# classes rather than beside their template-mode twins so that no existing class
+# number moves; nothing but this comment depends on the order.
+#
+#  21. MODE            -- the .sekai-template probe is resolved against --root, not
+#                         against the guard's own location. If it were not, every
+#                         instance-mode class below would silently exercise template
+#                         mode and prove nothing, which is the one failure this
+#                         suite could not otherwise detect: the assertions would all
+#                         still pass.
+#  22-29. FATAL        -- worker name, database_name, database_id, ALLOWED_ORIGIN, a
+#                         dropped [[d1_databases]] block, an unparseable config, an
+#                         unregistered worker directory, and a tracked derived
+#                         artifact must exit 1 in an adopter's tree too. Identity is
+#                         account-scoped and CORS is a security boundary: those
+#                         collide with, or expose, someone other than the editor.
+#                         27 and 24 have no template-mode twin above, so each
+#                         asserts both modes itself.
+#  30-31. WARN         -- a retuned [vars] constant registered in
+#                         WORKER_VAR_OVERRIDES, and a [vars] key the adopter added
+#                         that no registration covers, must exit 0 AND name the file,
+#                         the key, both values, and the upgrade cost. Exit code alone
+#                         would pass on a gate that had silently dropped the check,
+#                         which is the vacuous-guard failure this whole file exists
+#                         to prevent.
+#  32. ANNOTATION      -- under GITHUB_ACTIONS the same warning is emitted as
+#                         `::warning file=<path>::<message>`, so it reaches the run
+#                         summary and the pull request rather than a log nobody
+#                         opens. The line is echoed to this test's own stdout as
+#                         well: the framework repository is always in template mode,
+#                         so a CI run of this suite is the only place the annotation
+#                         can actually be seen.
+#  33. RUNBOOK         -- a drifted docs/runbook/DEPLOY.md default warns in an
+#                         adopter's tree, where both the runbook and the template are
+#                         their own files, and stays fatal in the framework's, which
+#                         is what ships the table.
+#
 # Unlike its sibling check-scan-root-docs-selftest.sh, this test never mutates
 # the repository: each class gets a fresh copy of the committed workers/ tree in
 # a temp directory and the guard is pointed at it with --root. Before each plant
@@ -111,8 +156,9 @@
 # scripts/, which both gates scan; the planted place names are invented.
 #
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
-# exit 1 when the guard fails to catch a planted defect or the generator
-# mishandles an override, exit 0 when all twenty classes hold)
+# exit 1 when the guard fails to catch a planted defect, classifies one into the
+# wrong mode, or the generator mishandles an override; exit 0 when all
+# thirty-three classes hold)
 
 set -euo pipefail
 
@@ -183,6 +229,22 @@ fresh_copy_with_runbook() {
   echo "$copy"
 }
 
+# A copy in TEMPLATE mode. `fresh_copy` above produces an INSTANCE-mode fixture --
+# the marker is a real file in the framework's tree and `cp -R "$ROOT/workers"`
+# does not bring it along -- so the mode of every fixture is stated here, at the
+# fixture, rather than left to what a copy happens to inherit.
+TEMPLATE_MARKER=".sekai-template"
+fresh_copy_template() {
+  copy="$(fresh_copy "$1")"
+  : > "$copy/$TEMPLATE_MARKER"
+  echo "$copy"
+}
+fresh_copy_with_runbook_template() {
+  copy="$(fresh_copy_with_runbook "$1")"
+  : > "$copy/$TEMPLATE_MARKER"
+  echo "$copy"
+}
+
 # Rewrite the copied runbook with `filter` applied to it (sed or grep), and fail
 # loudly when that changes nothing: text this test plants against that has moved
 # would otherwise hand the guard a compliant file to pass on.
@@ -238,6 +300,50 @@ assert_guard_catches() {
   fi
 }
 
+# The guard must PASS (exit 0) and WARN about $what, naming every remaining
+# argument. Both halves are asserted: an exit-code-only check would pass just as
+# happily on a gate that had stopped looking at the file, and a warning nobody can
+# read is the same as no warning at all.
+assert_guard_warns() {
+  where="$1"; what="$2"; shift 2
+  if ! run_guard "$where"; then
+    echo "FAIL: worker config self-test -- the guard FAILED the build on $what. In an" >&2
+    echo "  adopter's tree this is a divergence that costs only the person who made it," >&2
+    echo "  so it must warn and exit 0 (ADR 010)." >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+  if ! grep -q '^WARN:' "$OUT"; then
+    echo "FAIL: worker config self-test -- the guard exited 0 on $what without a WARN:" >&2
+    echo "  line. A silently ignored divergence is indistinguishable from a dropped check:" >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+  for want in "$@"; do
+    if ! grep -qF -- "$want" "$OUT"; then
+      echo "FAIL: worker config self-test -- the guard warned about $what but its output" >&2
+      echo "  never names $want:" >&2
+      cat "$OUT" >&2
+      exit 1
+    fi
+  done
+}
+
+# The mode the guard reports for a root. This is what makes DoD 5 checkable: the
+# guard prints its mode on both the OK: and the FAIL: line, so a --root probe that
+# resolved against the guard's own location instead would be visible here rather
+# than silently turning every instance-mode class below into a template-mode one.
+assert_guard_mode() {
+  where="$1"; want="$2"
+  run_guard "$where" || true
+  if ! grep -qF -- "($want mode)" "$OUT"; then
+    echo "FAIL: worker config self-test -- the guard does not report \"$want mode\" for" >&2
+    echo "  $where. The .sekai-template probe must resolve against --root:" >&2
+    cat "$OUT" >&2
+    exit 1
+  fi
+}
+
 # Commit $WORK_DIR/plant.tmp over the copied template. An edit that changes
 # nothing means the shipped file no longer carries the text this test plants
 # against, which must fail loudly instead of handing the guard a compliant file
@@ -261,6 +367,19 @@ plant() {
   commit_plant "$target" "$from"
 }
 
+# Insert $3 immediately after the first line equal to $2 in the copied template.
+# awk rather than `sed 's/x/x\ny/'`: a newline in a sed replacement is written
+# differently on BSD and GNU sed, and this file runs on both.
+insert_after() {
+  copy="$1"; after="$2"; line="$3"
+  target="$copy/$REL"
+  awk -v after="$after" -v line="$line" '
+    { print }
+    $0 == after && done != 1 { print line; done = 1 }
+  ' "$target" > "$WORK_DIR/plant.tmp"
+  commit_plant "$target" "$after"
+}
+
 # Delete a whole [[table]] block from the copied template: the header line and
 # every line after it up to the next table header or end of file.
 drop_table() {
@@ -279,19 +398,19 @@ assert_guard_passes "" "the shipped tree"
 
 # 1. ORIGIN: a real deploy origin committed in [vars]. The generated config is
 # where place.domain belongs; the template ships ALLOWED_ORIGIN empty.
-COPY="$(fresh_copy origin)"
+COPY="$(fresh_copy_template origin)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 plant "$COPY" 'ALLOWED_ORIGIN = ""' 'ALLOWED_ORIGIN = "https://kb.harborbend.example"'
 assert_guard_catches "$COPY" "a real origin committed in [vars]"
 
 # 2. WORKER NAME: a place-named `name` where the framework placeholder belongs.
-COPY="$(fresh_copy worker-name)"
+COPY="$(fresh_copy_template worker-name)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 plant "$COPY" '^name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'name = "harborbend-feedback"'
 assert_guard_catches "$COPY" "a place-named worker name"
 
 # 3. DATABASE NAME: the same identity leak one key deeper, in [[d1_databases]].
-COPY="$(fresh_copy database-name)"
+COPY="$(fresh_copy_template database-name)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 plant "$COPY" '^database_name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'database_name = "harborbend-feedback"'
 assert_guard_catches "$COPY" "a place-named database_name"
@@ -300,7 +419,7 @@ assert_guard_catches "$COPY" "a place-named database_name"
 # template, that the guard carries no expectation for. Copied rather than
 # written from a heredoc so it is compliant by construction: the only thing
 # wrong with it is that nobody registered it.
-COPY="$(fresh_copy new-worker)"
+COPY="$(fresh_copy_template new-worker)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 NEW_WORKER="$COPY/workers/selftest-unregistered"
 mkdir -p "$NEW_WORKER"
@@ -310,7 +429,7 @@ assert_guard_catches "$COPY" "a worker directory with no registered expectation"
 
 # 5. DROPPED D1: the whole [[d1_databases]] block removed. No key is wrong
 # because no key is left, so only a registered block count catches it.
-COPY="$(fresh_copy dropped-d1)"
+COPY="$(fresh_copy_template dropped-d1)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 drop_table "$COPY" '[[d1_databases]]'
 assert_guard_catches "$COPY" "a deleted [[d1_databases]] block"
@@ -319,7 +438,7 @@ assert_guard_catches "$COPY" "a deleted [[d1_databases]] block"
 # `git ls-files`, so the fixture must be a real repository -- staged is enough,
 # no commit needed. The copies above are not repositories, which is exactly why
 # this class needs its own fixture rather than riding along with one of them.
-COPY="$(fresh_copy tracked-derived)"
+COPY="$(fresh_copy_template tracked-derived)"
 git -C "$COPY" init -q
 assert_guard_passes "$COPY" "a git repository with no derived artifact tracked"
 FEEDBACK_WORKER="$(dirname "$COPY/$REL")"
@@ -333,27 +452,27 @@ assert_guard_catches "$COPY" "a tracked generated embedding index" \
   "workers/chat/vectors.json"
 
 # 7. DROPPED AI: the registered chat worker must keep the Workers AI binding.
-COPY="$(fresh_copy dropped-ai)"
+COPY="$(fresh_copy_template dropped-ai)"
 assert_guard_passes "$COPY" "an unmutated copy of the shipped workers/ tree"
 drop_table "$COPY" '[ai]'
 assert_guard_catches "$COPY" "a deleted [ai] block"
 
 # 8. STALE DEFAULT: the runbook documenting a constant the template does not
 # ship. Nothing else in this repository compares the two.
-COPY="$(fresh_copy_with_runbook stale-default)"
+COPY="$(fresh_copy_with_runbook_template stale-default)"
 assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
 plant_runbook "$COPY" 'a retuned default' \
   sed 's|template (`0.46`)|template (`0.9`)|'
 assert_guard_catches "$COPY" "a documented default the template does not ship" "$RUNBOOK_REL"
 
 # 9. UNDOCUMENTED: a shipped default with no row to read it from.
-COPY="$(fresh_copy_with_runbook undocumented-default)"
+COPY="$(fresh_copy_with_runbook_template undocumented-default)"
 assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
 plant_runbook "$COPY" 'a deleted default row' grep -v 'RELEVANCE_FLOOR'
 assert_guard_catches "$COPY" "a shipped default the runbook documents nowhere" "$RUNBOOK_REL"
 
 # 10. DROPPED ANCHOR: the comment that ties a table to this gate, removed.
-COPY="$(fresh_copy_with_runbook dropped-anchor)"
+COPY="$(fresh_copy_with_runbook_template dropped-anchor)"
 assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
 plant_runbook "$COPY" 'a deleted table anchor' grep -v 'worker-vars: chat'
 assert_guard_catches "$COPY" "a deleted worker-vars anchor" "$RUNBOOK_REL"
@@ -361,7 +480,7 @@ assert_guard_catches "$COPY" "a deleted worker-vars anchor" "$RUNBOOK_REL"
 # 11. DROPPED OVERRIDE: the Source cell still states the right default, but no
 # longer says where a retuned value goes. Only the override cross-check catches
 # it; every value comparison above still passes.
-COPY="$(fresh_copy_with_runbook dropped-override)"
+COPY="$(fresh_copy_with_runbook_template dropped-override)"
 assert_guard_passes "$COPY" "an unmutated copy carrying the runbook"
 plant_runbook "$COPY" 'a deleted override key' \
   sed 's|template (`0.46`), override `workers.chatRelevanceFloor`|template (`0.46`)|'
@@ -553,4 +672,163 @@ if grep -q '^RELEVANCE_FLOOR' "$COPY/$GENERATED_REL"; then
   exit 1
 fi
 
-echo "OK: worker config self-test passed -- the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, and a runbook that has drifted from the shipped defaults; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"
+# -- Instance mode -----------------------------------------------------------
+#
+# Everything above pointed the gate at a fixture carrying .sekai-template, i.e. the
+# framework's own tree. Everything below removes it, which is the state of every
+# adopted instance: the same guard, the same planted defects, a different verdict
+# for the half of them that cost only the person who made the edit (ADR 010).
+
+# 21. MODE: the marker probe resolves against --root. Asserted first and on its own,
+# because a probe that resolved against the guard's own location would report
+# template mode for every fixture below -- and every one of those classes would then
+# pass while testing the wrong branch.
+COPY="$(fresh_copy mode-instance)"
+assert_guard_passes "$COPY" "a marker-less copy of the shipped workers/ tree"
+assert_guard_mode "$COPY" "instance"
+COPY="$(fresh_copy_template mode-template)"
+assert_guard_passes "$COPY" "a copy carrying .sekai-template"
+assert_guard_mode "$COPY" "template"
+
+# 22. WORKER NAME: account-scoped. Two instances deploying the same script name
+# collide inside one Cloudflare account, which is harm beyond the editor.
+COPY="$(fresh_copy instance-worker-name)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" '^name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'name = "harborbend-feedback"'
+assert_guard_catches "$COPY" "a place-named worker name in an instance"
+
+# 23. DATABASE NAME: the same collision one key deeper.
+COPY="$(fresh_copy instance-database-name)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" '^database_name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'database_name = "harborbend-feedback"'
+assert_guard_catches "$COPY" "a place-named database_name in an instance"
+
+# 24. DATABASE ID: an account-scoped identifier, and the one identity key with no
+# template-mode class of its own above -- so this class asserts both modes.
+COPY="$(fresh_copy instance-database-id)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" '^database_id = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'database_id = "0f9c1a7e-planted"'
+assert_guard_catches "$COPY" "a committed database_id in an instance"
+COPY="$(fresh_copy_template template-database-id)"
+assert_guard_passes "$COPY" "an unmutated copy carrying .sekai-template"
+plant "$COPY" '^database_id = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"' 'database_id = "0f9c1a7e-planted"'
+assert_guard_catches "$COPY" "a committed database_id in the template"
+
+# 25. ALLOWED_ORIGIN: a [vars] key, and the ONE that stays fatal in instance mode.
+# It is the workers' CORS boundary, so a committed one is a security decision made
+# in a framework-owned file and shipped to whoever clones next -- not a tuning
+# constant. If the [vars] relaxation below were written one line too wide, this is
+# the class that catches it.
+COPY="$(fresh_copy instance-origin)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" 'ALLOWED_ORIGIN = ""' 'ALLOWED_ORIGIN = "https://kb.harborbend.example"'
+assert_guard_catches "$COPY" "a real origin committed in an instance"
+
+# 26. DROPPED D1: the generator never adds a block, so the deployed worker would
+# reach env.DB.prepare with env.DB undefined.
+COPY="$(fresh_copy instance-dropped-d1)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+drop_table "$COPY" '[[d1_databases]]'
+assert_guard_catches "$COPY" "a deleted [[d1_databases]] block in an instance"
+
+# 27. UNPARSEABLE: a config this reader cannot parse is one nothing is checking --
+# including nothing checking the identity keys above. Fatal in both modes for that
+# reason, and neither mode had a class for it before, so both are asserted here.
+COPY="$(fresh_copy instance-unparseable)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+insert_after "$COPY" 'main = "src/index.mjs"' 'this line is not a toml assignment'
+assert_guard_catches "$COPY" "an unparseable config in an instance"
+COPY="$(fresh_copy_template template-unparseable)"
+assert_guard_passes "$COPY" "an unmutated copy carrying .sekai-template"
+insert_after "$COPY" 'main = "src/index.mjs"' 'this line is not a toml assignment'
+assert_guard_catches "$COPY" "an unparseable config in the template"
+
+# 28. NEW WORKER: an unregistered worker directory is one whose `name` and
+# `database_name` are checked by nothing at all, so exempting it by omission would
+# reopen every identity class above.
+COPY="$(fresh_copy instance-new-worker)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+NEW_WORKER="$COPY/workers/selftest-unregistered"
+mkdir -p "$NEW_WORKER"
+cp "$COPY/$REL" "$NEW_WORKER/wrangler.toml"
+assert_guard_catches "$COPY" "an unregistered worker directory in an instance" \
+  "workers/selftest-unregistered/wrangler.toml"
+
+# 29. TRACKED DERIVED: both artifacts are gitignored and skipped by name in the two
+# machine gates, so an instance that commits one has nothing else looking at it.
+COPY="$(fresh_copy instance-tracked-derived)"
+git -C "$COPY" init -q
+assert_guard_passes "$COPY" "a marker-less git repository with no derived artifact tracked"
+INSTANCE_WORKER="$(dirname "$COPY/$REL")"
+printf 'name = "planted"\n' > "$INSTANCE_WORKER/wrangler.generated.toml"
+mkdir -p "$COPY/workers/chat"
+printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/chat/vectors.json"
+git -C "$COPY" add -A
+assert_guard_catches "$COPY" "a tracked generated worker config in an instance" \
+  "$(basename "$INSTANCE_WORKER")/wrangler.generated.toml"
+assert_guard_catches "$COPY" "a tracked generated embedding index in an instance" \
+  "workers/chat/vectors.json"
+
+# 30. RETUNED TUNING VAR: the class this whole change exists for. A relevance floor
+# an instance measured against its own corpus is theirs to set, so the build stays
+# green -- and the warning has to carry enough to act on: the file, the key, both
+# values, the upgrade cost, and the place.config.ts key that records the same value
+# without ever conflicting.
+COPY="$(fresh_copy instance-retuned-var)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" 'RELEVANCE_FLOOR = "0.46"' 'RELEVANCE_FLOOR = "0.52"'
+assert_guard_warns "$COPY" "a retuned [vars] constant in an instance" \
+  "$REL" 'RELEVANCE_FLOOR' '"0.52"' '"0.46"' '/sekai-upgrade' 'workers.chatRelevanceFloor'
+
+# 31. ADOPTER-ADDED VAR: a [vars] key no registration covers. ADR 010 (d): in an
+# adopter's tree that is the edit right this change grants, not a defect. There is
+# no framework constant to name, so the warning says so rather than inventing one.
+COPY="$(fresh_copy instance-added-var)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+insert_after "$COPY" 'RELEVANCE_FLOOR = "0.46"' 'ADOPTER_TUNING_KNOB = "1"'
+assert_guard_warns "$COPY" "a [vars] key the adopter added" \
+  "$REL" 'ADOPTER_TUNING_KNOB' 'no such key' '/sekai-upgrade'
+
+# 32. ANNOTATION: under GITHUB_ACTIONS the same warning is also a workflow command,
+# so it lands on the run summary and the pull request instead of only in a log. The
+# framework repository is always in template mode, so this suite's own output is the
+# only place a CI run can show one -- which is why the line is echoed below rather
+# than only asserted.
+COPY="$(fresh_copy instance-annotation)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy"
+plant "$COPY" 'RELEVANCE_FLOOR = "0.46"' 'RELEVANCE_FLOOR = "0.52"'
+if ! GITHUB_ACTIONS=true node "$GUARD" --root "$COPY" > "$OUT" 2>&1; then
+  echo "FAIL: worker config self-test -- the guard failed the build on a retuned var" >&2
+  echo "  under GITHUB_ACTIONS; the annotation must not change the verdict." >&2
+  cat "$OUT" >&2
+  exit 1
+fi
+if ! grep -q "^::warning file=$REL::" "$OUT"; then
+  echo "FAIL: worker config self-test -- the guard warned about a retuned var but emitted" >&2
+  echo "  no \"::warning file=$REL::\" annotation under GITHUB_ACTIONS. Without it the" >&2
+  echo "  divergence reaches the log and nothing else:" >&2
+  cat "$OUT" >&2
+  exit 1
+fi
+# A workflow command must be one line: a raw newline would truncate the annotation
+# at the first one and leave the rest as stray log text.
+if [ "$(grep -c "^::warning file=$REL::" "$OUT")" != "1" ]; then
+  echo "FAIL: worker config self-test -- expected exactly one annotation line for $REL:" >&2
+  cat "$OUT" >&2
+  exit 1
+fi
+echo "worker config self-test: the instance-mode annotation this suite asserts, echoed"
+echo "  so a CI run of the template (always template mode) still shows one:"
+grep "^::warning file=$REL::" "$OUT"
+
+# 33. RUNBOOK DRIFT: docs/runbook/ is framework-owned, and in an adopter's tree both
+# it and the template are their files. The framework is what ships the table to
+# every adopter, so template mode stays fatal (class 8 above).
+COPY="$(fresh_copy_with_runbook instance-stale-default)"
+assert_guard_passes "$COPY" "an unmutated marker-less copy carrying the runbook"
+plant_runbook "$COPY" 'a retuned default' \
+  sed 's|template (`0.46`)|template (`0.9`)|'
+assert_guard_warns "$COPY" "a drifted runbook default in an instance" \
+  "$RUNBOOK_REL" '/sekai-upgrade'
+
+echo "OK: worker config self-test passed -- in template mode the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, an unparseable config, and a runbook that has drifted from the shipped defaults; in instance mode it still fails on all of the identity and structural classes and warns, with both values and the upgrade cost, on the divergences that cost only the adopter; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"

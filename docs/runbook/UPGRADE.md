@@ -120,10 +120,15 @@ The merge outcome, file by file:
   — added to your instance.
 - **Files only you have** (your docs, research, tracker config) — untouched; a
   merge never deletes a path absent on the incoming side.
-- **Framework-owned files you also carry** (`src/`, `scripts/`) — these conflict
-  on the first merge, because with unrelated histories git sees both sides as
-  having "added" the file. Resolve them to the framework version (the ownership
-  rule: `src/` and `scripts/` are framework-owned):
+- **Framework-owned files you also carry** (`src/`, `scripts/`, `workers/`,
+  `.agents/skills/`) — a file whose two sides are byte-identical merges cleanly even
+  with unrelated histories, so what conflicts here is the set where the content
+  actually differs: a framework change made since your clone was cut, an edit of your
+  own, or both. **Each one is a decision, and it is yours.** Framework-owned means the
+  framework ships that file and every release replaces it wholesale; it does not mean
+  you may not edit it. Taking the framework's version is the default that costs
+  nothing later. Keeping your own is supported, and costs this same conflict again on
+  every release until you upstream it.
 
 ```bash
 # v1.0.8 -> v1.0.9 only: keep the adopter's VERSION when the framework deletes
@@ -131,8 +136,20 @@ The merge outcome, file by file:
 git diff --name-only --diff-filter=U | grep -Fxq VERSION \
   && git checkout --ours VERSION && git add VERSION || true
 
-# Take framework for every remaining framework-owned conflict:
-for f in $(git diff --name-only --diff-filter=U); do git checkout --theirs "$f" && git add "$f"; done
+# List what is left to decide. Nothing is resolved for you: a loop that took one
+# side for every path would silently delete work you meant to keep.
+git diff --name-only --diff-filter=U
+```
+
+Then, one file at a time, read both sides before choosing. `:2:` is your version and
+`:3:` is the framework's incoming one; the target's CHANGELOG entry (printed in the
+routine flow's step 3, and readable here with
+`git show "$TARGET":CHANGELOG.md`) is what says why the framework's side changed:
+
+```bash
+git diff ":2:<file>" ":3:<file>"                 # yours vs the framework's incoming
+git checkout --theirs -- <file> && git add <file>  # take the framework's
+git checkout --ours   -- <file> && git add <file>  # keep yours, knowingly
 ```
 
 Then remove the template-only marker (an instance is not the template) and any
@@ -241,12 +258,19 @@ node "$PACKAGE_HELPER" reconcile "$PACKAGE_STATE"
 
 # 7. If conflicts remain: they can only be framework-owned files you edited locally,
 #    or the one-time VERSION modify/delete conflict when leaving v1.0.8. Keep the
-#    adopter VERSION in that one case. For framework-owned files, read the CHANGELOG.
-#    Read the CHANGELOG line for each, then take framework unless you intentionally
-#    forked it (in which case: upstream it to sekai-kb so it stops conflicting):
+#    adopter VERSION in that one case. Every other one is a per-file decision, and
+#    nothing here resolves them for you.
 git diff --name-only --diff-filter=U
-#    git checkout --theirs <file> && git add <file>     # take framework
-#    git commit --no-edit                               # finalize the merge
+#    For each file: read the CHANGELOG line for this release (step 3), then read your
+#    side against the framework's incoming side, then choose. Taking the framework's
+#    version is the default and ends the conflict. Keeping your own edit is a
+#    supported outcome — it is your repository — and the cost is that this same file
+#    conflicts again on every release until you upstream the change to sekai-kb,
+#    which is the recommended route precisely because it makes the conflict stop:
+#    git diff ":2:<file>" ":3:<file>"                   # yours vs framework incoming
+#    git checkout --theirs -- <file> && git add <file>   # take framework
+#    git checkout --ours   -- <file> && git add <file>   # keep yours, knowingly
+#    git commit --no-edit                                # finalize the merge
 
 # 8. Build-verify, then record the newly adopted framework version. Until this
 #    point FRAMEWORK-VERSION still holds the OLD value that step 6 restored — that
@@ -270,6 +294,33 @@ Upgrade note tells you what you are opting out of. Enable it by editing
 Pushing `main` deploys (see `DEPLOY.md` §CI) — that step is yours to make.
 
 ---
+
+## Framework-owned files: a default and an upgrade contract, not a lock
+
+`src/`, `scripts/`, `workers/`, and `.agents/skills/` are framework-owned: the
+framework ships them, and every release replaces them wholesale. That is a statement
+about where those files come from, not a permission boundary. This is your
+repository, and you may edit any file in it.
+
+What an edit costs is stated rather than prevented. A framework check running in your
+repository fails your build only for something that harms someone other than you —
+account-scoped collisions (a Worker `name`, a D1 `database_name`), committed
+credentials, security boundaries. Every other divergence from a framework-owned file
+**warns**: `npm run worker-config:check` names the file, the key, your value, the
+framework's, and the cost, and your CI run carries it as an annotation rather than a
+failure. The cost is the conflict this document is about: that file conflicts on every
+release until the two sides agree again.
+
+Three ways to make it agree, in order of what they cost you later:
+
+1. **Use the configured seam if one exists.** A value with a `place.config.ts` key
+   (`workers.chatRelevanceFloor` and the rest of the table in `DEPLOY.md`) belongs
+   there: instance-owned, never in conflict, and it reaches the same deployed value.
+2. **Upstream the change to sekai-kb.** Recommended for anything without a seam: it
+   comes back as a tagged release, every instance gets it, and the file stops
+   conflicting for you.
+3. **Keep the fork.** Supported. You resolve this one file on each upgrade, with the
+   framework's incoming version in front of you.
 
 ## Instance-owned files (`merge=ours`)
 

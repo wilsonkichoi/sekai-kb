@@ -12,22 +12,73 @@
 // `ALLOWED_ORIGIN = "https://example.com"` or `name = "coastal-feedback"` passes it
 // cleanly while being exactly the value that must not be committed. This gate asserts
 // the committed template still carries the framework placeholders, which is a
-// statement about the file rather than about any particular place, and therefore
-// fails in an adopter's checkout too -- the point, since an adopter is who would
-// otherwise paste a real origin in and never be told.
+// statement about the file rather than about any particular place.
 //
-// Checks, all exit 1:
+// TWO MODES (ADR 010) -------------------------------------------------------
+//
+// This gate runs in the framework's own repository AND in every adopter's, because
+// adoption copies .github/workflows/deploy.yml along with everything else. Those are
+// not the same situation, and the mode is read from the `.sekai-template` marker at
+// the --root this gate was pointed at:
+//
+//   TEMPLATE MODE (marker present) -- the framework's own tree. Every check below is
+//   fatal. A changed default has to be a deliberate edit to EXPECTED as well as to
+//   the template, which is what keeps this a contract rather than a restatement of
+//   whatever the file happens to say today.
+//
+//   INSTANCE MODE (marker absent) -- an adopter's tree, where workers/ is their file
+//   in their repository. A framework gate may fail their build only for something
+//   that harms a party other than the person editing (ADR 010 (a)): account-scoped
+//   collisions, committed credentials, security boundaries. Every other divergence
+//   warns, names both values, and names the upgrade cost. An adopter retuning a
+//   number that is theirs to tune is not a build error; the cost of that edit is a
+//   merge conflict at the next /sekai-upgrade, and saying so is this gate's whole job
+//   there.
+//
+// Fatal in BOTH modes -- deployment identity, plus the two structural checks without
+// which the identity checks cannot run at all:
 //   - a committed workers/<w>/wrangler.toml this reader cannot parse (an unparsed
-//     config is one nothing is checking);
+//     config is one nothing is checking, including nothing checking its identity);
 //   - a worker directory with no expectation registered below (a new worker must
-//     declare what it ships with, rather than being exempt by omission);
-//   - `name`, any `[[d1_databases]]` `database_name` or `database_id`, or any [vars]
-//     value that is not the constant the framework ships;
-//   - a missing registered key (deleting ALLOWED_ORIGIN is not a way to pass);
+//     declare what it ships with, rather than being exempt by omission -- an
+//     unregistered worker is one whose `name` and `database_name` go unchecked);
+//   - `name`, or any `[[d1_databases]]` `database_name` or `database_id`, that is not
+//     the framework placeholder, or missing outright. Both are ACCOUNT-scoped: two
+//     instances sharing one is a collision inside someone else's account;
+//   - `[vars] ALLOWED_ORIGIN` changed or deleted. It is the chat and feedback workers'
+//     CORS boundary -- a security boundary, not a tuning constant -- and the generator
+//     only rewrites keys the template already carries, so deleting it is not a way to
+//     pass either;
 //   - a `[[d1_databases]]` block set that does not match the bindings registered
 //     below, including a deleted one (removing the whole block is not a way to pass
 //     either: the generator only rewrites keys the template already has, so a
 //     template with no D1 block generates a deploy config with no `env.DB`);
+//   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
+//     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
+//     embeddings:build`). Both are gitignored and both are skipped by name in the two
+//     machine gates, so committing one would smuggle place identity past them -- the
+//     deploy config through its origin and worker names, the vector index through every
+//     article title, url, and body chunk it carries.
+//
+// Fatal in template mode, a WARNING in instance mode -- divergence from a
+// framework-owned file whose only cost lands on the person who made it:
+//   - any other [vars] value that is not the constant the framework ships, and any
+//     other registered [vars] key deleted from the template. The classification is
+//     derived, never duplicated (ADR 010 (c)): WORKER_VAR_OVERRIDES in
+//     scripts/deploy/wrangler-config.mjs already names the keys an instance is invited
+//     to retune, and the warning points at the place.config.ts key that records the
+//     same value without a conflict;
+//   - a [vars] key the template does not register. In an adopter's tree that is a var
+//     they added, which is the edit right ADR 010 (d) grants them; in the framework's
+//     it is still a worker nothing is checking;
+//   - an override registered for a [vars] key the committed template does not carry.
+//     The generator's half of that contract already warns and drops the value, because
+//     an instance that hits it hit it by upgrading and still has to be able to deploy;
+//     failing in template mode is what keeps the framework from shipping the mismatch
+//     in the first place;
+//   - an [ai] binding that is missing, renamed, or unregistered. A chat worker without
+//     it cannot call env.AI.run -- which breaks that instance's own deployment and
+//     nobody else's;
 //   - a documented default in docs/runbook/DEPLOY.md that disagrees with the constant
 //     the template ships, a registered default the runbook documents nowhere, and a
 //     runbook table whose `<!-- worker-vars: <name> -->` anchor is gone. The runbook is
@@ -39,20 +90,15 @@
 //     `workers.<key>`, a row naming a key no override is registered for, or a row
 //     naming the wrong one. Telling an operator to measure a value and not telling them
 //     where to put the answer is the defect this whole override path exists to fix, and
-//     it comes back the moment the two drift;
-//   - an override registered for a [vars] key the committed template does not carry.
-//     This is the fatal half of that contract: the generator only warns and drops the
-//     value, because an instance that hits it hit it by upgrading and still has to be
-//     able to deploy. Failing here is what keeps the framework from shipping the
-//     mismatch in the first place;
-//   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
-//     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
-//     embeddings:build`). Both are gitignored and both are skipped by name in the two
-//     machine gates, so committing one would smuggle place identity past them -- the
-//     deploy config through its origin and worker names, the vector index through every
-//     article title, url, and body chunk it carries.
+//     it comes back the moment the two drift.
 //
-// Success prints one summary line and exits 0.
+// Warnings exit 0. They are printed for a human and, under GitHub Actions, emitted as
+// `::warning file=<path>::<message>` so the divergence reaches the run summary and the
+// pull request rather than only a log nobody opens. /sekai-upgrade reports the same
+// files again at merge time, with the framework's incoming value beside the instance's
+// (ADR 010 (e)); neither message alone is enough.
+//
+// Success prints one summary line naming the mode, plus any warnings, and exits 0.
 //
 // Usage: node scripts/ci/check-worker-config.mjs [--root <dir>]
 //
@@ -139,7 +185,55 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
+/* -- Mode ------------------------------------------------------------------
+ *
+ * Resolved against `root`, never against this file's own location: the self-test
+ * points the gate at temp-tree copies with --root, and a probe relative to the
+ * script would report the framework's own mode for every one of them -- so every
+ * instance-mode assertion would silently exercise template mode and prove nothing.
+ */
+const TEMPLATE_MARKER = '.sekai-template';
+const templateMode = existsSync(join(root, TEMPLATE_MARKER));
+const mode = templateMode ? 'template' : 'instance';
+
+/**
+ * [vars] keys that stay fatal in instance mode. ALLOWED_ORIGIN is the workers' CORS
+ * boundary: a committed one is a security boundary decided in a framework-owned file
+ * and shipped to whoever clones next, which is harm beyond the person editing.
+ * Everything else in [vars] is a tuning constant or place-derived copy, and belongs
+ * to the instance under ADR 010.
+ */
+const IDENTITY_VARS = new Set(['ALLOWED_ORIGIN']);
+
+/** Exit 1 in every mode. */
 const failures = [];
+/** Exit 1 in template mode, exit 0 with an annotation in instance mode. */
+const warnings = [];
+
+/**
+ * The cost sentence every instance-mode warning carries. A warning that names a
+ * divergence without naming what it will cost is one an adopter has no way to price.
+ */
+const DIVERGENCE_COST =
+  'a merge conflict on this file at the next /sekai-upgrade, where the framework value ' +
+  'arrives beside yours';
+
+/**
+ * Record a defect whose only cost lands on the person who made the edit: fatal where
+ * the framework owns the tree, a warning where the adopter does.
+ *
+ * `instanceTail` is appended in instance mode only. A framework maintainer reading a
+ * template-mode failure is not upgrading anything, so the diagnostic they see is the
+ * one this gate has always printed; the adopter is the one who needs the price.
+ */
+const owned = (file, message, instanceTail = '') => {
+  if (templateMode) failures.push(message);
+  else warnings.push({ file, message: message + instanceTail });
+};
+
+/** The instance-mode tail every warning carries: what keeping this divergence costs. */
+const costTail = (extra = '') => `\n      cost: ${DIVERGENCE_COST}.${extra}`;
+
 const workersDir = join(root, 'workers');
 
 if (!existsSync(workersDir)) {
@@ -185,6 +279,32 @@ for (const dir of workerDirs) {
         `      expected: ${JSON.stringify(want)} (the framework placeholder/constant)`,
     );
 
+  const overrides = WORKER_VAR_OVERRIDES[dir] ?? {};
+
+  /**
+   * The same comparison `report` makes, for a value the instance owns. In template
+   * mode it fails with exactly the text `report` would have printed; in instance mode
+   * it warns and adds the cost, plus -- when the framework registered an override for
+   * that key -- the place.config.ts key that records the same value without ever
+   * conflicting.
+   */
+  const ownedReport = (label, varName, found, want) => {
+    const configKey = overrides[varName]?.configKey;
+    owned(
+      rel,
+      `${rel}: ${label}\n` +
+        `      found:    ${JSON.stringify(found)}\n` +
+        `      expected: ${JSON.stringify(want)} (the framework placeholder/constant)`,
+      costTail(
+        configKey
+          ? `\n      no-conflict alternative: set \`workers.${configKey}\` in place.config.ts; ` +
+              'it is instance-owned, survives every upgrade, and reaches the same deployed ' +
+              'value (docs/runbook/DEPLOY.md).'
+          : '',
+      ),
+    );
+  };
+
   if (!('name' in config.top)) {
     failures.push(`${rel}: no top-level "name" key. The template must ship one, as the placeholder.`);
   } else if (config.top.name !== PLACEHOLDER) {
@@ -194,16 +314,31 @@ for (const dir of workerDirs) {
   const vars = config.tables.vars ?? {};
   for (const [key, want] of Object.entries(expected.vars)) {
     if (!(key in vars)) {
-      failures.push(`${rel}: [vars] has no "${key}" key; the generator overrides it and needs it present.`);
+      const missing =
+        `${rel}: [vars] has no "${key}" key; the generator overrides it and needs it present.`;
+      if (IDENTITY_VARS.has(key)) failures.push(missing);
+      else {
+        owned(
+          rel,
+          missing,
+          `\n      the framework ships it as ${JSON.stringify(want)}; with the key gone the ` +
+            'generator writes no value and the deployed worker falls back to its compiled-in ' +
+            `default.${costTail()}`,
+        );
+      }
     } else if (vars[key] !== want) {
-      report(`[vars] ${key}`, vars[key], want);
+      if (IDENTITY_VARS.has(key)) report(`[vars] ${key}`, vars[key], want);
+      else ownedReport(`[vars] ${key}`, key, vars[key], want);
     }
   }
   for (const key of Object.keys(vars)) {
     if (!(key in expected.vars)) {
-      failures.push(
+      owned(
+        rel,
         `${rel}: [vars] carries an unregistered key "${key}" = ${JSON.stringify(vars[key])}. ` +
           'Register its framework constant in scripts/ci/check-worker-config.mjs, or remove it.',
+        `\n      the framework ships no such key, so there is no constant to compare it ` +
+          `against; keeping it is your call.${costTail()}`,
       );
     }
   }
@@ -212,12 +347,15 @@ for (const dir of workerDirs) {
   // If the template drops the var, that promise breaks only for the instance that set
   // the key, at generation time, long after the change that broke it -- and there it
   // is a warning, not a stop. This is where it is caught while it is still cheap.
-  for (const [key, spec] of Object.entries(WORKER_VAR_OVERRIDES[dir] ?? {})) {
+  for (const [key, spec] of Object.entries(overrides)) {
     if (!(key in vars)) {
-      failures.push(
+      owned(
+        rel,
         `${rel}: scripts/deploy/wrangler-config.mjs registers \`workers.${spec.configKey}\` as an ` +
           `override for [vars] ${key}, but the template carries no such key. Restore it, or drop ` +
           'the registration.',
+        `\n      \`npm run worker-config\` names the key and generates without it, so ` +
+          `\`workers.${spec.configKey}\` in place.config.ts now does nothing.${costTail()}`,
       );
     }
   }
@@ -225,10 +363,21 @@ for (const dir of workerDirs) {
   const ai = config.tables.ai;
   if (expected.aiBinding) {
     if (!ai || ai.binding !== expected.aiBinding) {
-      report('[ai] binding', ai?.binding, expected.aiBinding);
+      owned(
+        rel,
+        `${rel}: [ai] binding\n` +
+          `      found:    ${JSON.stringify(ai?.binding)}\n` +
+          `      expected: ${JSON.stringify(expected.aiBinding)} (the framework placeholder/constant)`,
+        '\n      the worker calls env.AI.run through this binding, so a renamed or missing ' +
+          `one fails at request time -- in this instance's deployment.${costTail()}`,
+      );
     }
   } else if (ai) {
-    failures.push(`${rel}: carries an unregistered [ai] binding.`);
+    owned(
+      rel,
+      `${rel}: carries an unregistered [ai] binding.`,
+      costTail(),
+    );
   }
 
   const databases = config.arrays.d1_databases ?? [];
@@ -302,6 +451,15 @@ const RUNBOOK_REL = 'docs/runbook/DEPLOY.md';
  */
 const SOURCE_RE = /^template \(`([^`]*)`\)(?:, override `workers\.([A-Za-z0-9_]+)`)?$/;
 
+/**
+ * A runbook that has drifted from the shipped constants. Fatal in template mode: the
+ * framework is what ships this table to every adopter, so it may not ship a wrong
+ * number. In instance mode both the runbook and the template are the adopter's own
+ * files, and disagreeing with the framework there costs them an upgrade conflict and
+ * nobody else anything.
+ */
+const runbookOwned = (message) => owned(RUNBOOK_REL, message, costTail());
+
 const runbookAbs = join(root, RUNBOOK_REL);
 const runbookPresent = existsSync(runbookAbs);
 
@@ -315,7 +473,7 @@ if (runbookPresent) {
     const worker = anchor[1];
 
     if (documented.has(worker)) {
-      failures.push(`${RUNBOOK_REL}: two "worker-vars: ${worker}" anchors; one table per worker.`);
+      runbookOwned(`${RUNBOOK_REL}: two "worker-vars: ${worker}" anchors; one table per worker.`);
       continue;
     }
 
@@ -327,7 +485,7 @@ if (runbookPresent) {
       j += 1;
     }
     if (rows.length === 0) {
-      failures.push(
+      runbookOwned(
         `${RUNBOOK_REL}: the "worker-vars: ${worker}" anchor is followed by no table. ` +
           'The anchor marks the table that documents that worker\'s shipped constants.',
       );
@@ -347,7 +505,7 @@ if (runbookPresent) {
   for (const [worker, defaults] of documented) {
     const expected = EXPECTED[worker];
     if (!expected) {
-      failures.push(
+      runbookOwned(
         `${RUNBOOK_REL}: documents a worker "${worker}" that has no expectation registered ` +
           'in scripts/ci/check-worker-config.mjs.',
       );
@@ -356,17 +514,17 @@ if (runbookPresent) {
     const overridable = WORKER_VAR_OVERRIDES[worker] ?? {};
     for (const [key, { value, overrideKey }] of defaults) {
       if (!(key in expected.vars)) {
-        failures.push(
+        runbookOwned(
           `${RUNBOOK_REL}: documents ${worker} [vars] ${key} as a shipped default, but the ` +
             'template carries no such key.',
         );
       } else if (expected.vars[key] === '') {
-        failures.push(
+        runbookOwned(
           `${RUNBOOK_REL}: documents ${worker} [vars] ${key} as "template (\`${value}\`)", but ` +
             'the template ships it empty; it is generated per place, not a framework default.',
         );
       } else if (expected.vars[key] !== value) {
-        failures.push(
+        runbookOwned(
           `${RUNBOOK_REL}: ${worker} [vars] ${key}\n` +
             `      documented: ${JSON.stringify(value)}\n` +
             `      shipped:    ${JSON.stringify(expected.vars[key])} (workers/${worker}/${TEMPLATE_BASENAME})`,
@@ -375,7 +533,7 @@ if (runbookPresent) {
 
       const wantKey = overridable[key]?.configKey;
       if (wantKey !== overrideKey) {
-        failures.push(
+        runbookOwned(
           `${RUNBOOK_REL}: ${worker} [vars] ${key} Source cell\n` +
             `      documents override: ${overrideKey ? `\`workers.${overrideKey}\`` : 'none'}\n` +
             `      registered:         ${wantKey ? `\`workers.${wantKey}\`` : 'none'} ` +
@@ -387,7 +545,7 @@ if (runbookPresent) {
     }
     for (const [key, value] of Object.entries(expected.vars)) {
       if (value !== '' && !defaults.has(key)) {
-        failures.push(
+        runbookOwned(
           `${RUNBOOK_REL}: the ${worker} table documents no default for [vars] ${key} ` +
             `(the template ships ${JSON.stringify(value)}). An operator tuning it has nowhere ` +
             'to read what it started as.',
@@ -398,7 +556,7 @@ if (runbookPresent) {
 
   for (const worker of checkedWorkers) {
     if (!documented.has(worker)) {
-      failures.push(
+      runbookOwned(
         `${RUNBOOK_REL}: no "<!-- worker-vars: ${worker} -->" anchor. Every worker with a ` +
           'committed template documents its shipped constants there, and the anchor is what ' +
           'ties the table to this gate.',
@@ -445,7 +603,7 @@ for (const artifact of DERIVED_ARTIFACTS) {
 
 if (failures.length) {
   const runbookFailures = failures.filter((f) => f.startsWith(`${RUNBOOK_REL}:`));
-  console.error('FAIL: the committed worker contract does not hold:');
+  console.error(`FAIL: the committed worker contract does not hold (${mode} mode):`);
   for (const f of failures) console.error(`  ${f}`);
   if (runbookFailures.length < failures.length) {
     console.error('');
@@ -462,10 +620,43 @@ if (failures.length) {
   process.exit(1);
 }
 
+/* -- Instance-mode warnings -------------------------------------------------
+ *
+ * Two audiences, one list. The human block is what a local `npm run
+ * worker-config:check` prints, where GitHub's annotation syntax is noise. The
+ * annotation is what makes the divergence visible on the run and in the pull request
+ * instead of only in a log; GitHub sets GITHUB_ACTIONS on every runner, and it is the
+ * only place the syntax means anything.
+ *
+ * A workflow command must be one line, so newlines are percent-encoded per GitHub's
+ * escaping rules; the annotation body renders with them restored.
+ */
+const encodeAnnotation = (s) => s.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+
+if (warnings.length) {
+  console.log(
+    `WARN: ${warnings.length} divergence(s) from the framework's committed worker contract. ` +
+      'This build is not failing on them: they are yours to keep (ADR 010).',
+  );
+  for (const { message } of warnings) console.log(`  ${message}`);
+  if (process.env.GITHUB_ACTIONS) {
+    for (const { file, message } of warnings) {
+      console.log(`::warning file=${file}::${encodeAnnotation(message)}`);
+    }
+  }
+}
+
+const runbookNote = runbookPresent
+  ? `every shipped default matches the one ${RUNBOOK_REL} documents.`
+  : `${RUNBOOK_REL} is absent from this root, so no documented default was checked.`;
+
 console.log(
-  `OK: worker config gate passed -- ${checked} committed ${TEMPLATE_BASENAME} file(s) carry ` +
-    'framework placeholders only, no derived worker artifact is tracked, and ' +
-    (runbookPresent
-      ? `every shipped default matches the one ${RUNBOOK_REL} documents.`
-      : `${RUNBOOK_REL} is absent from this root, so no documented default was checked.`),
+  warnings.length
+    ? `OK: worker config gate passed (${mode} mode) -- ${checked} committed ${TEMPLATE_BASENAME} ` +
+        'file(s) carry no deployment identity and no derived worker artifact is tracked. ' +
+        `${warnings.length} divergence(s) from the framework contract are reported above, and ` +
+        'are this instance\'s to keep.'
+    : `OK: worker config gate passed (${mode} mode) -- ${checked} committed ${TEMPLATE_BASENAME} file(s) carry ` +
+        'framework placeholders only, no derived worker artifact is tracked, and ' +
+        runbookNote,
 );

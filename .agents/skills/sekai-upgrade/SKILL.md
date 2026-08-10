@@ -273,12 +273,14 @@ git diff --name-only --diff-filter=U
 For each file, show: the path, the relevant CHANGELOG line for this version, and
 the two sides (`git diff`). Then propose the resolution and its rationale:
 
-- **Framework-owned file (`src/`, `scripts/`), no intentional local change** →
-  propose taking framework (`git checkout --theirs <file>`). This is the ownership
-  rule healing an accidental local edit.
-- **A change the instance intentionally forked** → propose keeping the local
-  edit, and note it should be upstreamed to sekai-kb so it stops conflicting every
-  release (SPEC ownership rule).
+- **Framework-owned file (`src/`, `scripts/`, `workers/`, `.agents/skills/`), no
+  intentional local change** → propose taking framework
+  (`git checkout --theirs <file>`), which ends the conflict at no later cost.
+- **A change the instance intentionally forked** → propose keeping the local edit.
+  This is a supported outcome, not a defect to undo: framework-owned states where a
+  file comes from, not what the instance may edit (ADR 010). Name the cost — this
+  file conflicts again on every release — and offer upstreaming to sekai-kb as the
+  route that makes it stop, without requiring it.
 - **`VERSION` modify/delete conflict on the first upgrade from v1.0.8** → keep
   the adopter file. v1.0.8 mistakenly tracked a framework `VERSION`; the next
   framework release deletes it. This is a one-time migration conflict. Later

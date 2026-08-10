@@ -345,9 +345,20 @@ projections of \`knowledge/\` — never edit them directly.
    \`scripts/ci/check-english-only.mjs\` (CJK codepoints) scans \`src/\`, \`scripts/\`,
    \`tests/\`, \`workers/\`, \`.agents/skills/\`; the two lists agree today but are stated
    separately, and a gate skips any of its roots that this instance does not have.
-3. **Framework vs instance:** \`src/\` and \`scripts/\` are framework-owned — customize
-   through config, content, and media. Anything more is upstreamed to sekai-kb and
-   pulled back as a tagged release. The genericity gate is the structural guarantee.
+3. **Framework vs instance:** \`src/\`, \`scripts/\`, \`workers/\`, and
+   \`.agents/skills/\` are framework-owned — the framework ships them and every release
+   replaces them wholesale. That is a **default and an upgrade contract, not an access
+   boundary**: this is your repository and you may edit any file in it. The recommended
+   routes are still the cheap ones — customize through \`place.config.ts\`,
+   \`knowledge/\`, and \`public/media/\`, and upstream anything larger to sekai-kb so it
+   comes back as a tagged release and stops conflicting. What a direct edit costs is a
+   merge conflict on that file at the next \`/sekai-upgrade\`, and the framework says so
+   rather than preventing it: a gate running here fails your build only for something
+   that harms someone other than you — account-scoped collisions (a Worker \`name\`, a
+   D1 \`database_name\`), committed credentials, security boundaries. Every other
+   divergence warns, names both values, and names that cost
+   (\`docs/runbook/UPGRADE.md\` §Framework-owned files). The genericity gate remains the
+   structural guarantee for rule 2, which is a different rule and stays fatal.
 
 ## Skill discovery
 

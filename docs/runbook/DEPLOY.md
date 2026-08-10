@@ -730,7 +730,11 @@ is derived from `place.domain` and exact-match CORS rejects every other origin.
 The three rows above carry an **override**: the committed `workers/chat/wrangler.toml`
 is framework-owned and ships the default, but you can set a different value in
 `place.config.ts` under `workers` and `npm run worker-config` writes it into the
-generated config. Leave a key unset and the template default is carried through
+generated config. Editing the committed template directly is not forbidden — it is your
+repository, and `npm run worker-config:check` warns rather than failing your build for
+it — but the override key is the cheaper home: it is instance-owned, so it never
+conflicts on a framework upgrade, while a retuned template value conflicts on every
+release until you and the framework agree again (`UPGRADE.md` §Framework-owned files). Leave a key unset and the template default is carried through
 unchanged, so an instance that sets none behaves exactly as it did before these keys
 existed. A value the worker could not use is rejected at generation time by name — a
 rate limit below `1`, a floor outside `0..1`, a fractional count, anything non-numeric —
@@ -782,10 +786,12 @@ corpus, and your corpus is not that corpus.** Re-measure it after your content s
 5. Record that value in `place.config.ts` as `workers.chatRelevanceFloor`, then
    `npm run worker-config` and redeploy. That key is the supported home for a measured
    floor: it is instance-owned, it survives every `/sekai-upgrade`, and the generated
-   config it feeds is what `wrangler deploy` reads. Editing
-   `workers/chat/wrangler.toml` instead forks a framework-owned file and re-conflicts on
-   each release, and a value typed into the Cloudflare dashboard is overwritten by the
-   next deploy.
+   config it feeds is what `wrangler deploy` reads. Writing the number into
+   `workers/chat/wrangler.toml` instead also works and is allowed — the gate warns,
+   naming both values and the cost, rather than failing your build — but it forks a
+   framework-owned file, so it conflicts on each release until you upstream it. A value
+   typed into the Cloudflare dashboard is the one option that does not work at all: the
+   next deploy overwrites it from the generated config.
 
 ```ts
 workers: {

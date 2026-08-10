@@ -82,6 +82,60 @@ tags, never framework `main`** (ADR 004, SPEC
 > placements busier than the template's default assumes. Regenerate with
 > `npm run worker-config` and redeploy after changing one.
 
+### Changed
+
+- **"Framework-owned" now warns about upgrade risk instead of failing your build.**
+  `scripts/ci/check-worker-config.mjs` held every committed `workers/*/wrangler.toml`
+  to the framework's constants with no template-mode branch, and it runs in the
+  `genericity` job of the `deploy.yml` an instance inherits. Retuning a value that is
+  yours to tune — a relevance floor measured against your own corpus, a rate ceiling
+  for a busier placement — therefore turned **your** repository's CI red, in a file in
+  your own tree, for a divergence that costs nobody but you. The gate is now
+  mode-gated (ADR 010, `dev_docs/` in the framework repository). In **template mode**
+  (the `.sekai-template` marker, i.e. the framework's own tree) nothing changes: every
+  check is still fatal, so a changed default is still a deliberate edit to the gate's
+  `EXPECTED` table as well as to the template. In **instance mode** the gate fails
+  only on what reaches past the person editing — a Worker `name`, a D1
+  `database_name` or `database_id`, `ALLOWED_ORIGIN` (the workers' CORS boundary), a
+  dropped `[[d1_databases]]` block, an unparseable config, an unregistered worker
+  directory, and a tracked `wrangler.generated.toml` or `vectors.json`. Every other
+  divergence — a retuned `[vars]` constant, a `[vars]` key you added, a drifted
+  runbook default — warns, names the file, the key, your value, the framework's, and
+  the cost (a merge conflict at the next `/sekai-upgrade`), and points at the
+  `place.config.ts` override key when one exists. Under GitHub Actions the same
+  warning is emitted as a `::warning` annotation, so it reaches the run summary and
+  the pull request instead of only the log. The identity/tuning split is read from
+  the existing `WORKER_VAR_OVERRIDES` registry rather than a second classification.
+- **`docs/runbook/UPGRADE.md` no longer tells you to throw your own work away.** The
+  first-merge instructions resolved every framework-owned conflict with one blind
+  sweep (`for f in $(git diff --name-only --diff-filter=U); do git checkout --theirs
+  ...`), which silently deleted exactly the edits the gate above now permits. It is
+  replaced by a per-file decision: the conflicted paths are listed, and each is
+  resolved after reading your side against the framework's incoming one
+  (`git diff ":2:<file>" ":3:<file>"`) and that release's CHANGELOG entry. Step 7 of
+  the routine flow is reworded the same way, and a new §Framework-owned files section
+  states the doctrine: framework-owned is where a file comes from, not a permission
+  boundary; upstreaming is recommended because it ends the conflict, not because a
+  fork is disallowed. `docs/runbook/DEPLOY.md` and the `/sekai-upgrade` skill's
+  conflict walk match, and `AGENTS.md` iron rule 3 — in the template and in the copy
+  the init wizard writes for a new adopter — is reworded to state it as a default and
+  an upgrade contract rather than an access boundary.
+
+> **Upgrade note:** nothing to do at merge time, and no `place.config.ts` key changes.
+> Two things are worth knowing. First, your CI may now print warnings where it
+> previously printed nothing: an instance that already diverged from a committed
+> `wrangler.toml` was failing before and is now green with a `::warning` naming the
+> file and the cost. Second, **`AGENTS.md` iron rule 3 was NOT updated in your
+> repository and never will be by an upgrade.** `AGENTS.md` carries
+> `.gitattributes merge=ours`, so your copy is kept as-is on every tag merge by
+> design — this release's new wording reaches new adopters only. If you want it, copy
+> iron rule 3 from the tag yourself:
+> `git show sekai-kb-vX.Y.Z:AGENTS.md` and take the "Framework vs instance" rule, or
+> `git diff --no-index -- AGENTS.md <(git show sekai-kb-vX.Y.Z:AGENTS.md)` to see it
+> beside yours. Leaving your copy alone is fine: it is prose your agents read, and the
+> behavior it describes is enforced by the gate, which is framework-owned and does
+> arrive with this release.
+
 ### Fixed
 
 - **A tag merge no longer stops the upgrade over a maintainer document you kept
