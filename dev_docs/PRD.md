@@ -162,8 +162,9 @@ to conflict with a non-goal, surface the conflict to the maintainer (per
   whether that half is its own task; ADR 010 recording the decision. Two delivery
   constraints travel with it — `AGENTS.md` is instance-owned (`merge=ours`), so a reworded
   iron rule reaches future adopters only and existing instances need a `CHANGELOG.md`
-  Upgrade note; and `WORKER_VAR_OVERRIDES`, landing with LB-89, already encodes the
-  identity-versus-tuning classification, so it does not need inventing.
+  Upgrade note; and `WORKER_VAR_OVERRIDES` in `scripts/deploy/wrangler-config.mjs`, merged
+  with LB-89, already encodes the identity-versus-tuning classification, so it does not
+  need inventing.
 
   **Downstream tasks.** LB-92 returns to `/dev:backlog` for a packet once `/dev:architect`
   lands the SPEC delta and ADR 010. LB-91 is parked behind LB-92 in `Backlog`: it argues

@@ -62,10 +62,15 @@ upgrade notes, (b) zero place content in the template, (c) `merge=ours` on insta
 files (`place.config.ts`, `knowledge/**`, `public/media/**`, `CNAME`, `CLAUDE.md`,
 `AGENTS.md`, `README.md`, `CHANGELOG.md`, `VERSION`, `FRAMEWORK-VERSION`,
 `scripts/ci/genericity-denylist.local.txt`, `.agent-toolkit/**`, `dev_docs/**`),
-(d) the **ownership rule**: an instance's `src/` and `scripts/` are framework-owned —
-customization flows through config/content/media; anything more is upstreamed to sekai-kb
-first and pulled back as a release. `.gitattributes` in each repository is the operative
-list, and `scripts/ci/check-framework-docs.mjs` gates the enumeration above against it.
+(d) the **ownership rule**: an instance's `src/` and `scripts/` are framework-owned, which
+is a **default and an upgrade contract, never an access boundary** (ADR 010). Customization
+flows through config/content/media because that route survives merges without conflict and is
+machine-validated; an adopter may nonetheless edit any file in their own clone, and what the
+framework owes them is the cost stated where it applies rather than a refusal. Upstreaming to
+sekai-kb and pulling the change back as a release stays the **recommended** route because it
+buys conflict-free upgrades, not because the local edit is forbidden.
+`.gitattributes` in each repository is the operative list, and
+`scripts/ci/check-framework-docs.mjs` gates the enumeration above against it.
 
 `VERSION` records an instance's own release. `FRAMEWORK-VERSION` records the
 adopted Sekai release. The template carries only `FRAMEWORK-VERSION`; init creates
@@ -194,9 +199,15 @@ Both the top-level section list and the `features` flag list are derived from
 > (`workers.feedbackDatabaseId`, `<worker>DatabaseId` in general). A worker is
 > deployed by hand after adoption, so the wizard prompts for the URL with a blank
 > default and an instance fills both in later. Both are place identity — they name
-> this instance's deployment — so under iron rule 2 they may live only here, never in
-> `src/` and never in the committed `workers/*/wrangler.toml`, which
-> `scripts/ci/check-worker-config.mjs` holds to framework placeholders. The effective
+> this instance's deployment, and a Worker `name` or a D1 `database_name` is
+> account-scoped, so two instances sharing one collide inside a single Cloudflare
+> account. Under iron rule 2 they may live only here, never in `src/` and never in the
+> committed `workers/*/wrangler.toml`, which `scripts/ci/check-worker-config.mjs` holds
+> to framework placeholders **and keeps fatal in both modes** — this is the harm-beyond-
+> the-editor half of ADR 010, and the place-name denylist gate cannot catch it, since
+> `name = "coastal-feedback"` carries no denylisted term. The `[vars]` tuning constants
+> in the same files are the other half and are **not** identity: see the third role
+> below. The effective
 > deploy config is derived from this block into a gitignored
 > `wrangler.generated.toml` by `npm run worker-config`. Absent-safe by construction:
 > a consumer requires both its `features` flag and a non-empty endpoint, so a missing
@@ -209,9 +220,14 @@ Both the top-level section list and the `features` flag list are derived from
 > default for each in `workers/chat/wrangler.toml`, and the committed template remains
 > the default carrier and stays gated at those constants. They live here because the
 > framework *asks* an instance to retune them (§New builds (6) sends an adopter to
-> `docs/runbook/DEPLOY.md` to re-measure the floor against their own corpus) and iron
-> rule 3 makes `workers/` framework-owned, so there was no supported place to record the
-> answer. The registry is `WORKER_VAR_OVERRIDES` in `scripts/deploy/wrangler-config.mjs`,
+> `docs/runbook/DEPLOY.md` to re-measure the floor against their own corpus) and
+> `workers/` is framework-owned, so there was no structured place to record the answer.
+> **ADR 010 amends the justification, not the feature.** A hand-edit to the committed
+> `wrangler.toml` is now permitted in an instance and warns rather than failing, so this
+> block is no longer the *only* way to record a retuned value — it remains the
+> **preferred** one, because a structured key survives a tag merge without conflict and
+> is validated by name, where a hand-edit conflicts on the next upgrade.
+> The registry is `WORKER_VAR_OVERRIDES` in `scripts/deploy/wrangler-config.mjs`,
 > shared by the generator and the gate; a second worker's vars are another entry in it,
 > not a second mechanism. Absent-safe: an unset key pushes no override, so the generated
 > config is byte-identical to one produced before the keys existed. Values are validated
@@ -441,6 +457,11 @@ writes the MEMORY organ. Kill switch: disabling the routine organ in
 4. **Two-repo drift.** The template contains no place content, instance-owned paths use
    `merge=ours`, instances merge immutable tags only, and framework-owned changes land in
    `sekai-kb` before instances adopt them. ADR 004 and ADR 006 govern the full contract.
+   The control is **visibility, not prohibition** (ADR 010): an instance may diverge from a
+   framework-owned file, and the framework's job is to say so twice — once continuously, as
+   a CI warning naming the file and the consequence, and once at `/sekai-upgrade`, with the
+   incoming framework value beside the instance's. Divergence the framework cannot see is
+   the risk; divergence it names is a decision the instance made.
 5. **Lost upstream improvements.** This is an accepted cost. The codebase the framework
    was extracted from remains readable; useful ideas are reimplemented generically, never
    merged automatically.
@@ -489,6 +510,15 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   PR behind CI — `auto-merge-data` on green for data-only artifacts, `human-merge` for
   content. The dev-plugin iron rule (no work done outside a verified merge) applies to
   automation, not just humans.
+- **A framework gate may not fail an adopter's build on ownership grounds** (ADR 010): in
+  instance mode a check running in an adopter's repository exits nonzero only for something
+  that harms a party other than the person editing — account-scoped collisions (a Worker
+  `name`, a D1 `database_name` or `database_id`), committed credentials, and security
+  boundaries. Every other divergence from a framework-owned file warns, names both values,
+  and names the upgrade consequence. Template mode (the `.sekai-template` marker) is
+  unaffected and stays fully fatal, because there the gate is protecting the framework's own
+  shipped contract rather than policing someone else's repository. This binds gates that do
+  not exist yet: a new check that blocks an adopter must first show the harm.
 - **New `place.config` keys must be absent-safe**: a missing key means the feature is
   off; framework upgrades never require config surgery on existing instances.
 - **Framework maintainer docs never ship to an adopter**: `npm run init` removes
@@ -497,6 +527,29 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   `scripts/ci/check-framework-docs.mjs`).
 
 ## Change log
+
+- **2026-08-10, ADR 010 adopter edit rights:** "framework-owned" is now a default and an
+  upgrade contract rather than an access boundary, following the `dev_docs/PRD.md` §Non-goals
+  amendment of the same date. Four statements moved: §Repo topology rule (d) (customization
+  through config/content/media is the recommended route, not the only permitted one);
+  §`place.config.ts` `workers?` (the identity half is named as account-scoped and stays fatal
+  in both modes; the tuning half is explicitly not identity, and the LB-89 override block's
+  justification is amended from "the only supported place" to "the preferred place");
+  §Risk controls 4 (the control is visibility, not prohibition); §Negative requirements (a
+  new bullet binding gates that do not exist yet).
+
+  **What it invalidates.** `AGENTS.md` iron rule 3 as written, in the template and in every
+  instance that carries its own copy — `merge=ours` means the reworded text reaches future
+  adopters only, so the release carrying this needs a `CHANGELOG.md` **Upgrade note**.
+  `scripts/ci/check-worker-config.mjs` has no mode branch and must gain one.
+  `docs/runbook/UPGRADE.md`'s blind `for f in $(git diff --diff-filter=U); do git checkout
+  --theirs ...` sweep is now actively wrong: it silently destroys the edits this decision
+  licenses, which is why ADR 010 (f) removes it in the same change rather than deferring it.
+
+  **What it does not change.** Template mode stays fully fatal. The identity half of the
+  worker gate stays fatal in both modes. `place.config.ts` remains the preferred home for a
+  retuned value. The `WORKER_VAR_OVERRIDES` registry is reused as the identity/tuning
+  classification rather than a second one being introduced, so no new drift surface appears.
 
 - **2026-07-28, ADR 008 docs ownership split:** this document was created by moving the
   framework sections of instance #1's SPEC into the framework repository, alongside a
