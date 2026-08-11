@@ -178,7 +178,8 @@ Schema: `place {name, brandSuffix?, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
-`workers? {feedback?, feedbackDatabaseId?, chat?, chatDatabaseId?, chatRateLimitMax?,
+`workers? {feedback?, feedbackDatabaseId?, feedbackRateLimitMax?,
+feedbackRateLimitWindowSeconds?, chat?, chatDatabaseId?, chatRateLimitMax?,
 chatRateLimitWindowSeconds?, chatRelevanceFloor?, og?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
@@ -225,9 +226,10 @@ compiler, is what keeps the emitted config and the emitted interface in agreemen
 > empty value with a note rather than failing.
 >
 > This block carries a third role, added in LB-89: a **deploy-time tuning override**
-> (`workers.chatRateLimitMax`, `chatRateLimitWindowSeconds`, `chatRelevanceFloor`).
+> (`workers.chatRateLimitMax`, `chatRateLimitWindowSeconds`, `chatRelevanceFloor`, and
+> — added in LB-91 — `workers.feedbackRateLimitMax`, `feedbackRateLimitWindowSeconds`).
 > Unlike the first two roles these are not place identity — the framework ships a real
-> default for each in `workers/chat/wrangler.toml`, and the committed template remains
+> default for each in that worker's `wrangler.toml`, and the committed template remains
 > the default carrier and stays gated at those constants. They live here because the
 > framework *asks* an instance to retune them (§New builds (6) sends an adopter to
 > `docs/runbook/DEPLOY.md` to re-measure the floor against their own corpus) and
@@ -239,7 +241,13 @@ compiler, is what keeps the emitted config and the emitted interface in agreemen
 > is validated by name, where a hand-edit conflicts on the next upgrade.
 > The registry is `WORKER_VAR_OVERRIDES` in `scripts/deploy/wrangler-config.mjs`,
 > shared by the generator and the gate; a second worker's vars are another entry in it,
-> not a second mechanism. Absent-safe: an unset key pushes no override, so the generated
+> not a second mechanism. That is now what ships rather than a forward-looking claim:
+> LB-91 added `feedback` as the second entry, and it cost one registry row per var —
+> the generator and the gate both reach it by iterating
+> `WORKER_VAR_OVERRIDES[<worker>]`, and neither grew a per-worker branch.
+> `scripts/ci/check-worker-config-selftest.sh` states its generator classes per
+> worker, with one recorded pre-override fixture each, so a third entry is proven by
+> the same classes rather than by the first worker's alone. Absent-safe: an unset key pushes no override, so the generated
 > config is byte-identical to one produced before the keys existed. Values are validated
 > at generation time and rejected by name, because the worker parses these vars leniently
 > and would otherwise fall back to its own defaults on a typo, deploying clean and

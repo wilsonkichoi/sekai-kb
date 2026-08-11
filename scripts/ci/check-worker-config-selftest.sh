@@ -61,13 +61,14 @@
 #
 # The classes after those cover the other half of the same contract: the
 # GENERATOR (scripts/deploy/gen-worker-config.mjs) writing the deploy-time
-# tuning vars an instance may override from place.config.ts. Nine more:
+# tuning vars an instance may override from place.config.ts. Nine more, plus the
+# second worker's two (35-36, described after them):
 #
 #  12. UNSET       -- a place.config.ts setting none of the override keys must
 #                     generate a config byte-identical to the one recorded in
-#                     scripts/ci/fixtures/worker-config-chat-unset.toml, which
-#                     was produced before the override path existed. That is
-#                     what makes the absent-safe claim checkable rather than
+#                     scripts/ci/fixtures/worker-config-<worker>-unset.toml, which
+#                     was produced before that worker's keys were registered. That
+#                     is what makes the absent-safe claim checkable rather than
 #                     asserted: a stray formatting change, a reordered key, or
 #                     an override that fires when its key is unset all fail here.
 #  13. SET         -- all three keys set to non-default values must reach the
@@ -92,6 +93,26 @@
 #                     unable to deploy any worker over one stale key; the fatal
 #                     half of the contract is check-worker-config.mjs, which
 #                     fails at CI time on the same mismatch.
+#
+# Classes 12 and 13 above are stated per WORKER, not once for whichever one was
+# registered first, and classes 35-36 are the second worker's half:
+#
+#  35. UNSET (feedback)  -- the absent-safe claim for the registry's second entry,
+#                     against its own fixture recorded before its keys existed.
+#  36. SET (feedback)    -- both registered keys reach that worker's [vars] with
+#                     their exact values and change exactly two lines. The two
+#                     workers ship identically NAMED vars, so this is also what
+#                     proves the generator resolves an override by worker rather
+#                     than by var name: the fixture sets different values on both
+#                     workers at once, and a name-keyed lookup would write chat's
+#                     into feedback's config.
+#
+# The validation classes 14-19 are NOT duplicated per worker. They exercise
+# overrideVarValue(), which the generator reaches through one registry-driven loop
+# (`for (const [varName, spec] of Object.entries(WORKER_VAR_OVERRIDES[dir] ?? {}))`)
+# with the configKey and kind read from the registry row -- no worker name appears
+# in that path, and class 36 proves the feedback rows reach it. A per-worker copy
+# of each would assert the same function against the same `kind` values.
 #
 # The gate is MODE-GATED (ADR 010), so every GATE class above (1-11) is a
 # TEMPLATE-mode class: each of those fixture copies is marked with a
@@ -166,7 +187,7 @@
 # Usage: bash scripts/ci/check-worker-config-selftest.sh   (run from anywhere;
 # exit 1 when the guard fails to catch a planted defect, classifies one into the
 # wrong mode, or the generator mishandles an override; exit 0 when all
-# thirty-four classes hold)
+# thirty-six classes hold)
 
 set -euo pipefail
 
@@ -177,12 +198,19 @@ cd "$ROOT"
 GUARD="$ROOT/scripts/ci/check-worker-config.mjs"
 GENERATOR="$ROOT/scripts/deploy/gen-worker-config.mjs"
 
-# The chat config the generator produces from the fixture place.config.ts below
-# with none of the tuning keys set. Recorded from the generator as it stood
-# before the override path existed, which is the only thing that makes class 12
-# a regression test rather than a restatement of current behavior.
-EXPECTED_UNSET="$ROOT/scripts/ci/fixtures/worker-config-chat-unset.toml"
-GENERATED_REL="workers/chat/wrangler.generated.toml"
+# Where one worker's generated config lands under a fixture root, and the
+# recorded config the generator produced for it from the fixture place.config.ts
+# below with none of the tuning keys set. There is one fixture per worker with
+# registered overrides, and each was recorded from the generator as it stood
+# BEFORE that worker's keys were registered -- which is the only thing that makes
+# the UNSET classes regression tests rather than restatements of current behavior.
+#
+# Both are functions of the worker rather than constants, so the generator classes
+# below run per worker instead of being pinned to whichever one was registered
+# first. That is what lets the registry gain an entry without this suite proving
+# the mechanism for only the original member.
+generated_rel() { echo "workers/$1/wrangler.generated.toml"; }
+expected_unset() { echo "$ROOT/scripts/ci/fixtures/worker-config-$1-unset.toml"; }
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/worker-config-selftest.XXXXXX")"
 cleanup() {
@@ -594,46 +622,98 @@ assert_generator_warns() {
 }
 
 assert_generated_var() {
-  where="$1"; key="$2"; want="$3"
-  if ! grep -q "^$key = $want\$" "$where/$GENERATED_REL"; then
-    echo "FAIL: worker config self-test -- $GENERATED_REL does not carry" >&2
+  where="$1"; worker="$2"; key="$3"; want="$4"
+  rel="$(generated_rel "$worker")"
+  if ! grep -q "^$key = $want\$" "$where/$rel" 2>/dev/null; then
+    echo "FAIL: worker config self-test -- $rel does not carry" >&2
     echo "  $key = $want. The override never reached the generated [vars] block:" >&2
-    cat "$where/$GENERATED_REL" >&2
+    cat "$where/$rel" >&2
     exit 1
   fi
 }
 
-# 12. UNSET: the absent-safe case, proven byte for byte against output recorded
-# before these keys existed. An override that fires on an unset key, or any
-# incidental formatting drift, fails here rather than in someone's deploy.
+# UNSET, for one worker: with none of its tuning keys set, the generated config
+# must equal the recorded pre-override output byte for byte. An override that
+# fires on an unset key, or any incidental formatting drift, fails here rather
+# than in someone's deploy.
+assert_unset_byte_identical() {
+  where="$1"; worker="$2"
+  rel="$(generated_rel "$worker")"; fixture="$(expected_unset "$worker")"
+  if [ ! -f "$fixture" ]; then
+    echo "worker config self-test: no recorded pre-override config for \"$worker\" at" >&2
+    echo "  $fixture. A worker registered in WORKER_VAR_OVERRIDES needs one, recorded" >&2
+    echo "  before its keys were registered; without it the absent-safe claim is asserted" >&2
+    echo "  rather than checked." >&2
+    exit 1
+  fi
+  if ! cmp -s "$where/$rel" "$fixture"; then
+    echo "FAIL: worker config self-test -- with no tuning key set, the generated $worker" >&2
+    echo "  config is no longer byte-identical to the recorded pre-override output. Adding" >&2
+    echo "  these keys must change nothing for an instance that sets none of them." >&2
+    diff "$fixture" "$where/$rel" >&2 || true
+    echo "  If the committed template legitimately changed, re-record the expectation:" >&2
+    echo "    cp <a generated $worker config from this fixture> $fixture" >&2
+    exit 1
+  fi
+}
+
+# SET, for one worker: the generated config differs from that same recorded unset
+# output on exactly $3 lines -- the overrides that were set, and nothing else.
+assert_changed_lines() {
+  where="$1"; worker="$2"; want="$3"
+  rel="$(generated_rel "$worker")"; fixture="$(expected_unset "$worker")"
+  changed="$(diff "$fixture" "$where/$rel" | grep -c '^>' || true)"
+  if [ "$changed" != "$want" ]; then
+    echo "FAIL: worker config self-test -- setting the $worker tuning keys changed $changed" >&2
+    echo "  line(s) in its generated config; exactly $want must change." >&2
+    diff "$fixture" "$where/$rel" >&2 || true
+    exit 1
+  fi
+}
+
+# 12. UNSET (chat): the absent-safe case, proven byte for byte against output
+# recorded before these keys existed.
 COPY="$(fresh_copy_with_place_config generate-unset "")"
 assert_generator_succeeds "$COPY" "a place.config.ts setting no tuning overrides"
-if ! cmp -s "$COPY/$GENERATED_REL" "$EXPECTED_UNSET"; then
-  echo "FAIL: worker config self-test -- with no tuning key set, the generated chat config" >&2
-  echo "  is no longer byte-identical to the recorded pre-override output. Adding these" >&2
-  echo "  keys must change nothing for an instance that sets none of them." >&2
-  diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" >&2 || true
-  echo "  If the committed template legitimately changed, re-record the expectation:" >&2
-  echo "    cp <a generated chat config from this fixture> $EXPECTED_UNSET" >&2
-  exit 1
-fi
+assert_unset_byte_identical "$COPY" chat
 
-# 13. SET: all three reach [vars] with their exact values, quoted as TOML
+# 35. UNSET (feedback): the same claim for the registry's second entry, against a
+# fixture recorded before the feedback keys were registered. The two workers share
+# one generator loop, but "shared code, therefore correct for both" is the
+# assumption this class exists to stop being an assumption: the loop reads
+# `WORKER_VAR_OVERRIDES[dir]`, and a registration that named the wrong var or the
+# wrong worker would leave chat's classes green and change this worker's output.
+# The unset copy generates every worker at once, so this reads the same fixture
+# root class 12 does rather than building a second one.
+assert_unset_byte_identical "$COPY" feedback
+
+# 13. SET (chat): all three reach [vars] with their exact values, quoted as TOML
 # strings the way the template writes them, and nothing else moves.
 COPY="$(fresh_copy_with_place_config generate-set "    chatRateLimitMax: 60,
     chatRateLimitWindowSeconds: 900,
     chatRelevanceFloor: 0.52,")"
 assert_generator_succeeds "$COPY" "a place.config.ts setting all three tuning overrides"
-assert_generated_var "$COPY" 'RATE_LIMIT_MAX' '"60"'
-assert_generated_var "$COPY" 'RATE_LIMIT_WINDOW_SECONDS' '"900"'
-assert_generated_var "$COPY" 'RELEVANCE_FLOOR' '"0.52"'
-CHANGED="$(diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" | grep -c '^>' || true)"
-if [ "$CHANGED" != "3" ]; then
-  echo "FAIL: worker config self-test -- setting the three tuning keys changed $CHANGED line(s)" >&2
-  echo "  in the generated chat config; exactly 3 must change." >&2
-  diff "$EXPECTED_UNSET" "$COPY/$GENERATED_REL" >&2 || true
-  exit 1
-fi
+assert_generated_var "$COPY" chat 'RATE_LIMIT_MAX' '"60"'
+assert_generated_var "$COPY" chat 'RATE_LIMIT_WINDOW_SECONDS' '"900"'
+assert_generated_var "$COPY" chat 'RELEVANCE_FLOOR' '"0.52"'
+assert_changed_lines "$COPY" chat 3
+
+# 36. SET (feedback): both registered keys reach the feedback worker's [vars] with
+# their exact TOML-quoted values, and exactly two lines move. The count is what
+# makes this more than a spot check: the two workers' templates carry identically
+# NAMED vars (RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS), so a generator that
+# resolved an override by var name instead of by worker would write chat's values
+# here too -- passing every `assert_generated_var` above while changing more lines
+# than were set. The chat keys are set to different values in the same fixture for
+# exactly that reason.
+COPY="$(fresh_copy_with_place_config generate-set-feedback "    chatRateLimitMax: 60,
+    chatRateLimitWindowSeconds: 900,
+    feedbackRateLimitMax: 25,
+    feedbackRateLimitWindowSeconds: 1800,")"
+assert_generator_succeeds "$COPY" "a place.config.ts setting both feedback tuning overrides"
+assert_generated_var "$COPY" feedback 'RATE_LIMIT_MAX' '"25"'
+assert_generated_var "$COPY" feedback 'RATE_LIMIT_WINDOW_SECONDS' '"1800"'
+assert_changed_lines "$COPY" feedback 2
 
 # 14. NON-NUMERIC: the declared type is a number; anything else is a typo that
 # must not survive to a deploy.
@@ -686,10 +766,11 @@ grep -v '^RELEVANCE_FLOOR' "$COPY/$REL" > "$WORK_DIR/plant.tmp"
 commit_plant "$COPY/$REL" "RELEVANCE_FLOOR"
 assert_generator_warns "$COPY" "a tuning key whose template var was removed" \
   'WARNING' 'workers.chatRelevanceFloor' '0.52' 'RELEVANCE_FLOOR' 'Generated without it'
-if grep -q '^RELEVANCE_FLOOR' "$COPY/$GENERATED_REL"; then
+CHAT_GENERATED="$(generated_rel chat)"
+if grep -q '^RELEVANCE_FLOOR' "$COPY/$CHAT_GENERATED"; then
   echo "FAIL: worker config self-test -- the generator warned that it dropped the override" >&2
-  echo "  but $GENERATED_REL carries RELEVANCE_FLOOR anyway:" >&2
-  cat "$COPY/$GENERATED_REL" >&2
+  echo "  but $CHAT_GENERATED carries RELEVANCE_FLOOR anyway:" >&2
+  cat "$COPY/$CHAT_GENERATED" >&2
   exit 1
 fi
 
@@ -870,4 +951,4 @@ assert_guard_passes "$COPY" "an unmutated copy carrying .sekai-template"
 drop_line "$COPY" 'ALLOWED_ORIGIN = ""'
 assert_guard_catches "$COPY" "a deleted ALLOWED_ORIGIN in the template"
 
-echo "OK: worker config self-test passed -- in template mode the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, an unparseable config, and a runbook that has drifted from the shipped defaults; in instance mode it still fails on all of the identity and structural classes and warns, with both values and the upgrade cost, on the divergences that cost only the adopter; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"
+echo "OK: worker config self-test passed -- in template mode the guard catches committed identity, unregistered workers, missing D1 or AI bindings, tracked derived artifacts, an unparseable config, and a runbook that has drifted from the shipped defaults; in instance mode it still fails on all of the identity and structural classes and warns, with both values and the upgrade cost, on the divergences that cost only the adopter; the generator carries the template through unchanged when no tuning key is set, writes each key that is set, resolves each override by worker rather than by var name across both registered workers, rejects a value the worker could not use, and warns rather than stops when a set key's template var is gone"

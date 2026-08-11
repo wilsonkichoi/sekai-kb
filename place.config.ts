@@ -83,6 +83,20 @@ export interface PlaceConfig {
      * auth. `npm run worker-config` reads it; unset generates an empty id and says so.
      */
     feedbackDatabaseId?: string;
+    /**
+     * Feedback submissions accepted per hashed address in the rolling window.
+     * Template default `5`. The limit is keyed on a hash of the caller's public
+     * address, so everyone behind one NAT — a hotspot, a cafe, a school, a group
+     * standing at one QR placement — shares one budget, and a rejected submission
+     * is silent from the operator's side. Raise it for busier placements.
+     * `docs/runbook/DEPLOY.md` §Deploying the feedback worker.
+     */
+    feedbackRateLimitMax?: number;
+    /**
+     * Length of that rolling window, in seconds. Template default `3600`.
+     * `docs/runbook/DEPLOY.md` §Deploying the feedback worker.
+     */
+    feedbackRateLimitWindowSeconds?: number;
     /** URL of this instance's deployed `workers/chat/` worker. */
     chat?: string;
     /** D1 `database_id` for the chat worker's rolling rate-limit state. */

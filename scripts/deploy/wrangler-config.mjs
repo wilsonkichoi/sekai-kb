@@ -78,6 +78,10 @@ export const WORKER_VAR_OVERRIDES = {
     RATE_LIMIT_WINDOW_SECONDS: { configKey: 'chatRateLimitWindowSeconds', kind: 'count' },
     RELEVANCE_FLOOR: { configKey: 'chatRelevanceFloor', kind: 'unitInterval' },
   },
+  feedback: {
+    RATE_LIMIT_MAX: { configKey: 'feedbackRateLimitMax', kind: 'count' },
+    RATE_LIMIT_WINDOW_SECONDS: { configKey: 'feedbackRateLimitWindowSeconds', kind: 'count' },
+  },
 };
 
 /**

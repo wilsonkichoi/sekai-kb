@@ -459,8 +459,41 @@ committed `wrangler.toml` is where the framework's own defaults live; the
 | `database_name` | yes | derived: `<place-slug>-<worker>` | The D1 database, account-scoped. Must match the database you created in step 2. |
 | `database_id` | yes | `place.config.ts` → `workers.feedbackDatabaseId` | Printed by `wrangler d1 create`. Absent-safe: unset generates an empty value and a note, which is the state between steps 1 and 3. |
 | `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the per-address hash. Missing → every POST is 500. Never a var. |
-| `RATE_LIMIT_MAX` | no | template (`5`) | Submissions allowed per address per window. |
-| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`) | Length of the rolling window, in seconds. |
+| `RATE_LIMIT_MAX` | no | template (`5`), override `workers.feedbackRateLimitMax` | Submissions allowed per address per window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`), override `workers.feedbackRateLimitWindowSeconds` | Length of the rolling window, in seconds. |
+
+The last two rows carry an **override**: the committed
+`workers/feedback/wrangler.toml` is framework-owned and ships the default, but you
+can set a different value in `place.config.ts` under `workers` and `npm run
+worker-config` writes it into the generated config. Editing the committed template
+directly is not forbidden — it is your repository, and `npm run worker-config:check`
+warns rather than failing your build for it — but the override key is the cheaper
+home: it is instance-owned, so it never conflicts on a framework upgrade, while a
+retuned template value conflicts on every release until you and the framework agree
+again (`UPGRADE.md` §Framework-owned files). Leave a key unset and the template
+default is carried through unchanged, so an instance that sets neither behaves
+exactly as it did before these keys existed. A value the worker could not use is
+rejected at generation time by name — a limit below `1`, a fractional count,
+anything non-numeric — rather than deploying and silently falling back to the
+default. If a later release drops one of these vars from the template, `npm run
+worker-config` names the key, leaves the value out, and finishes, so one stale key
+never blocks a deploy.
+
+```ts
+workers: {
+  // ...
+  feedbackRateLimitMax: 20,
+},
+```
+
+The rate limit is keyed on `sha256(address + salt)`, which is **per public address,
+not per person**: everyone behind one NAT shares one budget. A hotspot, a cafe, a
+hotel, a school, and a QR code that puts the form in front of a group standing in
+one place all land on the same key. A rate-limited submission tells the reader to try
+later and tells you nothing at all: a ceiling too low for a placement produces
+silence, not a report, so no absence of feedback is evidence that the limit is not
+being hit. Raise `feedbackRateLimitMax` for placements busier than the default
+assumes.
 
 The `[[d1_databases]]` block binds the database as `DB`; `binding = "DB"` is the
 name the worker's code uses and is framework-owned, not instance identity.

@@ -43,6 +43,45 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **The feedback worker's two rate-limit vars are now settable from
+  `place.config.ts`.** `workers/feedback/wrangler.toml` ships `RATE_LIMIT_MAX = "5"`
+  and `RATE_LIMIT_WINDOW_SECONDS = "3600"`, and until now the only way to change
+  either was to edit that framework-owned file and re-resolve the conflict on every
+  upgrade. The limit is keyed on `sha256(address + salt)` — per public address, not
+  per person — so everyone behind one NAT shares a single budget of five submissions
+  per hour: a cafe, a school, a hotel, or a group standing at one QR placement. A
+  rate-limited submission is also silent from the operator's side, so no absence of
+  reports is evidence that the ceiling is not being hit.
+
+  Two optional keys under `workers` now carry them: `feedbackRateLimitMax` and
+  `feedbackRateLimitWindowSeconds`. They are the same mechanism the three `chat*`
+  tuning keys use, not a second one: `feedback` is one more entry in the
+  `WORKER_VAR_OVERRIDES` registry in `scripts/deploy/wrangler-config.mjs`, which the
+  generator and `npm run worker-config:check` both reach by iteration, so adding it
+  needed no per-worker code path in either. `npm run worker-config` writes each key
+  that is set into the generated config, rejecting at generation time by name a value
+  the worker could not use (a limit below `1`, a fractional count, anything
+  non-numeric). The committed template keeps its constants, stays the default
+  carrier, and stays gated at them. The runbook's `feedback` var table names the
+  override key beside each default, and the gate fails when that table and the
+  registry disagree. `scripts/ci/check-worker-config-selftest.sh` now states its
+  generator classes per worker, with one recorded pre-override fixture each, so the
+  registry's second entry is proven by its own cases rather than by the first
+  worker's.
+
+> **Upgrade note:** `workers.feedbackRateLimitMax` and
+> `workers.feedbackRateLimitWindowSeconds` are optional, absent-safe config-schema
+> additions. An instance that sets neither behaves exactly as before: no key set means
+> no override, and the generated `workers/feedback/wrangler.generated.toml` is
+> byte-identical to the one the previous release produced from the same
+> `place.config.ts` (a self-test case holds that byte-for-byte, against a config
+> recorded before these keys existed). No edit is required at merge time. Set them
+> only when you have a reason — a placement busier than five submissions per hour per
+> address assumes — then regenerate with `npm run worker-config` and redeploy the
+> worker.
+
 ### Fixed
 
 - **The `PlaceConfig` declaration is stated once, and the init wizard emits that one.**
