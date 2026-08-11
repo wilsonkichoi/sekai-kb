@@ -84,7 +84,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 const workerModule = await import('../src/index.mjs');
-const { CHAT_MODEL, EMBED_MODEL, SQL, handleRequest, default: worker } = workerModule;
+const { CHAT_MODEL, EMBED_MODEL, REFUSAL_SENTENCE, SQL, handleRequest, default: worker } = workerModule;
 
 // The fixture's six chunks are unit vectors chosen to rank strictly against the
 // default query [10, 0, 0]: alpha 1.000, bravo 0.898, charlie 0.709, delta 0.504,
@@ -179,6 +179,18 @@ describe('retrieval, prompting, and SSE', () => {
       systemPrompt,
       /brows/i,
       `the unsure path must suggest browsing, got ${JSON.stringify(systemPrompt)}`,
+    );
+    // LB-90: the unsure path is the with-context twin of the no-context refusal and
+    // was written in the same imperative shape, so it gets the same guard before it
+    // is observed failing rather than after.
+    assert.ok(
+      systemPrompt.includes(REFUSAL_SENTENCE(SITE_NAME)),
+      `the unsure path must supply the exact refusal sentence, got ${JSON.stringify(systemPrompt)}`,
+    );
+    assert.equal(
+      systemPrompt.includes('and suggest browsing'),
+      false,
+      'no subjectless imperative fragment may sit where a parroting model can emit it',
     );
   });
 
@@ -337,6 +349,32 @@ describe('relevance floor', () => {
     assert.match(systemPrompt, /brows/i, 'the prompt must suggest browsing');
     assert.match(systemPrompt, /not cite|do not cite/i, 'the prompt must forbid citing anything');
     assert.ok(systemPrompt.includes(SITE_NAME), 'the prompt must still identify the configured site');
+  });
+
+  // LB-90: the refusal used to be described to the model in the imperative, and the
+  // deployed model dropped the leading verb and emitted the remainder as its answer --
+  // a second clause with no subject, reaching readers as broken English. The prompt
+  // must therefore carry the refusal as a sentence that survives being copied
+  // verbatim, and must carry no imperative that reads as an answer when it is.
+  test('the no-context prompt supplies the refusal sentence instead of commanding one', async () => {
+    const AI = createAiStub({ query: ORTHOGONAL_QUERY });
+    await accepted({ AI });
+    const systemPrompt = AI.calls[1].input.messages[0].content;
+
+    assert.equal(
+      systemPrompt.includes('Say that the knowledge base does not cover it'),
+      false,
+      'the imperative the model parroted must not be in the prompt',
+    );
+    assert.equal(
+      systemPrompt.includes('and suggest browsing'),
+      false,
+      'no subjectless imperative fragment may sit where a parroting model can emit it',
+    );
+    assert.ok(
+      systemPrompt.includes(REFUSAL_SENTENCE(SITE_NAME)),
+      `the prompt must supply the exact refusal sentence, got ${JSON.stringify(systemPrompt)}`,
+    );
   });
 
   test('a floor of 0 disables filtering and restores plain top-k', async () => {

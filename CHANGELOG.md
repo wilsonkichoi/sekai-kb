@@ -43,6 +43,38 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **The chat worker's refusal is a sentence a reader can read, not an instruction the
+  model repeats back.** When no chunk clears the relevance floor, `systemPrompt()` in
+  `workers/chat/src/index.mjs` sent the model a line describing the refusal in the
+  imperative: `Say that the knowledge base does not cover it and suggest browsing the
+  knowledge base.` The deployed model dropped the leading verb and emitted the rest as
+  its answer — "The knowledge base does not cover it and suggest browsing the knowledge
+  base" — whose second clause has no subject. That is the reply every off-corpus
+  question gets, and the QR flow (`/chat?ctx=<slug>`) puts it in front of somebody
+  standing at a physical placement, so it was a plausible first impression of the whole
+  site. The refusal is now a single exported constant, `REFUSAL_SENTENCE(siteName)`,
+  supplied to the model as the sentence to produce rather than described to it, with a
+  subject in every clause and the site name interpolated. Both prompt branches carry it
+  on its own line after the instruction that names it, so a model that copies the line
+  it was pointed at produces exactly the intended answer: the parroting failure degrades
+  into the right output instead of a fragment. The with-context branch's twin line
+  (`If the excerpts do not contain the answer, say so and suggest browsing the knowledge
+  base.`) was written the same way and is rewritten the same way, before it is observed
+  failing rather than after. The comment explaining why the no-context branch exists at
+  all is unchanged.
+- `workers/chat/test/chat.test.mjs` gains the guard for both branches: neither prompt may
+  contain the parroted imperative or the subjectless `and suggest browsing` fragment, and
+  each must contain the exact `REFUSAL_SENTENCE` text. The suite runs in CI through
+  `npm run test:workers`. The prompt's four pre-existing no-context assertions and the
+  with-context browse assertion pass unmodified — the rewrite was held to them rather
+  than the other way round.
+
+No **Upgrade note**: this changes no `place.config.ts` key, no deploy-time var, and no
+file an instance owns. It changes prompt text inside the framework-owned chat worker, so
+an instance picks it up by redeploying that worker after the merge.
+
 ## [1.1.3] — 2026-08-10
 
 Framework-owned files warn instead of failing an instance's build, /sekai-upgrade reports diverged files with both values, chat worker tuning vars gain place.config.ts overrides, and a tag merge no longer stops on an unedited doc.

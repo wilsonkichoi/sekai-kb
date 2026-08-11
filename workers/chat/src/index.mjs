@@ -42,6 +42,27 @@ const MAX_HISTORY_ENTRIES = 20;
 const MAX_HINT_CHARS = 200;
 const TOP_K = 5;
 
+/**
+ * The refusal a reader gets when the corpus cannot support their question, written
+ * out as the sentence the model should produce rather than described to it.
+ *
+ * It is a constant because it is reader-facing copy, and both prompt branches need
+ * the same one: the no-context branch, where nothing cleared the relevance floor,
+ * and the with-context branch, where excerpts were retrieved but do not answer.
+ *
+ * Its shape is a lesson from how the previous phrasing failed (LB-90). That line was
+ * an imperative addressed to the model -- "Say that the knowledge base does not
+ * cover it and suggest browsing the knowledge base" -- and the deployed model
+ * dropped the leading verb and emitted the remainder as its answer, which left a
+ * second clause with no subject and reached readers as broken English. So: every
+ * clause here carries its own subject, and the prompt lines below put this sentence
+ * last, alone, after the instruction that names it. A model that copies the line it
+ * was pointed at then produces exactly this, and the parroting failure degrades into
+ * the intended answer instead of a fragment.
+ */
+export const REFUSAL_SENTENCE = (siteName) =>
+  `The ${siteName} knowledge base does not cover that, so you may want to browse it for a related article.`;
+
 let decodedArtifact;
 
 function corsHeaders(origin) {
@@ -234,8 +255,9 @@ function systemPrompt(siteName, chunks) {
       `You are a helpful guide to ${siteName}.`,
       'Answer only from the supplied knowledge-base excerpts.',
       'No excerpt in the knowledge base is relevant to this question.',
-      'Say that the knowledge base does not cover it and suggest browsing the knowledge base.',
       'Do not answer from any other source, and do not cite anything.',
+      'Your entire reply is the sentence on the next line, with nothing added:',
+      REFUSAL_SENTENCE(siteName),
     ].join('\n');
   }
 
@@ -249,7 +271,8 @@ function systemPrompt(siteName, chunks) {
     `You are a helpful guide to ${siteName}.`,
     'Answer only from the supplied knowledge-base excerpts.',
     'Cite supporting claims with the excerpt number and its exact URL.',
-    'If the excerpts do not contain the answer, say so and suggest browsing the knowledge base.',
+    'If the excerpts do not contain the answer, your entire reply is the sentence on the next line, with nothing added:',
+    REFUSAL_SENTENCE(siteName),
     '',
     context,
   ].join('\n');
