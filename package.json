@@ -44,6 +44,8 @@
     "schema-docs": "node scripts/ci/check-soundscape-schema-docs.mjs && node scripts/ci/check-chat-context-schema-docs.mjs",
     "framework-docs": "node scripts/ci/check-framework-docs.mjs",
     "framework-docs:selftest": "node scripts/ci/check-framework-docs.mjs --selftest",
+    "place-config:check": "node --experimental-strip-types scripts/ci/check-place-config-interface.mjs",
+    "place-config:selftest": "node --experimental-strip-types scripts/ci/check-place-config-interface.mjs --selftest",
     "roadmap-gates": "node scripts/ci/check-roadmap-exit-gates.mjs",
     "roadmap-gates:selftest": "node scripts/ci/check-roadmap-exit-gates.mjs --selftest",
     "dev-plugin:check": "node scripts/ci/check-dev-plugin-action.mjs",

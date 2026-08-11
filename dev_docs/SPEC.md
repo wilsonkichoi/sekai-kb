@@ -174,7 +174,7 @@ sekai-kb/
 
 ## `place.config.ts`
 
-Schema: `place {name, tagline, domain, locale, languages}`,
+Schema: `place {name, brandSuffix?, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
@@ -186,7 +186,17 @@ Init-time: written only by the `npm run init`
 wizard (or `--answers <json>` from `/sekai-adopt` — single writer, no drift).
 Runtime-toggleable: `features`, languages, semiont organs.
 Both the top-level section list and the `features` flag list are derived from
-`place.config.ts` and gated by `scripts/ci/check-framework-docs.mjs`.
+`place.config.ts` and gated by `scripts/ci/check-framework-docs.mjs`. The
+`PlaceConfig` declaration itself is stated **once**, at the top of that file: the
+wizard re-emits the committed declaration rather than carrying a copy, and
+`scripts/ci/check-place-config-interface.mjs` (`npm run place-config:check`) is
+the gate — it fails when `scripts/init/writer.mjs` re-introduces a declaration of
+its own or emits a different one, when a `scripts/init/prompt-table.mjs` row
+prompts for a key the declaration does not declare, or when a config object sets
+a property its own declaration omits. `scripts/init/check-init.sh` runs that last
+assertion against a real wizard run (`--generated`). Nothing in this repository
+typechecks — `npm run build` strips types through esbuild — so this gate, not the
+compiler, is what keeps the emitted config and the emitted interface in agreement.
 
 > **`links`:** the shell's Footer/SEO/Header need a repository URL, contact
 > email, and social handles, which the original schema did not define. The schema was

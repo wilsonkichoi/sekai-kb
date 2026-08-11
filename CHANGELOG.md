@@ -45,6 +45,42 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Fixed
 
+- **The `PlaceConfig` declaration is stated once, and the init wizard emits that one.**
+  `scripts/init/writer.mjs` carried its own copy of the interface inside a template
+  literal, and nothing in this repository compared it to `place.config.ts`. It had lost
+  five keys: `place.brandSuffix?`, `categories[].color?`, `categories[].colorLight?`,
+  `features.og`, and `workers.og?`. Two of them are prompted — `scripts/init/prompt-table.mjs`
+  asks `features.og` ("Enable per-article OG images") and `workers.og` — so the wizard
+  wrote both into the emitted config object under an interface that declared neither.
+  **Every `place.config.ts` the wizard had produced was a TypeScript excess-property
+  error against its own interface**, and the other three failed the moment an adopter
+  hand-added a brand suffix or a category color, both documented features. The copy is
+  gone: `writeInstance` now reads the committed `place.config.ts` before overwriting it
+  and re-emits the declaration it finds, through the new shared parser
+  `scripts/init/place-config-interface.mjs`. Adding a config key is now two edits (the
+  declaration and, if it is prompted, the table row) instead of three, and the emitted
+  file is byte-identical to before apart from the five restored keys.
+- **The drift is machine-gated.** New `scripts/ci/check-place-config-interface.mjs`
+  (`npm run place-config:check`, wired into the `test` job of
+  `.github/workflows/deploy.yml`) fails when `place.config.ts` carries no parseable
+  declaration, when `writer.mjs` re-introduces one of its own, when what the wizard
+  renders is not byte-identical to the committed declaration, when a prompt-table row
+  names a key the declaration does not declare, or when a config object sets a property
+  its own declaration omits. `npm run place-config:selftest` plants six defect classes —
+  one per branch — and requires the gate to fail each, so the gate cannot pass vacuously.
+  `scripts/init/check-init.sh` runs the same object-vs-declaration assertion against a
+  real `--answers` wizard run, which is the half a static comparison cannot reach. No
+  typechecker was added: `npm run build` strips types through esbuild, and `astro check`
+  over this tree is a larger, separate change that would surface unrelated pre-existing
+  errors.
+- `scripts/ci/check-framework-docs.mjs` claimed in its header that the wizard's copy of
+  the interface needed no gate because a drifted one would fail `npm run init:check` as a
+  type error. It would not — nothing here typechecks — and under that reasoning the five
+  keys were lost unnoticed. The comment now states what actually holds the two in
+  agreement. `scripts/init/README.md` §Extending said the companion edit for a new prompt
+  was the interface block in `writer.mjs`; it is now the declaration in `place.config.ts`.
+  `dev_docs/SPEC.md` §`place.config.ts` names the new gate and gains the `brandSuffix?`
+  key its schema line had never listed.
 - **The chat worker's refusal is a sentence a reader can read, not an instruction the
   model repeats back.** When no chunk clears the relevance floor, `systemPrompt()` in
   `workers/chat/src/index.mjs` sent the model a line describing the refusal in the
@@ -71,9 +107,16 @@ tags, never framework `main`** (ADR 004, SPEC
   with-context browse assertion pass unmodified — the rewrite was held to them rather
   than the other way round.
 
-No **Upgrade note**: this changes no `place.config.ts` key, no deploy-time var, and no
-file an instance owns. It changes prompt text inside the framework-owned chat worker, so
-an instance picks it up by redeploying that worker after the merge.
+No **Upgrade note**: neither change adds, renames, or requires a `place.config.ts` key,
+a deploy-time var, or an edit to a file an instance owns. The chat change is prompt text
+inside the framework-owned worker, so an instance picks it up by redeploying that worker
+after the merge. The wizard change makes the emitted declaration match the one the
+framework already read — no config an instance holds becomes invalid. One thing worth
+knowing rather than acting on: an instance adopted before this release has a
+`place.config.ts` whose interface came from the old copy and is short those five keys.
+It is instance-owned, so the merge leaves it alone, and nothing typechecks it either way;
+add a key by hand if you want to use `place.brandSuffix`, a category `color`, or an
+`og` worker.
 
 ## [1.1.3] — 2026-08-10
 

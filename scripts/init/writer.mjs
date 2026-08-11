@@ -27,6 +27,15 @@
  *
  * Writing is a pure function of the resolved config, with no timestamps or
  * environment reads, so the same answers always produce byte-identical output.
+ *
+ * The `PlaceConfig` type declaration this file writes into place.config.ts is
+ * DERIVED, never carried here: `writeInstance` reads the committed place.config.ts
+ * before overwriting it and re-emits the declaration it finds (see
+ * ./place-config-interface.mjs). A copy in this file would be the one declaration
+ * in the repository nothing validates -- which is exactly what it was, and it had
+ * silently lost five keys, two of them (`features.og`, `workers.og`) prompted by
+ * prompt-table.mjs, so every config the wizard emitted declared properties its own
+ * type did not. `scripts/ci/check-place-config-interface.mjs` gates the derivation.
  */
 
 import {
@@ -38,6 +47,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { extractInterfaceBlock } from './place-config-interface.mjs';
 import { slugify } from './prompt-table.mjs';
 
 /* ── TypeScript-literal serializer (deterministic, repo code style) ──────── */
@@ -100,169 +110,15 @@ const CONFIG_HEADER = `/**
  */
 `;
 
-const CONFIG_INTERFACE = `
-export interface PlaceConfig {
-  place: {
-    name: string;
-    tagline: string;
-    domain: string;
-    locale: string;
-    languages: string[];
-  };
-  /** 5-14 categories. slug/icon/description feed nav, hubs, and category pages. */
-  categories: Array<{
-    slug: string;
-    title: string;
-    icon: string;
-    description: string;
-  }>;
-  /** Leaflet init: center [lat, lng], zoom, and maxBounds [[S,W],[N,E]]. */
-  map: {
-    center: [number, number];
-    zoom: number;
-    maxBounds: [[number, number], [number, number]];
-  };
-  features: {
-    graph: boolean;
-    map: boolean;
-    dashboard: boolean;
-    soundscape: boolean;
-    feedback: boolean;
-    chat: boolean;
-    social: boolean;
-    analytics: boolean;
-  };
-  /**
-   * Outbound identity links. \`repo\` + \`email\` are always rendered (footer,
-   * SEO sameAs/contactPoint, the "edit on GitHub" affordance). \`social\`
-   * handles feed the footer social row and SEO sameAs, and render ONLY when
-   * \`features.social\` is true. Handles include the leading \`@\`; component
-   * code strips it when building platform URLs.
-   */
-  links: {
-    repo: string;
-    email: string;
-    social: {
-      twitter?: string;
-      threads?: string;
-      instagram?: string;
-    };
-  };
-  /**
-   * Deployed Cloudflare Worker endpoints (\`docs/runbook/DEPLOY.md\` §Cloudflare
-   * Workers). Absent-safe: a missing key — or an empty string — keeps the
-   * capability that needs it off even when its \`features\` flag is true, so an
-   * instance upgrading across a framework release never has to edit config.
-   */
-  workers?: {
-    /** URL of this instance's deployed \`workers/feedback/\` worker. */
-    feedback?: string;
-    /**
-     * D1 \`database_id\` for \`workers/feedback/\`, printed by \`wrangler d1 create\`.
-     * It lives here because the generated \`workers/feedback/wrangler.generated.toml\`
-     * is disposable and gitignored, and \`workers/\` may carry no instance identity
-     * (iron rule 2). An account-scoped id, not a credential: useless without account
-     * auth. \`npm run worker-config\` reads it; unset generates an empty id and says so.
-     */
-    feedbackDatabaseId?: string;
-    /** URL of this instance's deployed \`workers/chat/\` worker. */
-    chat?: string;
-    /** D1 \`database_id\` for the chat worker's rolling rate-limit state. */
-    chatDatabaseId?: string;
-    /**
-     * Accepted chat requests per hashed address in the rolling window. Template
-     * default \`20\`. The limit is keyed on a hash of the caller's public address, so
-     * everyone behind one NAT — a hotspot, a cafe, a school — shares one budget.
-     * Raise it for busier placements. \`docs/runbook/DEPLOY.md\` §Deploying the chat
-     * worker.
-     */
-    chatRateLimitMax?: number;
-    /**
-     * Length of that rolling window, in seconds. Template default \`3600\`.
-     * \`docs/runbook/DEPLOY.md\` §Deploying the chat worker.
-     */
-    chatRateLimitWindowSeconds?: number;
-    /**
-     * Cosine score a corpus chunk must reach to be retrieved by the chat worker,
-     * within \`0..1\`. Template default \`0.46\`, measured against the demo corpus —
-     * a separating value is a property of YOUR corpus, so re-measure it and record
-     * the answer here. \`docs/runbook/DEPLOY.md\` §Tuning the relevance floor has
-     * the procedure.
-     */
-    chatRelevanceFloor?: number;
-  };
-  seo: {
-    defaultOgImage: string;
-    twitterHandle?: string;
-  };
-  home: {
-    hero: {
-      subtitle: string;
-      description: string;
-      highlight: string;
-      cta: { explore: string; github: string };
-    };
-    stats: Array<{ icon: string; number: string; label: string }>;
-    doors: Array<{
-      icon: string;
-      href: string;
-      title: string;
-      sub: string;
-      tone: 'green' | 'blue' | 'amber' | 'plum';
-    }>;
-    coverStory: {
-      heading: string;
-      lead: string;
-      quotes: Array<{
-        era: string;
-        quote: string;
-        cite: string;
-      }>;
-      closing: string[];
-      aboutLinkText: string;
-    };
-    randomDiscovery: {
-      button: string;
-      subtitle: string;
-      description: string;
-    };
-    features: {
-      title: string;
-      cards: Array<{ icon: string; title: string; description: string }>;
-      cta: { graph: string; ssot: string };
-    };
-    exhibitions: {
-      heading: string;
-      divider: string;
-      halls: Array<{
-        label: string;
-        paragraphs: Array<{
-          text: string;
-          pillHref: string;
-          pillIcon: string;
-          pillLabel: string;
-          categorySlug: string;
-        }>;
-      }>;
-    };
-    recentUpdates: {
-      heading: string;
-      subtitle: string;
-      viewAll: string;
-      latestLabel: string;
-    };
-    contribute: {
-      heading: string;
-      description: string;
-      guideLabel: string;
-      githubLabel: string;
-    };
-  };
-}
-`;
+/**
+ * The type declaration the emitted config is checked against. Read from the
+ * committed place.config.ts by `writeInstance` and passed through here, so the
+ * wizard and the framework cannot disagree about what a key is called.
+ */
+export function renderPlaceConfig(cfg, interfaceBlock) {
+  return `${CONFIG_HEADER}
+${interfaceBlock}
 
-export function renderPlaceConfig(cfg) {
-  return `${CONFIG_HEADER}${CONFIG_INTERFACE}
 const config: PlaceConfig = ${tsValue(cfg, 0)};
 
 export default config;
@@ -553,8 +409,23 @@ export function writeInstance(root, cfg) {
     actions.push(`wrote   ${rel}`);
   };
 
-  // place.config.ts — the single writer.
-  write('place.config.ts', renderPlaceConfig(cfg));
+  // place.config.ts — the single writer. The type declaration is read out of the
+  // file about to be overwritten, so the wizard emits the framework's own
+  // declaration rather than a copy that can drift from it (ADR: none; the copy
+  // this replaces had lost five keys). Read BEFORE the write, and fail loudly:
+  // a config emitted with no type at all is worse than no config.
+  const configPath = join(root, 'place.config.ts');
+  let interfaceBlock;
+  try {
+    interfaceBlock = extractInterfaceBlock(readFileSync(configPath, 'utf8'));
+  } catch (e) {
+    throw new Error(
+      `cannot derive the PlaceConfig declaration from ${configPath}: ${e.message}. ` +
+        'The wizard re-emits the committed declaration instead of carrying its own ' +
+        'copy, so place.config.ts must be present and carry exactly one.',
+    );
+  }
+  write('place.config.ts', renderPlaceConfig(cfg, interfaceBlock));
 
   // knowledge/: remove demo content, reseed category dirs + INBOX.md.
   rmSync(join(root, 'knowledge'), { recursive: true, force: true });

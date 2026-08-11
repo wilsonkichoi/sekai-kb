@@ -28,10 +28,14 @@
 //   4. PLACE CONFIG SCHEMA -- the top-level sections of `PlaceConfig`, and the flags
 //      inside its `features` block, come from `place.config.ts`. SPEC ``place.config.ts``
 //      enumerates both, and that enumeration is what an adopter reads to learn which
-//      keys exist. The wizard's own copy of the interface (`scripts/init/writer.mjs`)
-//      is NOT the derivation source and needs none: `npm run init:check` initializes a
-//      tree and builds it, so an interface that has drifted from the config the wizard
-//      emits fails there as a type error, at the moment it would reach an adopter.
+//      keys exist. The wizard holds no second copy of that interface to derive from:
+//      `scripts/init/writer.mjs` re-emits the committed declaration, and
+//      `scripts/ci/check-place-config-interface.mjs` is the gate that keeps it that
+//      way and holds the prompt table to the same keys. (This comment used to claim
+//      the wizard's copy needed no gate because `npm run init:check` would fail on a
+//      drifted interface as a type error. It would not: nothing in this repository
+//      typechecks -- `npm run build` strips types through esbuild -- and under that
+//      reasoning the copy lost five keys unnoticed.)
 //   5. PAGES -- the route list comes from `src/pages/`, where Astro's file-based routing
 //      already makes every file a route. SPEC ``Pages`` enumerates it, and that
 //      enumeration goes stale the moment a phase adds a page -- exactly when nobody is

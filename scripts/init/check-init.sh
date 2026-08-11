@@ -259,6 +259,19 @@ node "$TMP/run2/scripts/init/index.mjs" --answers "$ANSWERS" >/dev/null
 cmp "$TMP/run1/place.config.ts" "$TMP/run2/place.config.ts" \
   || fail "place.config.ts differs between two --answers runs (not byte-identical)"
 echo "✓ two --answers runs produce byte-identical place.config.ts"
+# The emitted config must typecheck against the interface emitted directly above
+# it. Nothing in this repository runs a typechecker -- `npm run build` strips
+# types through esbuild, and the tier-2 build below is that same build -- so an
+# excess property in the object literal is invisible to every other assertion
+# here. It is not hypothetical: the wizard shipped `og:` into both the `features`
+# and `workers` literals while its own copy of the interface declared neither.
+# This runs the gate's --generated mode against a REAL wizard run, which is the
+# half of that contract a static comparison of the two sources cannot reach.
+node --experimental-strip-types \
+  "$TMP/run1/scripts/ci/check-place-config-interface.mjs" \
+  --generated "$TMP/run1/place.config.ts" \
+  || fail "the generated place.config.ts sets a property its own interface does not declare"
+echo "✓ the generated place.config.ts declares every property it sets"
 cmp "$TMP/run1/CHANGELOG.md" "$TMP/run2/CHANGELOG.md" \
   || fail "CHANGELOG.md differs between two --answers runs (not byte-identical)"
 echo "✓ two --answers runs produce byte-identical instance changelogs"

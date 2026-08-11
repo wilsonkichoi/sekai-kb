@@ -104,8 +104,11 @@ serializer pick the new field up from the row — including a row that opens a
 **new top-level section** (e.g. `analytics.ga4`): the emitted config is
 assembled from the resolved answers, not from a fixed key list, so nothing
 else in the flow needs touching. The one companion edit is the `PlaceConfig`
-interface block in `writer.mjs` (schema, not flow code). New keys must follow
-the absent-safe spec rule: default to feature-off when missing.
+declaration in **`place.config.ts`** (schema, not flow code) — `writer.mjs` holds
+no copy of it, it re-emits the committed one, so a new prompt and its key are
+edited in exactly two files. `npm run place-config:check` fails when they
+disagree. New keys must follow the absent-safe spec rule: default to feature-off
+when missing.
 
 ## Self-check (`npm run init:check`)
 

@@ -166,6 +166,16 @@ jobs:
       - run: npm run framework-release:selftest
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy
+      # The PlaceConfig declaration exists once, in place.config.ts, and the init
+      # wizard re-emits it rather than carrying a copy. Before this gate the copy
+      # existed and had lost five keys, two of them prompted by prompt-table.mjs,
+      # so every config the wizard emitted set properties its own interface did
+      # not declare. This repository runs no typechecker (the build strips types),
+      # which is why the drift needs a gate of its own rather than a compile step.
+      - name: PlaceConfig declaration is stated once and matches the wizard and prompt table
+        run: npm run place-config:check
+      - name: Self-test — the PlaceConfig declaration gate fails on every planted defect class
+        run: npm run place-config:selftest
       - name: Dev-plugin action references match the declared release
         run: npm run dev-plugin:check
       # Dev-plugin rule registry: assert every rule under rules_dir is tier-classified
