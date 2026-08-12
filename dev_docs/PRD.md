@@ -52,7 +52,7 @@ sequencing was itself a decision (ADR 002):
 | Readers of an adopted instance | Curated, fact-checked local knowledge at the inherited editorial bar; graph, map, and client-side search |
 | AI consumers of an adopted instance | `/llms.txt` → `/kb/topics.json` → `/kb/articles/{slug}.md`: a lazy-loading knowledge protocol, one HTTP request per article, no clone required (SPEC `Build pipeline`); tool-using MCP clients reach the same corpus over one remote MCP connection (`workers/mcp/`, Phase 9, ADR 005) |
 | Instance contributors | Plain-Markdown SSOT under `knowledge/`, quality tooling (article-health, link and frontmatter checks), and a tracker-driven contribution workflow |
-| Instance operators | An optional autonomous operations layer (Phase 11 routines) that maintains the instance without burnout, shipping only through verified PR merges |
+| Instance operators | An optional autonomous operations layer (Phase 11 routines) that maintains the instance without burnout, shipping only through verified PR merges. **Not yet delivered and unscheduled** (ADR 011); the framework ships no routine substrate today, and what an operator has in the meantime is the manual lifecycle the skills and runbook cover |
 | Framework maintainers | One template repository, an immutable-tag release train, and a genericity gate that fails CI rather than a convention that erodes |
 
 ## North star

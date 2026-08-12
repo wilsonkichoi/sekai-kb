@@ -23,10 +23,10 @@ so task ids (`LB-*`) are continuous across the split.
 |---|---|---|---|---|---|
 | 6 | Social + engagement | Feedback (Worker + D1 + widget + triage), snippet pipeline, soundscape | 6.1a-c · 6.2 · 6.3 · 6.3b · 6.3c · 6.3d · 6.4 | Live submission → D1 → GitHub issue, and three real recordings; tag released; instance #1 adopts clean (6.4); maintainer phase confirm | AI 20.25h \| Human 3h |
 | 7 | Differentiators | On-demand OG worker, RAG chat (bge-m3 + Workers AI, free tier end to end), QR flow | 7.1 · 7.2a-c · 7.3 · 7.4 | Eval set answered with citations, no hallucinated places (7.2c); tag released; instance #1 adopts clean (7.4); maintainer phase confirm | AI 14.5h \| Human 2.5h |
-| 8 | Semiont plugin layer | Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 · 8.3 | Site builds with `semiont/` deleted and organs toggle via config only; tag released; instance #1 adopts clean (8.3); maintainer phase confirm | AI 5h \| Human 0.5h |
-| 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook proven on the first real post-cut feature release | 9.1 · 9.2 · 9.3 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; tag released; instance #1 adopts clean (9.3); maintainer phase confirm | AI 6h \| Human 0.75h |
+| 8 | Semiont plugin layer | **DEFERRED — unscheduled (2026-08-12 amendment, D1).** Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 · 8.3 | Site builds with `semiont/` deleted and organs toggle via config only; tag released; instance #1 adopts clean (8.3); maintainer phase confirm | AI 5h \| Human 0.5h |
+| 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook; CI corpus refresh so retrieval never goes stale | 9.1 · 9.2 · 9.3 · 9.4 · 9.5 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; tag released; instance #1 adopts clean (9.5); maintainer phase confirm | AI 9h \| Human 1h |
 | 10 | Perception (analytics) | GA4 + Search Console + Cloudflare Web Analytics live behind `features.analytics`; signal fetchers ported; dashboard analytics panels | 10.1 · 10.2 · 10.3 | Dashboard renders real traffic/search data from a fetch run, zero analytics IDs in `src/` outside place.config; tag released; instance #1 adopts clean (10.3); maintainer phase confirm | AI 5h \| Human 1.5h |
-| 11 | Autonomous routines | ROUTINE organ activated: routine contract + `/schedule` skill; embeddings/index refresh (CI); maintainer (content PR review + link/health audits); feedback-triage; data-refresh; trend-discovery; social-publish; rewrite | 11.1-11.9 | Two routines live >= 1 week shipping only via PRs, zero direct pushes to main; tag released; instance #1 adopts clean (11.9); maintainer phase confirm | AI 17.25h \| Human 1.25h |
+| 11 | Autonomous routines | **DEFERRED — unscheduled (2026-08-12 amendment, D1); 11.2 pulled forward to 9.4 (D2).** ROUTINE organ activated: routine contract + `/schedule` skill; maintainer (content PR review + link/health audits); feedback-triage; data-refresh; trend-discovery; social-publish; rewrite | 11.1 · 11.3-11.9 | Two routines live >= 1 week shipping only via PRs, zero direct pushes to main; tag released; instance #1 adopts clean (11.9); maintainer phase confirm | AI 15.5h \| Human 1.25h |
 
 **Exit-gate shape (uniform for phases 6-11).** Every `Exit gate` cell above states the same
 four things in the same order, and a phase is not closed until all four hold:
@@ -41,22 +41,24 @@ four things in the same order, and a phase is not closed until all four hold:
    phase's terminal packet, named in the cell.
 4. **Maintainer phase confirm** — the gate `/dev:plan` for phase n+1 waits on.
 
-Part 3 is why every phase has a terminal packet (6.4, 7.4, 8.3, 9.3, 10.3, 11.9): adoption
+Part 3 is why every phase has a terminal packet (6.4, 7.4, 8.3, 9.5, 10.3, 11.9): adoption
 is real work with human steps, so it is tracked as a task rather than asserted as a
 property. Those packets execute in the instance repository; the tag they adopt is cut in
 `sekai-kb` at verify of the phase's last framework task.
 
-**Totals for these phases:** AI ≈ 68h | Human ≈ 9.5h. Phases 6-8 close the original
-plan (AI ≈ 39.75h | Human ≈ 6h); the extension phases 9-11 add AI ≈ 28.25h | Human ≈ 3.5h
-and roughly 1.5-2 weeks elapsed. Phase 6's numbers are the 2026-07-29 planning amendment's
-as revised by the three later Phase 6 amendments, not the original block estimates; phases
-7, 8, 10, and 11 gained a terminal adoption packet in the 2026-08-04 exit-gate amendment;
-Phase 7's are the 2026-08-05 planning amendment's. **Every figure in this paragraph is now
-summed from the per-phase subtotals below** — the previous AI totals did not reconcile with
-them (the stated AI ≈ 62.5h against an actual 67h before this amendment, and the
-phase-6-through-8 and 9-through-11 splits likewise), because each amendment updated its own
-phase's row without re-summing. The human total was correct throughout. Phases 0-5, and
-therefore the grand totals for the whole programme, are recorded in instance #1's roadmap.
+**Totals for these phases:** the active scope is phases 6, 7, 9, and 10 —
+**AI ≈ 48.75h | Human ≈ 8h** (6: 20.25/3, 7: 14.5/2.5, 9: 9/1, 10: 5/1.5). Phases 8 and 11
+are deferred and unscheduled (2026-08-12 amendment, D1), carrying **AI ≈ 20.5h | Human ≈
+1.75h** they will cost whenever a maintainer schedules them (8: 5/0.5, 11: 15.5/1.25, the
+latter reduced by 11.2's move to 9.4). Everything sums to AI ≈ 69.25h | Human ≈ 9.75h across
+all six phases. Phase 6's numbers are the 2026-07-29 planning amendment's as revised by the
+three later Phase 6 amendments, not the original block estimates; phases 7, 8, 10, and 11
+gained a terminal adoption packet in the 2026-08-04 exit-gate amendment; Phase 7's are the
+2026-08-05 planning amendment's; Phase 9's are this amendment's. **Every figure in this
+paragraph is summed from the per-phase subtotals below** — an earlier revision's totals did
+not reconcile with them (a stated AI ≈ 62.5h against an actual 67h) because each amendment
+updated its own phase's row without re-summing. Phases 0-5, and therefore the grand totals
+for the whole programme, are recorded in instance #1's roadmap.
 
 **Language policy:** every phase ships English-only. The framework carries no
 CJK/multi-language code path, language profile, or gate — in ANY code tree (`src/`,
@@ -78,6 +80,13 @@ history; SPEC `Risk controls`). Phase 9 depends on 7.2c (the inherited-fork
 disposition's named MCP trigger); Phase 11 depends on 8.1 (ROUTINE organ architecture)
 plus per-routine feature deps. Reordering is a scope change requiring the maintainer's
 explicit call.
+
+**Execution order as of 2026-08-12: 6 → 7 → 9 → 10, then nothing scheduled.** The maintainer
+made that call in the 2026-08-12 amendment below (D1): phases 8 and 11 are deferred
+indefinitely, not dropped. No dependency was broken to do it — Phase 9 depends only on 7.2c,
+which shipped, and Phase 10 on a live domain, which exists. Phase 11 is the only block that
+depends on Phase 8, which is why deferring 8 parks 11 with it, and why the one Phase 11 task
+whose dependencies are 7.2a + 9.1 rather than 8.1 came forward instead of waiting (D2).
 
 **Execution repo flow (post-cut ownership rule, ADR 004/005):** every
 code task in these phases executes in the `sekai-kb` repository; each phase closes with a
@@ -335,6 +344,89 @@ four Phase 6 amendments.
   established as the house minimum for a public endpoint); Human loses 0.5h on 7.2a (D2)
   and 0.25h on 7.4 (no Claude API key to provision). The 13.25h it replaces was itself
   0.25h under the block sum.
+
+---
+
+## Phase 8/11 deferral and Phase 9 planning amendment — approved 2026-08-12
+
+Two things at once, because they are one decision: the maintainer deferred phases 8 and 11,
+and that made Phase 9 the next phase, so its blocks were converted in the same session. Same
+form as the six amendments above — the blocks carry the decisions inline, this section is the
+rationale, and the packets cite it. ADR 011 records the architecture half.
+
+- **D1 — phases 8 and 11 are deferred indefinitely; the active roadmap ends at Phase 10.**
+  Not dropped and not re-scoped: ADR 003 (organ layer) and ADR 005 (routines) stand as
+  accepted architecture with no delivery date, their blocks below are untouched, and their
+  milestone rows keep their exit gates. What unblocks them is a maintainer call to schedule
+  8; 11 follows it. `AGENTS.md` §Semiont probe already says `semiont/config.json` is absent
+  in this release and that nothing may require it — deferral makes that sentence true for
+  longer and needs no edit anywhere in the code trees, which is the property ADR 003's
+  opt-in design was bought for.
+- **D2 — 11.2 is pulled forward into Phase 9 as 9.4.** Its stated dependencies are 7.2a and
+  9.1, never 8.1, so nothing about it needed the organ layer. Leaving it parked would have
+  been the expensive half of the deferral rather than a neutral one: `vectors.json` is built
+  on the maintainer's machine and bundled into the worker at `wrangler deploy`, so the
+  deployed corpus is a snapshot of the last manual deploy and publishing an article does not
+  change what chat retrieves. 9.1's `semantic_search` reads the same artifact and would
+  inherit the same staleness on the day it shipped. The rest of Phase 11 stays parked.
+- **D3 — the corpus vectors move to a shared `workers/lib/vectors.json`.** Chat and MCP both
+  need them, and 9.1 step 3 already factors the shared retrieval code into `workers/lib/`;
+  the artifact belongs beside it. One artifact, one skip registration per gate, and no way
+  for two deployments to retrieve against different corpora. The three gates skip it by
+  basename, so the move does not change what they scan. The 7.2a treatment is otherwise
+  unchanged: still derived, still gitignored, still a `check-worker-config.mjs` failure if
+  git ever tracks it.
+- **D4 — `/kb/` + `llms.txt` is the primary AI-access path; MCP serves tool-only clients.**
+  `dev_docs/research/platform-notes.md` §3.2 flagged this overlap as unsettled and said to
+  settle it when Phase 9 is planned: the static protocol already serves any client that can
+  fetch a URL, at zero infrastructure cost, which makes MCP unnecessary for browsing-capable
+  clients. It is built anyway, because its remaining delta is real — clients that cannot
+  fetch arbitrary URLs, a persistent registered tool a user opts into once instead of a URL
+  they must remember, and `semantic_search`, which the static protocol cannot do at all. So
+  the `/ai` page (9.2) leads with the HTTP protocol and presents the MCP endpoint second,
+  matching how `dev_docs/PRD.md`'s consumer table already words it. This is a positioning
+  decision, recorded so 9.2 does not re-open it.
+- **D5 — `list_topics`, `get_article`, and `search` fetch the live site over HTTP with edge
+  caching**, rather than bundling `/kb/` JSON into the worker at deploy time. Those files
+  rebuild on every push to `main` and ship with the site, so the deployed site stays the
+  single source and three of the four tools are current by construction. Bundling would have
+  given all four the staleness problem D2 exists to remove, to save a cache-cold fetch.
+  `semantic_search` is the only tool touching the bundled artifact.
+- **D6 — CI may deploy the vector-carrying workers, which amends a standing rule.**
+  `AGENTS.md` §Where things live says Workers are "Deployed by hand, never by CI" and
+  `docs/runbook/DEPLOY.md` §Corpus embeddings calls the rebuild "a deliberate manual step";
+  9.4 cannot exist under either sentence, so 9.4 carries the edits to both. The exception is
+  narrow by construction and must stay that way: push to `main` only — never
+  `pull_request`, which would expose the credential to fork PRs — opt-in through a
+  repository secret whose absence makes the job no-op green, and least-privilege per
+  `.agent-toolkit/rules/github-actions-least-privilege.md`. The maintainer weighed the cost
+  and accepted it: this grants an adopter's CI deploy rights to their Cloudflare account,
+  and the token is strictly broader than the local one documented today
+  (`Workers AI: Read + Edit` for the embedding call **plus** `Workers Scripts: Edit` for the
+  deploy). 9.4's DEPLOY.md section states the scopes, the blast radius, and the revocation
+  path, because an adopter opting in deserves to read what they are opting into.
+
+**Two stale premises corrected in the blocks below.** Both predate phases 6 and 7 shipping,
+and converting 9.3 without fixing them would have produced a packet built on a false claim:
+
+1. **9.3 and ADR 005 §5 both call Phase 9's `features.mcp` the first post-cut config-schema
+   addition, and Phase 9 the first real feature-release upgrade.** Neither is true any more.
+   Phase 6 shipped `features.feedback` + `workers.feedback`, Phase 7 shipped `features.chat`
+   + `features.og` + six `workers.*` keys, and instance #1 adopted both through
+   `/sekai-upgrade` (6.4, 7.4). 9.3 is re-scoped to write the adopter playbook **from the two
+   real upgrade runs that already happened**, which is better evidence than one run and also
+   unties the task from waiting on Phase 9's own adoption.
+2. **9.3 as written spanned two repositories in one packet** — its steps 1, 3, and 4 commit
+   in `sekai-kb` while step 2 runs in the instance. `.agent-toolkit/dev.md` requires a session
+   to run in the repository that owns its commits, and the 2026-08-04 exit-gate amendment
+   established the terminal-adoption-packet shape for exactly this. 9.3 keeps the framework
+   doc work; the new **9.5** carries the instance-side exit gate, modelled on 6.4 and 7.4
+   including its `Execution repo:` line.
+
+- **Estimates:** Phase 9 becomes AI ≈ 9h | Human ≈ 1h (was AI 6h | Human 0.75h): 9.1 gains
+  0.5h for D3's artifact move and the `workers/lib/` extraction, 9.4 brings 1.75h from 11.2,
+  and 9.5 adds 0.75h. Phase 11 drops to AI ≈ 15.5h by losing 11.2. The totals paragraph above
+  is re-summed from the per-phase subtotals.
 
 ---
 
@@ -600,7 +692,13 @@ now re-sums from)
 
 _Phase 7 subtotal: AI 14.5h | Human 2.5h_
 
-**Phase 8: Semiont plugin layer**
+**Phase 8: Semiont plugin layer — DEFERRED, unscheduled**
+
+**Deferred by the 2026-08-12 amendment (D1); ADR 011.** The blocks below are unchanged and
+stay convertible: `/dev:plan` runs against them whenever a maintainer schedules this phase.
+Nothing in phases 9 or 10 requires the organ layer, and `AGENTS.md` §Semiont probe already
+requires every skill and script to no-op gracefully while `semiont/config.json` is absent.
+Phase 11 is the only phase that depends on 8.1, and it is deferred with this one.
 
 The agent-toolkit migration amendment above controls the `AGENTS.md` boot-hook location
 and supersedes the original `CLAUDE.md` loader wording.
@@ -663,59 +761,126 @@ release train): ADR 005.
 ```
 [9.1] MCP server worker (workers/mcp/)
   Effort: M | Model: Opus | Depends: 7.2c (named MCP trigger honored)
-  Est: AI 2.5h + 0.5h review | Human 0.25h (wrangler route, client test)
+  Est: AI 3h + 0.5h review | Human 0.25h (wrangler route, client test)
+  Decision: the shared corpus artifact moves to workers/lib/vectors.json (2026-08-12
+    amendment, D3), and the three HTTP-backed tools read the live site rather than a
+    bundled copy (D5). Only semantic_search touches the artifact.
   Steps:
     1. Stateless Streamable-HTTP MCP server on Cloudflare Workers (createMcpHandler
        pattern; no Durable Objects at single-instance scale — verified free-tier viable
        2026-07, see ADR 005; document McpAgent/DO as the scale-up path for adopters
        needing sessions).
-    2. Tools: list_topics (serves /kb/topics.json), get_article (slug →
-       /kb/articles/{slug}.md), search (keyword over /kb/search-index.json),
+    2. Tools: list_topics (fetches /kb/topics.json), get_article (slug →
+       /kb/articles/{category}/{slug}.md), search (keyword over /kb/search-index.json),
        semantic_search (query embed via Workers AI @cf/baai/bge-m3 + in-worker cosine
-       over the 7.2a vectors).
+       over the 7.2a vectors). The first three fetch the deployed site with edge caching
+       per D5, so they carry no build-time copy and stale on nothing.
     3. Factor the retrieval code shared with workers/chat into workers/lib/; surgical
-       refactor of the chat worker to consume it.
-    4. Place identity from config; new feature flag features.mcp (absent-safe schema
-       extension, links-precedent note in SPEC; init-wizard prompt tracked).
+       refactor of the chat worker to consume it. Move the vectors artifact there in the
+       same change (D3): build-embeddings.mjs's output path, the chat worker's import,
+       .gitignore, and the worker-config self-test fixtures. The gates skip it by
+       basename, so their scan sets do not change; its derived-and-gitignored treatment
+       from 7.2a (D3 of the 2026-08-05 amendment) carries over unchanged.
+    4. Place identity from config; new feature flag features.mcp plus workers.mcp
+       (absent-safe schema extension, links-precedent note in SPEC; init-wizard prompt
+       tracked; scripts/init/writer.mjs's copy must stay in agreement — place-config:check
+       enforces it).
   Acceptance: an MCP client connected to the deployed endpoint answers a question about
     the instance's place via tool calls; genericity CI green; chat worker eval (7.2c set)
     still passes post-refactor
-  Downstream: 9.2, 11.2 (vector redeploy path)
+  Downstream: 9.2, 9.4
 [9.2] AI-access page + agent boot file
   Effort: S | Model: Opus | Depends: 9.1
   Est: AI 1h + 0.25h review
+  Decision: the page leads with /kb/ + llms.txt and presents MCP second, for clients that
+    cannot fetch arbitrary URLs and for semantic_search (2026-08-12 amendment, D4). This
+    settles the overlap platform-notes.md §3.2 left open; do not re-open it in the packet.
   Steps:
     1. /ai page (successor to the inherited-fork MCP page) documenting every AI
        consumption path — llms.txt, /kb/ protocol, MCP endpoint + client config snippets,
-       /chat — all generated from place.config.
+       /chat — all generated from place.config, in D4's order.
     2. build-kb-index.mjs additionally emits /kb/agent.md: a vendor-agnostic boot file
        (identity, voice, topic index, fetch instructions), genericized; llms.txt links it.
   Acceptance: a browsing AI given only the domain can enumerate and use all access paths;
     genericity CI green
   Downstream: none
-[9.3] Adopter upgrade playbook (docs/runbook/UPGRADE.md) + first real feature-release proof
-  Effort: S | Model: Opus | Depends: 9.1, 9.2, framework cut
-  Est: AI 1.5h + 0.25h review | Human 0.5h (the maintainer runs the instance upgrade as
-    the adopter)
+[9.3] Adopter upgrade playbook (docs/runbook/UPGRADE.md) + the absent-safe schema rule
+  Effort: S | Model: Opus | Depends: framework cut
+  Est: AI 1.5h + 0.25h review | Human 0.25h (read it as a first-timer would)
+  Decision: written FROM the two real feature-release upgrades that already happened —
+    6.4 and 7.4 — not from Phase 9's own adoption (2026-08-12 amendment, correction 1).
+    features.mcp is not the first post-cut config-schema addition; features.feedback,
+    features.soundscape, features.chat, and features.og all preceded it. Two completed
+    runs are better evidence than one, and sourcing from them unblocks this task from
+    9.5. The instance-side adoption that used to be this block's step 2 is now 9.5
+    (correction 2): a packet commits in one repository.
   Steps:
-    1. Ship Phase 9 as sekai-kb release vX.Y: CHANGELOG entry with the features.mcp
-       upgrade note — the first real config-schema addition since the cut.
-    2. Run /sekai-upgrade in instance #1 against the tag as the proof.
-    3. Extend docs/runbook/UPGRADE.md (exists since Phase 5) for adopters
-       FROM that real run: discover releases (watch tags / CHANGELOG), read upgrade
-       notes, run /sekai-upgrade (AI path) or the manual fetch → merge-tag → build commands
-       (non-AI path), handle conflict reports, enable newly added feature flags
-       (absent-safe: skipping the flag = feature stays off), verify FRAMEWORK-VERSION
-       bumped.
-    4. Add the absent-safe schema rule to sekai-kb's AGENTS.md + playbook so future
+    1. Read docs/runbook/UPGRADE.md first. It has been hardened repeatedly since Phase 5
+       (maintainer-doc classification, FRAMEWORK-VERSION survival, divergence reporting),
+       so state what this task adds rather than re-describing what is there.
+    2. Extend it for adopters from the 6.4 and 7.4 runs: discover releases (watch tags /
+       CHANGELOG), read upgrade notes, run /sekai-upgrade (AI path) or the manual
+       fetch → merge-tag → build commands (non-AI path), handle conflict reports, enable
+       newly added feature flags (absent-safe: skipping the flag = feature stays off),
+       verify FRAMEWORK-VERSION bumped.
+    3. Add the absent-safe schema rule to sekai-kb's AGENTS.md + playbook so future
        framework changes preserve it (per ADR 006, CLAUDE.md is a one-line @AGENTS.md
        shim — never content-bearing).
-  Acceptance: the instance runs the real Phase-9 upgrade clean end-to-end; a first-timer
-    following UPGRADE.md alone can state the exact commands and the flag to flip for MCP
-  Downstream: every later framework release (10, 11, and beyond) ships against this playbook
+  Acceptance: a first-timer following UPGRADE.md alone can state the exact commands and
+    the flag to flip for a newly released feature, citing the 6.4/7.4 runs as the worked
+    examples
+  Downstream: every later framework release ships against this playbook
+[9.4] Corpus + index refresh pipeline (CI-triggered, deterministic)
+  Effort: S | Model: Opus | Depends: 7.2a, 9.1
+  Est: AI 1.5h + 0.25h review
+  Decision: pulled forward from 11.2 (2026-08-12 amendment, D2) because its dependencies
+    were never 8.1, and without it both chat and the new semantic_search retrieve against
+    whatever corpus was bundled at the last manual deploy. This block is what makes CI
+    deploy a Worker, which the amendment's D6 permits by narrow exception; the AGENTS.md
+    and DEPLOY.md edits that exception requires land HERE, in the task whose code proves
+    them, not in a separate docs pass.
+  Steps:
+    1. GH Actions job on push-to-main touching knowledge/**: rebuild chunk vectors via
+       Workers AI @cf/baai/bge-m3 (single-instance scale fits the 10k-neurons/day free
+       tier; the offline GPU path stays documented as the alternative per SPEC `Stack`),
+       and redeploy the workers that bundle workers/lib/vectors.json.
+    2. Fail safe by default: push to main only, never pull_request; the job no-ops green
+       when the credential secret is absent, so an adopter who never opts in keeps a green
+       CI and the hand-deploy path; permissions: contents: read at the top level with
+       write scopes only on the job that needs them.
+    3. Amend AGENTS.md §Where things live and docs/runbook/DEPLOY.md §Corpus embeddings,
+       both of which currently state that Workers are deployed by hand and never by CI.
+       Document the token scopes the job needs (Workers AI: Read + Edit for the embedding
+       call, Workers Scripts: Edit for the deploy), what an adopter grants by opting in,
+       and how to revoke.
+    4. Verify + document that search/kb/graph indexes already rebuild on every deploy
+       (no gap).
+  Acceptance: editing an article on main updates chat + MCP retrieval within one deploy
+    cycle, no manual step; a checkout with no Cloudflare secret configured still goes green
+  Downstream: 9.5
+[9.5] Phase 9 exit gate: ship the tag, adopt it in the instance, connect a real client
+  Effort: S | Model: Opus | Depends: 9.1, 9.2, 9.3, 9.4
+  Est: AI 0.5h + 0.25h review | Human 0.5h (Cloudflare deploy, MCP client registration,
+    confirm)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 9.1-9.4, with an upgrade note for features.mcp +
+       workers.mcp and one for the CI refresh job's opt-in secret; adopt it with
+       /sekai-upgrade (real merge commit, instance-owned files untouched, instance CI
+       green, FRAMEWORK-VERSION bumped after verification).
+    2. Enable features.mcp, deploy the instance's own MCP worker, and set its endpoint in
+       place.config.
+    3. Register the endpoint in a real MCP client and ask it a question about the place.
+       No clone: the proof is that a client which has never seen the repository answers
+       from the instance's articles through tool calls.
+  Acceptance: the connected client answers from the instance's own articles with no clone;
+    an article edited on main reaches its retrieval within one deploy cycle; maintainer
+    phase confirm
+  Downstream: Phase 10 entry
 ```
 
-_Phase 9 subtotal: AI 6h | Human 0.75h_
+_Phase 9 subtotal: AI 9h | Human 1h_
 
 **Phase 10: Perception (analytics)**
 ```
@@ -766,7 +931,13 @@ _Phase 9 subtotal: AI 6h | Human 0.75h_
 
 _Phase 10 subtotal: AI 5h | Human 1.5h_
 
-**Phase 11: Autonomous routines**
+**Phase 11: Autonomous routines — DEFERRED, unscheduled**
+
+**Deferred by the 2026-08-12 amendment (D1); ADR 011.** It depends on 8.1, which is deferred
+with it. The blocks below are unchanged apart from 11.2, which moved to 9.4 (D2) because its
+dependencies were 7.2a + 9.1 and its absence would have left chat and MCP retrieving against
+a manually-deployed snapshot. Scheduling Phase 8 is what unblocks the rest.
+
 ```
 [11.1] Routine substrate + contract (ROUTINE organ activation + /schedule skill)
   Effort: M | Model: Opus | Depends: 8.1
@@ -787,19 +958,9 @@ _Phase 10 subtotal: AI 5h | Human 1.5h_
   Acceptance: a demo no-op routine registered on each substrate fires once, opens a PR,
     logs to MEMORY; disabling the organ stops both
   Downstream: 11.3, 11.4, 11.5, 11.6, 11.7, 11.8
-[11.2] Embeddings + index refresh pipeline (CI-triggered, deterministic)
-  Effort: S | Model: Opus | Depends: 7.2a, 9.1
-  Est: AI 1.5h + 0.25h review
-  Steps:
-    1. GH Actions job on push-to-main touching knowledge/**: rebuild chunk vectors via
-       Workers AI @cf/baai/bge-m3 (single-instance scale fits the 10k-neurons/day free
-       tier; the offline GPU path stays documented as the alternative per SPEC `Stack`),
-       redeploy the vectors JSON consumed by workers/chat + workers/mcp.
-    2. Verify + document that search/kb/graph indexes already rebuild on every deploy
-       (no gap).
-  Acceptance: editing an article on main updates chat + MCP retrieval within one deploy
-    cycle, no manual step
-  Downstream: none
+[11.2] MOVED to 9.4 by the 2026-08-12 amendment (D2). Its dependencies were 7.2a + 9.1,
+  never 8.1, and deferring it would have shipped 9.1's semantic_search against a corpus
+  that only refreshes on a manual deploy. Nothing remains here; the block lives in Phase 9.
 [11.3] Maintainer routine: content PR review + link/health audit
   Effort: M | Model: Opus | Depends: 11.1, quality tooling
   Est: AI 2.5h + 0.5h review
@@ -883,4 +1044,4 @@ _Phase 10 subtotal: AI 5h | Human 1.5h_
   Downstream: none — this closes the roadmap
 ```
 
-_Phase 11 subtotal: AI 17.25h | Human 1.25h_
+_Phase 11 subtotal: AI 15.5h | Human 1.25h_ (was 17.25h; 11.2's 1.75h moved to 9.4)

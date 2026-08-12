@@ -259,7 +259,8 @@ compiler, is what keeps the emitted config and the emitted interface in agreemen
 > colors from a framework-owned slug-keyed palette to instance data, eliminating the
 > per-upgrade conflict on `categoryConfig.ts` that every non-demo-slug adopter hits.
 
-> **Phase 9-11 extensions (ADR 005):** `features.mcp` (task 9.1)
+> **Phase 9-10 extensions (ADR 005, rescheduled by ADR 011):** `features.mcp` + `workers.mcp?`
+> (task 9.1)
 > and `analytics` IDs (GA4 measurement ID, Cloudflare Web Analytics token — task 10.1)
 > extend the schema under the same intentional-divergence pattern as `links`; init-wizard
 > prompts are tracked on the citing tasks.
@@ -433,12 +434,26 @@ sentence fails CI.
 Stateless Streamable-HTTP MCP server on Cloudflare Workers (createMcpHandler pattern, no
 Durable Objects at single-instance scale — free-tier verified 2026-07, ADR 005;
 McpAgent/DO documented as the scale-up path for adopters needing sessions). Tools:
-`list_topics` (/kb/topics.json), `get_article` (/kb/articles/{slug}.md), `search`
+`list_topics` (/kb/topics.json), `get_article` (/kb/articles/{category}/{slug}.md), `search`
 (keyword over /kb/search-index.json), `semantic_search` (query embed via Workers AI
 `@cf/baai/bge-m3` + in-worker cosine over the 7.2a vectors — same model space as chat,
-§Stack). Retrieval code shared with `workers/chat/` lives in `workers/lib/`. Behind
-`features.mcp`. The `/ai` page + `/kb/agent.md` boot file (task 9.2) document every AI
-consumption path.
+§Stack). Retrieval code shared with `workers/chat/` lives in `workers/lib/`, and so does the
+corpus artifact both workers bundle (`workers/lib/vectors.json`), so two deployments cannot
+retrieve against different corpora. Behind `features.mcp`.
+
+**The static protocol is primary; MCP serves clients that cannot use it.** `/llms.txt` +
+`/kb/` already serve any consumer able to fetch a URL, at zero infrastructure cost, which
+makes MCP unnecessary for browsing-capable clients — the overlap
+`dev_docs/research/platform-notes.md` §3.2 left open and the 2026-08-12 ROADMAP amendment
+(D4) settles. MCP is built for what remains: clients that cannot fetch arbitrary URLs, a
+persistent registered tool a user opts into once rather than a URL they must remember, and
+`semantic_search`, which the static protocol cannot do at all. The `/ai` page + `/kb/agent.md`
+boot file (task 9.2) document every AI consumption path in that order.
+
+**Three of the four tools hold no build-time copy** (D5): `list_topics`, `get_article`, and
+`search` fetch the deployed site with edge caching, so they are current with `main` by
+construction and the site stays the single source. Only `semantic_search` reads the bundled
+artifact, and task 9.4 is what keeps that artifact fresh.
 
 ### Analytics (`features.analytics`, Phase 10)
 
@@ -449,7 +464,18 @@ never in `src/`. Fetchers emit `src/data/analytics/*.json` behind
 green when they are absent. Credentials via local env / Actions secrets, documented in
 the runbook.
 
-### Autonomous routines (Phase 11)
+### Autonomous routines (Phase 11 — DEFERRED, unscheduled)
+
+**Deferred with Phase 8, which it depends on (ADR 011).** The contract below stands as
+specified and is what a future Phase 11 builds; nothing in the framework claims to deliver it
+in the meantime, and a document implying otherwise is a defect. The one exception is the
+embeddings/index refresh pipeline, which moved to task 9.4 because its dependencies were 7.2a
+and 9.1 rather than the organ layer, and because both chat and MCP would otherwise retrieve
+against a corpus that only refreshes on a manual deploy. That task is also the narrow
+exception to the hand-deploy rule for Workers: CI may deploy the workers bundling
+`workers/lib/vectors.json`, push-to-`main` only, opt-in through a secret whose absence keeps
+the job green, least-privilege permissions, blast radius documented in the runbook
+(ADR 011 (c)).
 
 Hybrid substrate (ADR 005): deterministic pipelines (embeddings/index refresh, analytics
 fetch) run as GitHub Actions cron/push-triggers; AI routines (maintainer, feedback-triage,
@@ -545,6 +571,25 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   `scripts/ci/check-framework-docs.mjs`).
 
 ## Change log
+
+- **2026-08-12, ADR 011 phases 8 and 11 deferred:** the execution order becomes 6 → 7 → 9 →
+  10 with nothing scheduled after it. §Extension capabilities marks the Phase 11 subsection
+  deferred and the MCP subsection gains two positioning rules the 2026-08-12 ROADMAP
+  amendment settled: the static `/kb/` + `llms.txt` protocol is primary and MCP serves what
+  it cannot reach (D4), and three of the four MCP tools fetch the live site rather than
+  bundling a copy (D5). The corpus artifact moves to `workers/lib/vectors.json` so chat and
+  MCP share one (D3).
+
+  **What it invalidates.** `ADR 005 §5`'s claim that `features.mcp` is the first post-cut
+  config-schema addition, which phases 6 and 7 had already falsified; task 9.3 now writes the
+  adopter upgrade playbook from the completed 6.4 and 7.4 runs. `AGENTS.md` §Where things
+  live and `docs/runbook/DEPLOY.md` §Corpus embeddings both state that Workers are deployed
+  by hand and never by CI, which task 9.4 amends by narrow exception in the same change that
+  ships the workflow.
+
+  **What it does not change.** ADR 003 and ADR 005 stay Accepted, their blocks stay
+  convertible, and 11.1's dependency on 8.1 is not weakened. The site must still build with
+  `semiont/` absent and every skill and script must still no-op gracefully without it.
 
 - **2026-08-10, ADR 010 adopter edit rights:** "framework-owned" is now a default and an
   upgrade contract rather than an access boundary, following the `dev_docs/PRD.md` §Non-goals
