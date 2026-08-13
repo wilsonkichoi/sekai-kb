@@ -488,6 +488,36 @@ describe('bundlingWorkers derives the workers that bundle the artifact', () => {
     });
     assert.deepEqual(bundlingWorkers(root), ['alpha']);
   });
+
+  test('a worker with a .ts entrypoint declared in wrangler.toml is followed', () => {
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/alpha/wrangler.toml': 'name = "alpha"\nmain = "src/index.ts"\n',
+      'workers/alpha/src/index.ts': importsFrom(loaderSpecifier()),
+      'workers/beta/wrangler.toml': 'name = "beta"\nmain = "src/index.ts"\n',
+      'workers/beta/src/index.ts': importsNothing,
+    });
+    assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
+
+  test('a worker with a .js entrypoint is followed', () => {
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/alpha/wrangler.toml': 'name = "alpha"\nmain = "src/index.js"\n',
+      'workers/alpha/src/index.js': importsFrom(loaderSpecifier()),
+    });
+    assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
+
+  test('a resolved .ts module in the graph is followed', () => {
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/alpha/wrangler.toml': 'name = "alpha"\nmain = "src/index.mjs"\n',
+      'workers/alpha/src/index.mjs': importsFrom('./retrieve.ts'),
+      'workers/alpha/src/retrieve.ts': importsFrom(loaderSpecifier()),
+    });
+    assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
 });
 
 /* ============================================ bundlingWorkers: reachability ========== */
@@ -668,6 +698,15 @@ describe('bundlingWorkers follows every specifier form a bundler follows', () =>
     assert.deepEqual(bundlingWorkers(root), ['alpha']);
   });
 
+  test('an extension-less specifier resolves to a .ts file when no .mjs exists', () => {
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/lib/corpus.ts': importsFrom('./vectors.mjs'),
+      'workers/alpha/src/index.mjs': importsFrom('../../lib/corpus'),
+    });
+    assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
+
   test('a directory specifier resolves to its index.mjs', () => {
     const root = makeTree({
       'workers/lib/vectors.mjs': loaderSource,
@@ -675,6 +714,15 @@ describe('bundlingWorkers follows every specifier form a bundler follows', () =>
       'workers/lib/plain/index.mjs': importsNothing,
       'workers/alpha/src/index.mjs': importsFrom('../../lib/corpus'),
       'workers/beta/src/index.mjs': importsFrom('../../lib/plain'),
+    });
+    assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
+
+  test('a directory specifier resolves to its index.ts when no index.mjs exists', () => {
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/lib/corpus/index.ts': importsFrom('../vectors.mjs'),
+      'workers/alpha/src/index.mjs': importsFrom('../../lib/corpus'),
     });
     assert.deepEqual(bundlingWorkers(root), ['alpha']);
   });

@@ -58,6 +58,14 @@ const WRANGLER_CONFIG = 'wrangler.toml';
 /** Fallback entrypoint when no wrangler config exists or declares no `main`. */
 const DEFAULT_ENTRYPOINT = 'src/index.mjs';
 
+/** Extensions Wrangler bundles. Used to filter the graph walk and specifier resolution. */
+const BUNDLER_EXTENSIONS = new Set(['.mjs', '.js', '.ts', '.mts']);
+
+const hasBundlerExtension = (file) => {
+  const dot = file.lastIndexOf('.');
+  return dot !== -1 && BUNDLER_EXTENSIONS.has(file.slice(dot));
+};
+
 const ARTIFACT_BASENAME = basename(OUTPUT_PATH);
 
 /**
@@ -83,19 +91,26 @@ function moduleSpecifiers(source) {
 }
 
 /**
- * A relative specifier as a path on disk: the specifier itself, else `<path>.mjs`, else
- * `<path>/index.mjs`. When none of the three is a file it returns the bare path, which
- * the caller's own existence check then rejects.
+ * A relative specifier as a path on disk: the specifier itself, else `<path>.<ext>` for
+ * each bundler extension, else `<path>/index.<ext>`. When none resolves to a file it
+ * returns the bare path, which the caller's own existence check then rejects.
  *
  * Everything in `workers/` writes explicit `.mjs` specifiers, which is what the deployed
- * bundler needs; the two fallbacks cost a stat each and mean an extension-less or
- * directory specifier added later is followed rather than silently ending the walk.
+ * bundler needs; the fallbacks cost a stat each and mean an extension-less or directory
+ * specifier added later is followed rather than silently ending the walk.
  */
 function resolveSpecifier(fromFile, specifier) {
   const base = resolve(dirname(fromFile), specifier);
-  for (const candidate of [base, `${base}.mjs`, join(base, 'index.mjs')]) {
+  const candidates = [base];
+  for (const ext of BUNDLER_EXTENSIONS) {
+    candidates.push(`${base}${ext}`);
+  }
+  for (const ext of BUNDLER_EXTENSIONS) {
+    candidates.push(join(base, `index${ext}`));
+  }
+  for (const candidate of candidates) {
     // isFile, not exists: a directory specifier's own path exists, and accepting it
-    // would return the directory and never try the index.mjs inside it.
+    // would return the directory and never try the index inside it.
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
   }
   return base; // reported as unresolved by the caller's existence check
@@ -136,7 +151,7 @@ function workerEntrypoint(workerDir) {
 function artifactLoaderPath(root) {
   const libDir = join(root, LIB_DIR);
   for (const file of listFiles(libDir).sort()) {
-    if (!/\.mjs$/.test(file)) continue;
+    if (!hasBundlerExtension(file)) continue;
     const specifiers = moduleSpecifiers(readFileSync(file, 'utf8'));
     if (specifiers.some((s) => basename(s) === ARTIFACT_BASENAME)) return file;
   }
@@ -163,7 +178,7 @@ export function artifactLoaderModule(root = DEFAULT_ROOT) {
  * so a stray `../../../` cannot walk the whole repository.
  */
 function graphReaches(entryFiles, target, workersDir) {
-  const queue = entryFiles.filter((file) => /\.mjs$/.test(file));
+  const queue = entryFiles.filter((file) => hasBundlerExtension(file));
   const seen = new Set(queue);
   while (queue.length > 0) {
     const file = queue.shift();
@@ -179,7 +194,7 @@ function graphReaches(entryFiles, target, workersDir) {
       const resolved = resolveSpecifier(file, specifier);
       if (resolved === target) return true;
       if (!resolved.startsWith(`${workersDir}${sep}`)) continue;
-      if (!/\.mjs$/.test(resolved) || seen.has(resolved) || !existsSync(resolved)) continue;
+      if (!hasBundlerExtension(resolved) || seen.has(resolved) || !existsSync(resolved)) continue;
       seen.add(resolved);
       queue.push(resolved);
     }
