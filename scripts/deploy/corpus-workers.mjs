@@ -14,13 +14,16 @@
 //      which is exported for exactly this class of use.
 //   2. The module that imports it is whichever file under workers/lib/ carries an
 //      import of that artifact (today: vectors.mjs, the single loader).
-//   3. A worker bundles the artifact when its import graph, starting at
-//      workers/<dir>/src/ and following relative imports wherever they lead, reaches
-//      that module. The walk is transitive because bundling is: wrangler pulls in the
-//      whole graph, so a worker that reaches the loader through an intermediate module
-//      carries the artifact just as surely as one importing it directly. A
-//      direct-imports-only rule would silently drop such a worker from the redeploy
-//      list, which is the same stale-corpus defect this job exists to remove.
+//   3. A worker bundles the artifact when its import graph, starting at the
+//      configured `main` entrypoint in wrangler.toml and following relative imports
+//      wherever they lead, reaches that module. The walk is transitive because
+//      bundling is: wrangler pulls in the whole graph, so a worker that reaches the
+//      loader through an intermediate module carries the artifact just as surely as
+//      one importing it directly. A direct-imports-only rule would silently drop such
+//      a worker from the redeploy list, which is the same stale-corpus defect this
+//      job exists to remove. Seeding from the entrypoint (not the whole src/ tree)
+//      ensures a dead module that Wrangler never bundles cannot make a worker appear
+//      as a target.
 //
 // Deploy targets are the bundling workers this instance has actually deployed: the
 // capability's `features` flag is on AND its `workers` endpoint is non-empty, the same
@@ -49,8 +52,11 @@ const DEFAULT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 /** The shared retrieval tree. Not a worker: it has no wrangler config of its own. */
 const LIB_DIR = 'workers/lib';
 
-/** Everything under a worker directory that wrangler bundles from. */
-const SOURCE_DIR = 'src';
+/** The wrangler config file that declares a worker's bundle entrypoint. */
+const WRANGLER_CONFIG = 'wrangler.toml';
+
+/** Fallback entrypoint when no wrangler config exists or declares no `main`. */
+const DEFAULT_ENTRYPOINT = 'src/index.mjs';
 
 const ARTIFACT_BASENAME = basename(OUTPUT_PATH);
 
@@ -104,6 +110,26 @@ function listFiles(dir) {
     else if (entry.isFile()) files.push(abs);
   }
   return files;
+}
+
+/**
+ * The bundle entrypoint for a worker directory, as an absolute path.
+ *
+ * Reads `main` from wrangler.toml (the standard Wrangler field); falls back to
+ * src/index.mjs when the config is absent or declares no `main`. The returned path
+ * is the ONLY file the graph walk seeds from: a source file that exists under src/
+ * but is unreachable from this entrypoint is dead code that Wrangler does not bundle,
+ * so it must not make the worker appear as a deploy target.
+ */
+function workerEntrypoint(workerDir) {
+  const configPath = join(workerDir, WRANGLER_CONFIG);
+  let main = DEFAULT_ENTRYPOINT;
+  if (existsSync(configPath)) {
+    const content = readFileSync(configPath, 'utf8');
+    const match = content.match(/^\s*main\s*=\s*"([^"]+)"/m);
+    if (match) main = match[1];
+  }
+  return resolve(workerDir, main);
 }
 
 /** Step 2, as an absolute path: the shared module that imports the corpus artifact. */
@@ -176,8 +202,9 @@ export function bundlingWorkers(root = DEFAULT_ROOT) {
   const found = [];
   for (const entry of readdirSync(workersDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === basename(LIB_DIR)) continue;
-    const entryFiles = listFiles(join(workersDir, entry.name, SOURCE_DIR));
-    if (graphReaches(entryFiles, target, workersDir)) found.push(entry.name);
+    const entrypoint = workerEntrypoint(join(workersDir, entry.name));
+    if (!existsSync(entrypoint) || !statSync(entrypoint).isFile()) continue;
+    if (graphReaches([entrypoint], target, workersDir)) found.push(entry.name);
   }
   return found.sort();
 }

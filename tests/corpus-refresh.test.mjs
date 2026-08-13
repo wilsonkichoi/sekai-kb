@@ -445,16 +445,27 @@ describe('bundlingWorkers derives the workers that bundle the artifact', () => {
     assert.deepEqual(bundlingWorkers(root), ['alpha', 'delta', 'gamma']);
   });
 
-  test('an import from a nested file under src/ counts: the whole src tree is scanned', () => {
+  test('a nested file reachable from the entrypoint that imports the loader counts', () => {
     // The nested file sits one directory deeper, so its specifier needs one more '..'.
     // A depth-0 specifier here would resolve to workers/alpha/lib/vectors.mjs, a file
     // that does not exist -- the case would pass for the wrong reason, or not at all.
     const root = makeTree({
       'workers/lib/vectors.mjs': loaderSource,
-      'workers/alpha/src/index.mjs': importsNothing,
+      'workers/alpha/src/index.mjs': importsFrom('./handlers/retrieve.mjs'),
       'workers/alpha/src/handlers/retrieve.mjs': importsFrom(loaderSpecifier('vectors.mjs', 1)),
     });
     assert.deepEqual(bundlingWorkers(root), ['alpha']);
+  });
+
+  test('an unreachable file under src/ does not make the worker a target', () => {
+    // A dead module that Wrangler never bundles must not cause a deploy. The graph
+    // seeds from the configured entrypoint only, not the whole src/ tree.
+    const root = makeTree({
+      'workers/lib/vectors.mjs': loaderSource,
+      'workers/alpha/src/index.mjs': importsNothing,
+      'workers/alpha/src/diagnostics.mjs': importsFrom(loaderSpecifier()),
+    });
+    assert.deepEqual(bundlingWorkers(root), []);
   });
 
   test('an import from a worker test/ directory does not make it a deployable bundler', () => {
