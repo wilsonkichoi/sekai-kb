@@ -43,6 +43,17 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Changed
+
+- **The adopter upgrade runbook now starts with a complete release-to-upgrade
+  checklist grounded in the Phase 6.4 and 7.4 production upgrades.** It gives both
+  the `/sekai-upgrade` path and the copy-pasteable manual tag-merge path, explains
+  how to discover and read release notes, walks conflict and feature-flag decisions,
+  and verifies the post-build `FRAMEWORK-VERSION` bump and tag ancestry. `AGENTS.md`
+  and the init wizard's generated instance instructions now state the absent-safe
+  `place.config.ts` rule; `CLAUDE.md` remains the byte-exact one-line `@AGENTS.md`
+  shim.
+
 ## [1.1.4] — 2026-08-11
 
 Feedback worker rate-limit vars gain a place.config.ts override path, the PlaceConfig declaration is stated once with a drift gate, and the chat worker supplies its refusal sentence directly.

@@ -63,6 +63,7 @@
     "prebuild:dashboard": "npm run article-health:json || true; node scripts/core/build-dashboard-lite.mjs",
     "test": "node scripts/core/test-frontmatter.mjs",
     "test:ci": "node scripts/core/test-frontmatter.mjs --ci",
+    "test:upgrade-docs": "node --test tests/upgrade-runbook.test.mjs",
     "test:feedback": "node --test tests/feedback-widget.test.mjs",
     "test:snippet": "node --test tests/snippet-queue.test.mjs",
     "test:soundscape": "node --experimental-strip-types --test tests/soundscape-manifest.test.mjs && node --experimental-strip-types --test tests/sounds-add.test.mjs",

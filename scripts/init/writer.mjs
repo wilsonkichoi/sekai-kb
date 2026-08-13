@@ -215,6 +215,11 @@ projections of \`knowledge/\` — never edit them directly.
    divergence warns, names both values, and names that cost
    (\`docs/runbook/UPGRADE.md\` §Framework-owned files). The genericity gate remains the
    structural guarantee for rule 2, which is a different rule and stays fatal.
+4. **Absent-safe schema evolution:** every new \`place.config.ts\` key must be safe
+   when missing. A missing key leaves the new feature off, so an existing instance
+   upgrades and builds without editing its config. Framework upgrades never require
+   config surgery. The target tag's \`CHANGELOG.md\` Upgrade note names the opt-in key
+   and the capability left off.
 
 ## Skill discovery
 
