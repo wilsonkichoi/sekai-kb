@@ -98,6 +98,12 @@ jobs:
           python-version: "3.12"
       - run: npm ci --force
       - run: npm run test:ci
+      # Adopter upgrade contract: the runbook keeps all six literal workflow
+      # surfaces, both real worked examples, the absent-safe schema rule, and the
+      # checked-in CLAUDE.md shim. The init self-check separately proves the wizard
+      # emits that schema rule and the byte-exact shim into a real adopted tree.
+      - name: Adopter upgrade runbook contract
+        run: npm run test:upgrade-docs
       # Snippet queue format contract: only `approved` publishes, an over-length
       # draft is refused rather than truncated, and a malformed queue stops the
       # run. The human gate in that pipeline is these assertions, so they are a

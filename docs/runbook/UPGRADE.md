@@ -13,8 +13,118 @@ at `sekai-kb-v1.2.3` has byte-identical
 framework code, and the merge is deterministic because instance-owned files carry
 `.gitattributes merge=ours`.
 
-> A fuller `UPGRADE.md` (edge cases, rollback) is formalized in task 9.3; this is
-> the working runbook the release discipline ships with (task 5.4).
+## Start here: six steps for every release
+
+The detailed sections below explain the mechanics and edge cases. This checklist is
+the release-to-upgrade path a first-time adopter follows.
+
+### 1. Discover a release
+
+Watch the framework's [GitHub releases](https://github.com/wilsonkichoi/sekai-kb/releases)
+or [immutable tags](https://github.com/wilsonkichoi/sekai-kb/tags). In the instance
+repository, fetch the tags and compare them with the release already recorded in
+`FRAMEWORK-VERSION`:
+
+```bash
+git remote get-url framework 2>/dev/null || git remote add framework https://github.com/wilsonkichoi/sekai-kb.git
+git fetch framework --tags
+git tag -l 'sekai-kb-v*' | sort -V
+cat FRAMEWORK-VERSION
+```
+
+Choose one `sekai-kb-vX.Y.Z` tag above the recorded version. Never select framework
+`main`.
+
+### 2. Read that release's upgrade notes
+
+Set the target once, then read its entry from the framework's `CHANGELOG.md` before
+merging anything:
+
+```bash
+TARGET=sekai-kb-vX.Y.Z
+TARGET_VERSION="${TARGET#sekai-kb-}"
+git show "$TARGET":CHANGELOG.md | awk -v h="## [${TARGET_VERSION#v}]" 'index($0,h)==1{p=1} p&&index($0,h)!=1&&/^## \[/{exit} p'
+```
+
+Read every **Upgrade note** in that entry. It names required runtime changes,
+one-time cleanup, and optional feature keys. A new `place.config.ts` key is
+absent-safe: skipping it leaves the new capability off and does not stop the build.
+
+### 3. Apply the tag, with or without an AI CLI
+
+With an agent CLI, invoke the repository skill with the selected tag:
+
+```text
+/sekai-upgrade sekai-kb-vX.Y.Z
+```
+
+Without an agent CLI, follow [Routine upgrade](#routine-upgrade-every-release-after-the-base-is-set)
+in full. Its core order is fetch, merge the selected tag, then build:
+
+```bash
+git fetch framework --tags
+git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
+npm run build
+```
+
+Do not run only those three commands. The routine flow also extracts the target
+tag's helpers, classifies instance-owned state, reports divergence, reconciles that
+state after the merge, and finalizes any stopped merge. For an instance with no
+shared framework ancestor, use [Establishing the merge base](#establishing-the-merge-base-one-time-first-upgrade-only)
+instead; only that first merge uses `--allow-unrelated-histories`.
+
+### 4. Handle the conflict report
+
+The pre-merge divergence command shows both values for every locally changed
+framework-owned file:
+
+```bash
+node "$DIVERGENCE_HELPER" report --target "$TARGET"
+```
+
+After the merge and reconciliation steps, list unresolved paths:
+
+```bash
+git diff --name-only --diff-filter=U
+```
+
+For each path, read the target's CHANGELOG entry and compare `:2:<file>` (the
+instance) with `:3:<file>` (the framework). Then choose one side or hand-merge it.
+The complete decision procedure is [Conflict report](#framework-owned-files-a-default-and-an-upgrade-contract-not-a-lock).
+Never resolve every file to one side blindly.
+
+### 5. Opt into new features deliberately
+
+The upgrade does not edit `place.config.ts`. After the merged tree builds, use the
+target's Upgrade note and `docs/runbook/DEPLOY.md` to deploy any required Worker,
+then edit the named flag in `place.config.ts`. If you skip this step, the absent-safe
+default keeps the feature off.
+
+The two completed feature-release upgrades are worked evidence:
+
+| Run | Adopted release | Flags deliberately enabled after deployment |
+| --- | --- | --- |
+| [LB-74, Phase 6.4](https://linear.app/sekai-kb/issue/LB-74/64-phase-6-exit-gate-ship-the-sekai-kb-tag-adopt-it-in-the-instance-go) | [`sekai-kb-v1.0.20`](https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.0.20) | `features.feedback: true` and `features.soundscape: true`; feedback also set `workers.feedback` and `workers.feedbackDatabaseId` |
+| [LB-87, Phase 7.4](https://linear.app/sekai-kb/issue/LB-87/74-phase-7-exit-gate-ship-the-tag-adopt-it-in-the-instance-go-live) | [`sekai-kb-v1.1.2`](https://github.com/wilsonkichoi/sekai-kb/releases/tag/sekai-kb-v1.1.2) | `features.og: true` and `features.chat: true`; the Workers also set `workers.og`, `workers.chat`, and `workers.chatDatabaseId` |
+
+Both instances first merged and built with the new keys absent or false. They
+enabled the flags only after their required Workers and data were ready. That is
+the absent-safe contract in practice, not permission to omit an Upgrade note.
+
+### 6. Verify the recorded framework version
+
+The detailed flow restores the old `FRAMEWORK-VERSION` during the merge and changes
+it only after `npm run build` passes. Read it back, compare it with the selected
+tag, and confirm the tag is an ancestor of the branch:
+
+```bash
+test "$(cat FRAMEWORK-VERSION)" = "$TARGET_VERSION" \
+  || { echo "STOP: FRAMEWORK-VERSION is not $TARGET_VERSION"; exit 1; }
+git merge-base --is-ancestor "$TARGET" HEAD
+```
+
+The successful read-back and ancestry check are the upgrade receipt. `VERSION`
+and `package.json.version` remain the adopter release version and do not change.
 
 ---
 
@@ -220,7 +330,7 @@ TARGET=sekai-kb-v1.0.9
 TARGET_VERSION="${TARGET#sekai-kb-}"
 
 # 3. Read the target's CHANGELOG entry first — especially its Upgrade note.
-git show "$TARGET":CHANGELOG.md | awk -v h="## [${TARGET_VERSION#v}]" '$0==h{p=1} p&&$0!=h&&/^## \[/{exit} p'
+git show "$TARGET":CHANGELOG.md | awk -v h="## [${TARGET_VERSION#v}]" 'index($0,h)==1{p=1} p&&index($0,h)!=1&&/^## \[/{exit} p'
 
 # 4. Classify dev-plugin state BEFORE merging (see "Dev-plugin state" below).
 #    Exit 3 = inconsistent state: stop and repair it deliberately.

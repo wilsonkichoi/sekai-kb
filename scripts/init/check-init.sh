@@ -363,6 +363,21 @@ NODE
 # AGENTS.md is the instance's agent-instruction SSOT; its header is the place name.
 head -1 "$R/AGENTS.md" | grep -q "^# $NAME$" \
   || fail "AGENTS.md header is not '# $NAME'"
+# Schema evolution is an adopter contract, so the wizard-emitted instruction SSOT
+# must retain the same absent-safe rule as the template copy. Normalize whitespace
+# because Markdown line wrapping is not part of the promise.
+node - "$R/AGENTS.md" <<'NODE'
+const fs = require('node:fs');
+const text = fs.readFileSync(process.argv[2], 'utf8').replace(/\s+/g, ' ').toLowerCase();
+const promises = [
+  ['absent-safe schema evolution', 'the absent-safe schema heading'],
+  ['a missing key leaves the new feature off', 'the missing-key-means-off rule'],
+  ['framework upgrades never require config surgery', 'the no-config-surgery rule'],
+];
+for (const [promise, label] of promises) {
+  if (!text.includes(promise)) throw new Error(`AGENTS.md missing ${label}: ${promise}`);
+}
+NODE
 # CLAUDE.md is a pure one-line @AGENTS.md shim — all instructions live in AGENTS.md.
 claude_shim_is_exact "$R/CLAUDE.md" \
   || fail "CLAUDE.md is not byte-identical to '@AGENTS.md\\n'"
