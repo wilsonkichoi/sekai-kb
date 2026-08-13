@@ -949,7 +949,8 @@ is not yet deployed is never advertised.
 
 **4. Connect a client.** Most MCP clients take a remote Streamable-HTTP server as a URL.
 The shape below is what a client's own config file expects; check yours for the exact
-key names.
+key names. Once the site is rebuilt, your own `/ai` page renders this same snippet with
+your endpoint already filled in, alongside every other AI path this instance serves.
 
 ```json
 {

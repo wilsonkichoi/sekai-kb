@@ -1,0 +1,330 @@
+---
+/**
+ * /ai — every way a machine can read this knowledge base, in one page.
+ *
+ * An adopted instance publishes up to four consumption paths, and until this page
+ * existed nothing announced them: a visiting AI had to guess that `/llms.txt` was there,
+ * and a human operator deciding what to deploy had no single place that said what each
+ * path is for. AI consumers are a first-class audience of an adopted instance, and an
+ * audience that cannot find the door is not being served.
+ *
+ * THE SECTION SET IS `aiPaths(config)`, NOT A LIST OF FEATURE CHECKS. The page renders
+ * one section per entry that helper returns, in the order it returns them, so it can
+ * never document a capability this instance does not run -- an MCP section on an
+ * instance with no deployed worker would hand an agent an endpoint that refuses every
+ * connection, which is worse than saying nothing. That order is ROADMAP amendment D4:
+ * the static protocol leads because it serves any consumer able to fetch a URL at zero
+ * infrastructure cost, and MCP follows for what the static protocol cannot do.
+ *
+ * Every endpoint on the page comes from `KB_PATHS` -- the same constant
+ * `scripts/core/build-kb-index.mjs` writes its outputs from -- so the page cannot
+ * document a URL the build does not emit. All copy comes from src/i18n/ui.ts; the brand,
+ * the origin, and the client-config snippet are built from place.config.ts. Every colour
+ * resolves through the theme tokens in src/styles/tokens.css.
+ */
+import Layout from '../layouts/Layout.astro';
+import { getLangFromUrl, useTranslations } from '../i18n/utils';
+import { KB_PATHS, MCP_TOOLS, brandName, siteOrigin } from '../lib/agent-boot';
+import { aiPaths } from '../lib/ai-paths';
+import placeConfig from '../../place.config';
+
+const lang = getLangFromUrl(Astro.url);
+const t = useTranslations(lang);
+
+const paths = aiPaths(placeConfig);
+const site = siteOrigin(placeConfig);
+const mcp = paths.find((path) => path.id === 'mcp');
+
+/**
+ * The name a client shows for this server in its own config. Derived from the brand
+ * rather than fixed, so two instances registered in one client are told apart; a place
+ * whose name is entirely non-ASCII would slug to nothing, which the fallback covers.
+ */
+const serverKey =
+  brandName(placeConfig)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'knowledge-base';
+
+/**
+ * The snippet a reader copies verbatim. Rendered as text inside a `<pre>`, so Astro's
+ * own escaping is the only escaping rule involved -- there is no JSON island here to
+ * break out of.
+ */
+const mcpClientConfig = mcp
+  ? JSON.stringify({ mcpServers: { [serverKey]: { type: 'http', url: mcp.href } } }, null, 2)
+  : '';
+
+/** Absolute forms, which are what a consumer off this origin actually fetches. */
+const absolute = (path: string) => `${site}${path}`;
+---
+
+<Layout title={t('ai.meta.title')} description={t('ai.meta.description')} lang={lang}>
+  <div class="ai-page">
+    {/* A `header`, not a `section`: every `section` on this page is a consumption
+        path, which is what lets the suite assert that none of them can omit its
+        `data-ai-path` marker. A page banner is not a path. */}
+    <header class="ai-hero">
+      <div class="ai-inner">
+        <h1>{t('ai.hero.title')}</h1>
+        <p class="ai-hero-subtitle">{t('ai.hero.subtitle')}</p>
+      </div>
+    </header>
+
+    <div class="ai-inner ai-body">
+      <p class="ai-note">{t('ai.hero.order')}</p>
+
+      {
+        paths.map((path) => (
+          <section class="ai-card" data-ai-path={path.id}>
+            {path.id === 'llms' && (
+              <>
+                <h2>{t('ai.llms.title')}</h2>
+                <p class="ai-desc">{t('ai.llms.desc')}</p>
+                <dl class="ai-endpoints">
+                  <dt>
+                    <a href={KB_PATHS.llmsTxt} class="ai-endpoint">
+                      {absolute(KB_PATHS.llmsTxt)}
+                    </a>
+                  </dt>
+                  <dd>{t('ai.llms.llmstxt')}</dd>
+                  <dt>
+                    <a href={KB_PATHS.agentBoot} class="ai-endpoint">
+                      {absolute(KB_PATHS.agentBoot)}
+                    </a>
+                  </dt>
+                  <dd>{t('ai.llms.agent')}</dd>
+                </dl>
+              </>
+            )}
+
+            {path.id === 'kb' && (
+              <>
+                <h2>{t('ai.kb.title')}</h2>
+                <p class="ai-desc">{t('ai.kb.desc')}</p>
+                <dl class="ai-endpoints">
+                  <dt>
+                    <a href={KB_PATHS.topics} class="ai-endpoint">
+                      {absolute(KB_PATHS.topics)}
+                    </a>
+                  </dt>
+                  <dd>{t('ai.kb.topics')}</dd>
+                  {/* A template, not a link: it carries placeholders and resolves to nothing. */}
+                  <dt>
+                    <code class="ai-endpoint">{absolute(KB_PATHS.articleTemplate)}</code>
+                  </dt>
+                  <dd>{t('ai.kb.articles')}</dd>
+                  <dt>
+                    <a href={KB_PATHS.searchIndex} class="ai-endpoint">
+                      {absolute(KB_PATHS.searchIndex)}
+                    </a>
+                  </dt>
+                  <dd>{t('ai.kb.search')}</dd>
+                </dl>
+              </>
+            )}
+
+            {path.id === 'mcp' && (
+              <>
+                <h2>{t('ai.mcp.title')}</h2>
+                <p class="ai-desc">{t('ai.mcp.desc')}</p>
+                <p class="ai-note">{t('ai.mcp.why')}</p>
+                {/* Not a link: the endpoint answers JSON-RPC over POST, so a reader who
+                    clicked it would get an error rather than a page. */}
+                <code class="ai-endpoint ai-endpoint-block">{path.href}</code>
+                <h3>{t('ai.mcp.tools')}</h3>
+                <p class="ai-desc">{t('ai.mcp.tools.desc')}</p>
+                <ul class="ai-tools">
+                  {MCP_TOOLS.map((tool) => (
+                    <li>
+                      <code>{tool}</code>
+                    </li>
+                  ))}
+                </ul>
+                <h3>{t('ai.mcp.config')}</h3>
+                <p class="ai-desc">{t('ai.mcp.config.desc')}</p>
+                <pre class="ai-snippet" data-mcp-config>{mcpClientConfig}</pre>
+              </>
+            )}
+
+            {path.id === 'chat' && (
+              <>
+                <h2>{t('ai.chat.title')}</h2>
+                <p class="ai-desc">{t('ai.chat.desc')}</p>
+                <a href={path.href} class="ai-cta">
+                  {t('ai.path.open')}
+                </a>
+              </>
+            )}
+          </section>
+        ))
+      }
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .ai-page {
+    padding-bottom: 3rem;
+  }
+
+  .ai-inner {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .ai-hero {
+    padding: 4rem 2rem 3rem;
+    background: linear-gradient(135deg, #1e3a5f, #2d5a87);
+    color: white;
+    text-align: center;
+  }
+
+  .ai-hero h1 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    letter-spacing: -0.02em;
+  }
+
+  .ai-hero-subtitle {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    line-height: 1.6;
+  }
+
+  .ai-body {
+    padding: 2.5rem 2rem 0;
+  }
+
+  .ai-note {
+    color: var(--color-ink-soft);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin-bottom: 2rem;
+  }
+
+  .ai-card {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-visible);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .ai-card h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--color-ink-heading);
+    margin-bottom: 0.75rem;
+  }
+
+  .ai-card h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-ink-heading);
+    margin: 1.75rem 0 0.5rem;
+  }
+
+  .ai-desc {
+    color: var(--color-ink-soft);
+    line-height: 1.7;
+    font-size: 0.98rem;
+  }
+
+  .ai-endpoints {
+    margin: 1.25rem 0 0;
+  }
+
+  .ai-endpoints dt {
+    margin-top: 1rem;
+  }
+
+  .ai-endpoints dd {
+    margin: 0.35rem 0 0;
+    color: var(--color-ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .ai-endpoint {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.88rem;
+    word-break: break-all;
+    color: var(--color-ink);
+  }
+
+  a.ai-endpoint {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ai-endpoint-block {
+    display: block;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border-visible);
+  }
+
+  .ai-tools {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .ai-tools li {
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border-visible);
+    border-radius: 999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    color: var(--color-ink);
+  }
+
+  .ai-snippet {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    border-radius: 10px;
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border-visible);
+    color: var(--color-ink);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+
+  .ai-cta {
+    display: inline-block;
+    margin-top: 1.25rem;
+    padding: 0.65rem 1.2rem;
+    border-radius: 8px;
+    background: #1e40af;
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+  }
+
+  .ai-cta:hover {
+    background: #1d4ed8;
+  }
+
+  @media (max-width: 768px) {
+    .ai-hero h1 {
+      font-size: 2rem;
+    }
+
+    .ai-body {
+      padding: 2rem 1.25rem 0;
+    }
+
+    .ai-card {
+      padding: 1.5rem;
+    }
+  }
+</style>

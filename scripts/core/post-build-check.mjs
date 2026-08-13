@@ -59,10 +59,33 @@ const REQUIRED = [
   ['home', 'index.html'],
   ['explore', 'explore/index.html'],
   ['latest', 'latest/index.html'],
+  ['ai', 'ai/index.html'],
   ['404', '404.html'],
 ];
 for (const [label, rel] of REQUIRED) {
   if (!(await exists(join(DIST, rel)))) errors.push(`missing ${label} page (dist/${rel})`);
+}
+
+// ── 2b. /ai documents exactly the paths this instance serves ──
+// The page renders one `data-ai-path` section per `aiPaths()` entry, so this compares
+// the built page against the config rather than against a hardcoded list. It is what
+// makes "no dangling MCP section" a build-time fact: an instance with `features.mcp`
+// off publishes an /ai page with no MCP section AND no MCP content, and an instance
+// that turns the flag on without deploying the worker gets the same answer, because
+// the gate is both halves. A section for a path the instance does not serve, or a
+// missing section for one it does, blocks the deploy.
+const { aiPaths } = await import(resolve(ROOT, 'src/lib/ai-paths.ts'));
+const expectedPaths = aiPaths(placeConfig).map((path) => path.id);
+const aiPage = join(DIST, 'ai', 'index.html');
+if (await exists(aiPage)) {
+  const html = await readFile(aiPage, 'utf-8');
+  const rendered = [...html.matchAll(/data-ai-path="([a-z]+)"/g)].map((match) => match[1]);
+  if (rendered.join(',') !== expectedPaths.join(',')) {
+    errors.push(
+      `/ai documents [${rendered.join(', ')}] but this config serves [${expectedPaths.join(', ')}]`,
+    );
+  }
+  console.log(`  ✅ /ai: ${rendered.length} AI consumption path(s) documented`);
 }
 
 // ── 3. Every configured category has a hub; populated ones render cards ──

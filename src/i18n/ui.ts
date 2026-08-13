@@ -43,6 +43,7 @@ export const ui = {
     'footer.chat': 'Ask',
     'footer.contribute': 'Contribute',
     'footer.changelog': 'Changelog',
+    'footer.ai': 'AI access',
     'footer.report': 'Report an issue',
     'footer.discuss': 'Discussions',
     'footer.rss': 'RSS',
@@ -116,6 +117,52 @@ export const ui = {
     // Deliberately says nothing about the place: which place it is, is the greeting's
     // job, and this string ships to every instance.
     'chat.context.article': 'Read the article about this spot',
+    // AI-access page (/ai). One section per path src/lib/ai-paths.ts returns, in its
+    // order: the static protocol first because it costs a consumer nothing, MCP second
+    // for what the static protocol cannot do (ROADMAP amendment D4). Every string here
+    // ships to every instance, so none of them may claim anything about a place; the
+    // endpoints, the brand, and the client-config snippet are built from place.config.
+    'ai.meta.title': 'AI access',
+    // Names no individual path: the description is rendered into head metadata on every
+    // build, including one whose feature-gated paths are off, and a description that
+    // promised an endpoint this instance does not run would be the one dangling claim
+    // the conditional sections below exist to prevent.
+    'ai.meta.description':
+      'Every way an AI can read this knowledge base, and which one to reach for.',
+    'ai.hero.title': 'AI access',
+    'ai.hero.subtitle':
+      'This knowledge base is written for machines as well as people. Every path below reads the same articles, and every one of them is public and needs no key.',
+    // Order note rendered for a human operator deciding which path to wire up.
+    'ai.hero.order':
+      'Start at the top. The static paths serve any client that can fetch a URL and cost nothing to run; the paths below them exist for what those cannot do.',
+    'ai.path.open': 'Open',
+    'ai.llms.title': 'Boot files',
+    'ai.llms.desc':
+      'Two files that describe the whole corpus. Fetch either one first and you need no other documentation to use everything below.',
+    'ai.llms.llmstxt':
+      'The llms.txt convention: identity, machine endpoints, and every article grouped by category.',
+    'ai.llms.agent':
+      'The agent boot file: the same corpus plus the fetch protocol spelled out, written for a client that would otherwise crawl the site.',
+    'ai.kb.title': 'Fetch protocol',
+    'ai.kb.desc':
+      'Read one index, then fetch only the articles you need. Nothing is paginated, nothing is rate limited, and every article is raw Markdown exactly as it was written.',
+    'ai.kb.topics': 'Every article: title, description, category, tags, reading time.',
+    'ai.kb.articles': 'One article as raw Markdown, one request each.',
+    'ai.kb.search': 'Prebuilt keyword index, for matching words instead of browsing.',
+    'ai.mcp.title': 'Remote MCP endpoint',
+    'ai.mcp.desc':
+      'A Model Context Protocol server over Streamable HTTP. Register it once in a client and this knowledge base becomes a tool it can call, with no URLs to remember and no clone.',
+    'ai.mcp.why':
+      'Use this instead of the paths above if your client cannot fetch arbitrary URLs, or if you want retrieval by meaning rather than by word.',
+    'ai.mcp.tools': 'Tools',
+    'ai.mcp.tools.desc':
+      'The first three re-serve the files above. Semantic search is the one thing the static protocol cannot do at all.',
+    'ai.mcp.config': 'Client configuration',
+    'ai.mcp.config.desc':
+      'The shape most clients expect for a remote Streamable HTTP server. Check your client for the exact key names.',
+    'ai.chat.title': 'Ask page',
+    'ai.chat.desc':
+      'A question answered from these articles, in the browser, with links to the ones it drew on. The path for a person rather than a program.',
     // soundscape page (features.soundscape + knowledge/sounds/_manifest.md)
     'soundscape.meta.title': 'Soundscape',
     // Says how the audio plays, never where it came from: provenance is per clip,

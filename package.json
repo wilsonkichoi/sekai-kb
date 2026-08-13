@@ -76,6 +76,7 @@
     "test:chat": "node --experimental-strip-types --test tests/chat-gate.test.mjs tests/chat-eval.test.mjs tests/chat-contexts.test.mjs && node --test tests/chat-page.test.mjs",
     "test:qr": "node --experimental-strip-types --test tests/qr-sheet.test.mjs tests/qr-sheet-cli.test.mjs",
     "test:mcp": "node --experimental-strip-types --test tests/mcp-gate.test.mjs && node --test --test-concurrency=1 workers/mcp/test/tools.test.mjs workers/mcp/test/mcp.test.mjs",
+    "test:ai": "node --experimental-strip-types --test tests/agent-boot.test.mjs tests/ai-page.test.mjs",
     "test:workers": "node scripts/ci/run-worker-tests.mjs",
     "test:theme": "node scripts/visual/theme-surfaces.test.mjs",
     "visual:baseline": "node scripts/visual/capture-baseline.mjs --baseline",

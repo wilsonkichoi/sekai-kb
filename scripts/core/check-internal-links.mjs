@@ -12,6 +12,14 @@
  * a link into a namespace that is neither built nor planned is a typo/orphan and
  * IS reported. Only <a> navigation is checked (not <link>/asset hrefs).
  *
+ * It also verifies the ONE non-HTML surface that carries navigation: the `/kb/agent.md`
+ * boot file. That file is fetched by machines rather than rendered, so a dead URL in it
+ * is invisible to every check that walks HTML -- and it is the file whose whole purpose
+ * is telling an agent which URLs to fetch. Its URLs are absolute, and by construction
+ * (src/lib/agent-boot.ts) every one of them is either this site's own origin, the
+ * configured repository, or the configured MCP endpoint; anything else is a defect
+ * rather than an outbound link this check has to guess about.
+ *
  * Exit 1 if broken links >= BROKEN_LINK_THRESHOLD (default 0) or dist/ missing.
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -20,6 +28,10 @@ import { resolve, join } from 'node:path';
 const ROOT = process.cwd();
 const DIST = resolve(ROOT, 'dist');
 const THRESHOLD = Number(process.env.BROKEN_LINK_THRESHOLD || 0);
+
+const placeConfig = (await import(resolve(ROOT, 'place.config.ts'))).default;
+const { resolveMcp } = await import(resolve(ROOT, 'src/lib/mcp.ts'));
+const { KB_PATHS, siteOrigin } = await import(resolve(ROOT, 'src/lib/agent-boot.ts'));
 
 async function walk(dir, out = []) {
   let entries;
@@ -39,6 +51,14 @@ async function walk(dir, out = []) {
 async function isFile(p) {
   try {
     return (await stat(p)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function isDir(p) {
+  try {
+    return (await stat(p)).isDirectory();
   } catch {
     return false;
   }
@@ -114,14 +134,63 @@ for (const page of pages) {
   }
 }
 
+/* ── the /kb/agent.md boot file ──────────────────────────────────────────────
+ * Absolute URLs, so each is classified before it can be resolved: same-origin URLs are
+ * resolved against dist/ exactly as an <a href> is, the two config-derived off-site URLs
+ * are accepted as-is, and anything else is broken. A URL carrying a `{placeholder}` is a
+ * fetch TEMPLATE rather than a resolvable path, so what is checked is that the directory
+ * it templates over was actually built. */
+const SITE = siteOrigin(placeConfig);
+const OFFSITE = new Set(
+  [placeConfig.links.repo, resolveMcp(placeConfig).endpoint].filter(Boolean),
+);
+const bootFile = join(DIST, ...KB_PATHS.agentBoot.split('/').filter(Boolean));
+let bootUrls = 0;
+
+if (!(await isFile(bootFile))) {
+  console.error(
+    `ERROR: ${KB_PATHS.agentBoot} is missing from dist/ — the prebuild must emit it.`,
+  );
+  process.exit(1);
+}
+
+const bootText = await readFile(bootFile, 'utf-8');
+// Trailing punctuation is prose, not part of the URL.
+const bootHrefs = new Set(
+  (bootText.match(/https?:\/\/[^\s<>()[\]"']+/g) || []).map((url) =>
+    url.replace(/[.,;:]+$/, ''),
+  ),
+);
+
+for (const href of bootHrefs) {
+  bootUrls++;
+  if (OFFSITE.has(href)) continue;
+  if (href !== SITE && !href.startsWith(`${SITE}/`)) {
+    broken.set(href, (broken.get(href) || 0) + 1);
+    continue;
+  }
+  const pathname = href.slice(SITE.length) || '/';
+  if (pathname.includes('{')) {
+    const base = pathname.slice(0, pathname.indexOf('{')).replace(/\/$/, '');
+    if (!(await isDir(join(DIST, base)))) {
+      broken.set(href, (broken.get(href) || 0) + 1);
+    }
+    continue;
+  }
+  if (!(await resolves(pathname))) broken.set(href, (broken.get(href) || 0) + 1);
+}
+
 console.log(`🔗 internal-links: checked ${checked} unique links across ${pages.length} pages`);
+console.log(`   (plus ${bootUrls} URLs in ${KB_PATHS.agentBoot})`);
 if (pending.size) {
   console.log(
     `   (skipped ${pending.size} pending future-phase namespace(s): ${[...pending].sort().join(', ')})`,
   );
 }
 if (broken.size > THRESHOLD) {
-  console.error(`\n🔴 ${broken.size} broken internal link(s) into built namespaces:`);
+  console.error(
+    `\n🔴 ${broken.size} broken link(s) into built namespaces (pages + ${KB_PATHS.agentBoot}):`,
+  );
   for (const [href, count] of [...broken].sort((a, b) => b[1] - a[1])) {
     console.error(`   - ${href}  (${count} page${count > 1 ? 's' : ''})`);
   }

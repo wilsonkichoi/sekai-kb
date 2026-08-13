@@ -81,7 +81,56 @@ tags, never framework `main`** (ADR 004, SPEC
   JSON-RPC transport's malformed-request classes, `Origin` rejection, protocol-version
   validation, and 2025-03-26 batch compatibility.
 
+- **An `/ai` page documenting every AI consumption path this instance serves.** An
+  adopted instance can publish four machine paths — `/llms.txt`, the `/kb/` fetch
+  protocol, the remote MCP endpoint, and `/chat` — and until now nothing announced them:
+  a visiting AI had to guess the boot file was there, and an operator deciding what to
+  deploy had no page that said what each path is for.
+
+  The page renders one section per path this instance actually serves, in the order
+  `src/lib/ai-paths.ts` returns them, so it can never document a capability that is not
+  running. The order is the recorded decision: the static protocol leads because it
+  serves any consumer able to fetch a URL at zero infrastructure cost, and MCP follows
+  for what the static protocol cannot do. The MCP section carries the client-config
+  snippet in the shape `docs/runbook/DEPLOY.md` documents, with the endpoint and the
+  server name built from `place.config.ts`. An instance with `features.mcp` off ships a
+  page with no MCP section and no mention of MCP anywhere, including its head metadata;
+  `npm run postbuild` compares the built page's section set against the config and blocks
+  the deploy on a mismatch either way. The footer links `/ai` unconditionally, because
+  the two static paths are published by every build.
+
+- **A `/kb/agent.md` boot file, emitted by the prebuild and linked first from
+  `llms.txt`.** `llms.txt` follows a convention whose shape is fixed and lists what
+  exists; this file additionally states how to read it — identity, the fetch protocol
+  step by step, and the topic index with both the raw and the human URL for every
+  article. One fetch of it is enough to use the corpus without crawling the site. Like
+  the `/ai` page, it names the MCP endpoint only when this instance runs one.
+
+  Every URL it contains is now verified by `npm run postbuild:internal-links`, which
+  previously walked HTML only. The file is fetched by machines and never rendered, so a
+  dead URL in it would be invisible to every other check — and it is the one file whose
+  entire purpose is telling an agent which URLs to fetch. Same-origin URLs must resolve
+  against `dist/`, a URL carrying a `{placeholder}` must template over a directory the
+  build produced, and the only URLs allowed off-origin are the configured repository and
+  the configured MCP endpoint.
+
+- **`npm run test:ai`**, wired into CI: the boot file's rendered contract against
+  synthetic fixture places, the prebuild that emits it, the `llms.txt` link to it, and
+  the path set the `/ai` page renders from.
+
 ### Changed
+
+- **`llms.txt` now names the site the way the rest of the site does.** Its heading was
+  built from `place.name` plus the domain's last label, ignoring `place.brandSuffix`,
+  which every reader-facing surface honors. The two boot files sit beside each other
+  under `## Machine endpoints`, so the mismatch had them announcing the same knowledge
+  base under two different names. Both now derive it once, from `brandName()` in
+  `src/lib/agent-boot.ts`. An instance that sets no `brandSuffix` sees no change.
+
+- **`npm run test:theme` checks light mode as well as dark.** It asserted only that no
+  surface renders a light-only color in dark mode; the mirrored defect — a dark-only
+  panel or light-on-light text in light mode — is the same regression in the other
+  direction and nothing caught it. The `/ai` page's surfaces are in the route list.
 
 - **Corpus retrieval moved to `workers/lib/`, and the corpus artifact moved with it.**
   `npm run embeddings:build` now writes `workers/lib/vectors.json` instead of

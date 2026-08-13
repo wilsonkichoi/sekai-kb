@@ -121,6 +121,9 @@ const colLinkClass =
         {features.soundscape && <a href="/soundscape">{t('footer.soundscape')}</a>}
         {features.dashboard && <a href="/dashboard">{t('footer.dashboard')}</a>}
         {chat.enabled && <a href="/chat">{t('footer.chat')}</a>}
+        {/* Unconditional: /ai always documents at least the two static paths, which
+            every build publishes. It is the only entry point a visiting AI has. */}
+        <a href="/ai">{t('footer.ai')}</a>
         <a href={`${links.repo}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noopener"
           >{t('footer.contribute')}</a
         >

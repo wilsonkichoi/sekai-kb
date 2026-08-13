@@ -311,10 +311,12 @@ vendor-agnostic lazy-loading knowledge protocol: any browsing-capable AI reads `
 ## Pages
 
 Routes under `src/pages/`: `index`, `[category]/index`, `[category]/[slug]`, `404`,
-`about`, `changelog`, `chat`, `contribute`, `dashboard`, `explore`, `feed.xml`, `graph`,
-`latest`, `map`, `rss.xml`, `soundscape`, `system`.
-Non-route build outputs: `llms.txt` and `/kb/*`, emitted by `build-kb-index.mjs`
-rather than by an Astro page. `/map` is Leaflet; `/soundscape` is native HTML5
+`about`, `ai`, `changelog`, `chat`, `contribute`, `dashboard`, `explore`, `feed.xml`,
+`graph`, `latest`, `map`, `rss.xml`, `soundscape`, `system`.
+Non-route build outputs: `llms.txt`, `/kb/agent.md`, and `/kb/*`, emitted by
+`build-kb-index.mjs` rather than by an Astro page. `/ai` documents every one of those
+machine paths that this instance actually serves, in the order `src/lib/ai-paths.ts`
+returns them (§MCP delivery, D4). `/map` is Leaflet; `/soundscape` is native HTML5
 audio with no player library. Phase 6 also adds the feedback widget (a component,
 not a route). `/chat` is vanilla JS over `fetch` and the streams API, with no client
 framework and no off-origin script; it always builds, and `src/lib/chat.ts` decides

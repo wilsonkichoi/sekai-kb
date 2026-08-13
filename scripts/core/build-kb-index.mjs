@@ -11,6 +11,11 @@
  *                                      per article, no clone/MCP required)
  *   public/llms.txt                  — the llms.txt boot file (llmstxt.org), lists
  *                                      every present article grouped by category
+ *   public/kb/agent.md               — the agent boot file: identity, the fetch
+ *                                      protocol, and the topic index, for a machine
+ *                                      that wants to be told how to read this site
+ *                                      rather than to crawl it (src/lib/agent-boot.ts
+ *                                      renders it; this script owns the disk)
  *
  * Place identity (name, domain, categories) flows from place.config.ts — zero
  * hardcoded strings (genericity gate, ADR 002).
@@ -22,13 +27,19 @@ import matter from 'gray-matter';
 const ROOT = process.cwd();
 const placeConfig = (await import(resolve(ROOT, 'place.config.ts'))).default;
 const { resolveMcp } = await import(resolve(ROOT, 'src/lib/mcp.ts'));
+const { KB_PATHS, brandName, renderAgentBoot, siteOrigin } = await import(
+  resolve(ROOT, 'src/lib/agent-boot.ts')
+);
 const mcp = resolveMcp(placeConfig);
 
-const { name: placeName, domain, tagline } = placeConfig.place;
+const { tagline } = placeConfig.place;
 const { repo } = placeConfig.links;
-const SITE = `https://${domain}`;
-// Site display name mirrors Layout.astro: "<Name>.<tld>" (e.g. domain foo.md → .md).
-const siteName = `${placeName}${'.' + domain.split('.').pop()}`;
+const SITE = siteOrigin(placeConfig);
+// The brand the reader sees, via the shared derivation: `place.brandSuffix`, falling
+// back to the domain's last label. The two boot files this script writes sit beside
+// each other in `## Machine endpoints`, so a second spelling of the brand rule here
+// would have them name the same site two different ways.
+const siteName = brandName(placeConfig);
 
 // slug → knowledge/ folder title (folders are the config category titles).
 const CATEGORIES = placeConfig.categories.map((c) => ({
@@ -122,6 +133,9 @@ lines.push('> This file follows the llms.txt convention (https://llmstxt.org/).'
 lines.push('');
 lines.push('## Machine endpoints');
 lines.push('');
+// First, because it is the one endpoint that explains the others: a consumer that
+// fetches it needs no further convention knowledge to use this corpus.
+lines.push(`- Agent boot file: ${SITE}${KB_PATHS.agentBoot}`);
 lines.push(`- Topics index: ${SITE}/kb/topics.json`);
 lines.push(`- Full-text search index: ${SITE}/kb/search-index.json`);
 lines.push(`- Per-article markdown: ${SITE}/kb/articles/{category}/{slug}.md`);
@@ -149,6 +163,17 @@ for (const { slug } of CATEGORIES) {
 }
 await writeFile(resolve(ROOT, 'public', 'llms.txt'), lines.join('\n'), 'utf-8');
 
+// ── agent.md ──
+// Written into KB_DIR, which this script does NOT clean: public/kb/ is shared with
+// build-search-index.mjs, running concurrently in the same run-p prebuild group
+// (.agent-toolkit/rules/prebuild-parallel-no-sibling-rm.md). Overwriting one file is
+// idempotent on its own.
+await writeFile(
+  join(KB_DIR, basename(KB_PATHS.agentBoot)),
+  renderAgentBoot(placeConfig, topics),
+  'utf-8',
+);
+
 console.log(
-  `[kb-index] ${articles.length} articles → topics.json + articles/*.md + llms.txt`,
+  `[kb-index] ${articles.length} articles → topics.json + articles/*.md + llms.txt + agent.md`,
 );

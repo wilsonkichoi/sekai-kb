@@ -155,6 +155,14 @@ jobs:
       # can find, and what pins the site-side gate that lives under tests/.
       - name: MCP surface gate, tools, and transport contract
         run: npm run test:mcp
+      # The AI-access surfaces: the `/kb/agent.md` boot file's rendered contract, the
+      # prebuild that emits it, the llms.txt link to it, and the path set the `/ai` page
+      # renders from. The boot file is fetched by machines and never rendered, so nothing
+      # a human looks at would show it going wrong; these assertions are the only thing
+      # that keeps its identity, topic index, and fetch instructions derived from
+      # place.config rather than from whatever the demo place happened to be.
+      - name: AI-access page and agent boot file contract
+        run: npm run test:ai
       # The printable QR sheet: the URL a scanned code resolves to, and the round trip
       # proving each card's own inline code decodes back to that URL. A wrong code is
       # invisible until somebody prints it, mounts it, and scans it, so the encoding is
