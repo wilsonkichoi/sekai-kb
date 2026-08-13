@@ -136,13 +136,18 @@ export function makeEnv(overrides = {}) {
   };
 }
 
-/** A POST carrying one JSON-RPC message, as an MCP client sends it. */
-export function rpcRequest(body, { method = 'POST', ip = CLIENT_IP } = {}) {
+/** An HTTP request carrying one JSON-RPC message or a legacy batch. */
+export function rpcRequest(
+  body,
+  { method = 'POST', ip = CLIENT_IP, origin, protocolVersion } = {},
+) {
   const headers = new Headers({
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
   });
   if (ip) headers.set('CF-Connecting-IP', ip);
+  if (origin !== undefined) headers.set('Origin', origin);
+  if (protocolVersion !== undefined) headers.set('MCP-Protocol-Version', protocolVersion);
   const init = { method, headers };
   if (body !== undefined && method !== 'GET') {
     init.body = typeof body === 'string' ? body : JSON.stringify(body);

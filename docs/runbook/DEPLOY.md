@@ -971,13 +971,12 @@ curl -s -X POST https://<place-slug>-mcp.<subdomain>.workers.dev \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-**This endpoint is deliberately not origin-locked.** MCP clients are desktop
-applications and editors: they send no `Origin` header, so the exact-match CORS the
-chat and feedback workers use would reject every intended consumer while stopping
-nobody, since a non-browser client is not bound by CORS at all. Three of the four tools
-only re-serve files your site already publishes to the world. The fourth,
-`semantic_search`, is the one that spends your Workers AI allowance, and it is the one
-the rate limit below applies to.
+**This endpoint rejects every request carrying an `Origin` header.** Intended MCP
+clients are desktop applications and editors, which send no `Origin`; rejecting the
+browser-only path also closes the DNS-rebinding attack required by Streamable HTTP's
+security contract. Three of the four tools only re-serve files your site already
+publishes to the world. The fourth, `semantic_search`, spends your Workers AI allowance
+and also carries the rate limit below.
 
 <!-- worker-vars: mcp -->
 

@@ -26,6 +26,7 @@ src/data/
 # `npm run worker-config`; they carry this instance's account-scoped worker names,
 # database ids, and origin, which must never be committed under workers/)
 workers/*/wrangler.generated.toml
+workers/*/.wrangler/
 
 # derived corpus embeddings (written by `npm run embeddings:build`). Article titles,
 # URLs, and body text are place identity, and workers/ is a code tree that may carry

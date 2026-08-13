@@ -84,10 +84,21 @@ function meteredEnv(overrides = {}) {
 }
 
 /** Send one JSON-RPC message and return the parsed response body. */
-async function call(message, { env, fetchImpl = createFetchStub(), ip = CLIENT_IP } = {}) {
-  const response = await handleRequest(rpcRequest(message, { ip }), env ?? makeEnv(), {
-    fetchImpl,
-  });
+async function call(
+  message,
+  {
+    env,
+    fetchImpl = createFetchStub(),
+    ip = CLIENT_IP,
+    origin,
+    protocolVersion = '2025-06-18',
+  } = {},
+) {
+  const response = await handleRequest(
+    rpcRequest(message, { ip, origin, protocolVersion }),
+    env ?? makeEnv(),
+    { fetchImpl },
+  );
   return { response, body: await response.json() };
 }
 
@@ -273,12 +284,54 @@ describe('MALFORMED requests', () => {
     }
   });
 
-  test('a batched request is refused, since no supported revision defines one', async () => {
-    const response = await handleRequest(rpcRequest([rpc(1, 'ping'), rpc(2, 'ping')]), makeEnv());
+  test('a 2025-06-18 batched request is refused', async () => {
+    const response = await handleRequest(
+      rpcRequest([rpc(1, 'ping'), rpc(2, 'ping')], { protocolVersion: '2025-06-18' }),
+      makeEnv(),
+    );
     const body = await response.json();
     assert.equal(response.status, 400);
     assert.equal(body.error.code, -32600);
     assert.match(body.error.message, /batched/);
+  });
+
+  test('a missing version header uses 2025-03-26 batch compatibility', async () => {
+    const response = await handleRequest(
+      rpcRequest([
+        rpc(1, 'ping'),
+        { jsonrpc: '2.0', method: 'notifications/initialized' },
+        rpc(2, 'tools/list'),
+      ]),
+      makeEnv(),
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.map((message) => message.id), [1, 2]);
+    assert.deepEqual(body[0].result, {});
+    assert.equal(body[1].result.tools.length, 4);
+  });
+
+  test('an explicit 2025-03-26 header keeps batch compatibility', async () => {
+    const response = await handleRequest(
+      rpcRequest([rpc(1, 'ping'), rpc(2, 'ping')], { protocolVersion: '2025-03-26' }),
+      makeEnv(),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      (await response.json()).map((message) => message.id),
+      [1, 2],
+    );
+  });
+
+  test('an unsupported protocol version header is refused before dispatch', async () => {
+    const response = await handleRequest(
+      rpcRequest(rpc(1, 'ping'), { protocolVersion: '2099-01-01' }),
+      makeEnv(),
+    );
+    assert.equal(response.status, 400);
+    const body = await response.json();
+    assert.equal(body.error.code, -32600);
+    assert.match(body.error.message, /MCP-Protocol-Version/);
   });
 
   test('an unknown method is method-not-found, and keeps the request id', async () => {
@@ -316,13 +369,38 @@ describe('the stateless transport surface', () => {
     assert.match((await response.json()).error.message, /session/);
   });
 
-  test('OPTIONS answers a preflight without an origin allowlist', async () => {
-    // MCP clients are desktop applications that send no Origin, so this endpoint is
-    // deliberately not origin-locked; the rate limit below is what protects it.
-    const response = await handleRequest(rpcRequest(undefined, { method: 'OPTIONS' }), makeEnv());
-    assert.equal(response.status, 204);
-    assert.equal(response.headers.get('access-control-allow-origin'), '*');
-    assert.match(response.headers.get('access-control-allow-methods'), /POST/);
+  test('a request without Origin is accepted for desktop MCP clients', async () => {
+    const { response, body } = await call(rpc(1, 'ping'));
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.result, {});
+    assert.equal(response.headers.get('access-control-allow-origin'), null);
+  });
+
+  test('browser preflights are rejected even when Origin matches the request URL', async () => {
+    const origin = new URL('https://mcp.example.invalid/').origin;
+    const response = await handleRequest(
+      rpcRequest(undefined, { method: 'OPTIONS', origin }),
+      makeEnv(),
+    );
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('access-control-allow-origin'), null);
+    assert.match((await response.json()).error.message, /Origin/);
+  });
+
+  test('a hostile Origin is rejected before a tool can run', async () => {
+    const AI = createAiStub({ query: [10, 0, 0] });
+    const { env } = meteredEnv({ AI });
+    const response = await handleRequest(
+      rpcRequest(
+        rpc(1, 'tools/call', { name: 'semantic_search', arguments: { query: 'q' } }),
+        { origin: 'https://attacker.example.invalid', protocolVersion: '2025-06-18' },
+      ),
+      env,
+    );
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('access-control-allow-origin'), null);
+    assert.equal((await response.json()).error.code, -32600);
+    assert.equal(AI.calls.length, 0);
   });
 });
 

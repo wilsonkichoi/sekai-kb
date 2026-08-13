@@ -67,18 +67,19 @@ tags, never framework `main`** (ADR 004, SPEC
   tier. `McpAgent` on Durable Objects is the documented scale-up path for an instance
   that needs sessions; it is a paid product and nothing here changes until then.
 
-  The endpoint is deliberately **not** origin-locked, unlike the chat and feedback
-  workers: MCP clients are desktop applications that send no `Origin` header, so an
-  allowlist would reject every intended consumer and stop nobody. What protects it is a
-  per-hashed-address rolling rate limit on `semantic_search` — the only tool that spends
-  the account's shared Workers AI allowance. The other three re-serve files the site
-  already publishes. `docs/runbook/DEPLOY.md` §Deploying the MCP worker has the full
-  procedure, the client config shape, and the var table.
+  The endpoint rejects every request carrying an `Origin` header. Intended MCP clients
+  are desktop applications and editors, which send no `Origin`; rejecting the browser
+  path also closes DNS rebinding. A per-hashed-address rolling rate limit separately
+  protects `semantic_search`, the only tool that spends the account's shared Workers AI
+  allowance. The other three re-serve files the site already publishes.
+  `docs/runbook/DEPLOY.md` §Deploying the MCP worker has the full procedure, the client
+  config shape, and the var table.
 
 - **`npm run test:mcp`**, wired into CI: the site-side surface gate, the four tools
   (including an unknown slug, a zero-match keyword search, and a semantic query below
   the relevance floor returning nothing rather than the least-bad passages), and the
-  JSON-RPC transport's malformed-request classes.
+  JSON-RPC transport's malformed-request classes, `Origin` rejection, protocol-version
+  validation, and 2025-03-26 batch compatibility.
 
 ### Changed
 

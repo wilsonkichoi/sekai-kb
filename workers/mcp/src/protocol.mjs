@@ -32,6 +32,7 @@
  */
 export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'];
 export const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
+export const LEGACY_PROTOCOL_VERSION = '2025-03-26';
 
 /**
  * Reported to clients as this server's own version; bumped with the tool contract.
@@ -65,35 +66,26 @@ export function rpcError(id, code, message, data) {
   return { jsonrpc: '2.0', id: id ?? null, error };
 }
 
-/**
- * CORS, deliberately wide open — and deliberately NOT this endpoint's access control.
- *
- * MCP clients are desktop applications and editors, not browsers: they send no `Origin`
- * header at all, so an origin allowlist (what workers/chat/ and workers/feedback/ use)
- * would reject every intended consumer while stopping nobody, since a non-browser client
- * is not bound by CORS in the first place. The control that actually matters here is the
- * per-hashed-address rate limit on the one tool that spends the account's Workers AI
- * allowance (`semantic_search`); see src/index.mjs. Everything else this server returns
- * is already public: it is the deployed site's own `/kb/` files.
- */
-export function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept, MCP-Protocol-Version',
-    'Access-Control-Max-Age': '86400',
-  };
-}
-
 export function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders(),
       ...extraHeaders,
     },
   });
+}
+
+/**
+ * Resolve the revision governing an HTTP request.
+ *
+ * The header was added in 2025-06-18. A missing header therefore means 2025-03-26
+ * compatibility, while any explicit revision this server does not implement is invalid.
+ */
+export function protocolVersionForRequest(request) {
+  const advertised = request.headers.get('MCP-Protocol-Version');
+  if (advertised === null) return LEGACY_PROTOCOL_VERSION;
+  return SUPPORTED_PROTOCOL_VERSIONS.includes(advertised) ? advertised : null;
 }
 
 /**
@@ -132,19 +124,11 @@ export async function readBoundedText(request) {
  * `id`: it gets no response body at all, which is why the two are distinguished before
  * dispatch rather than inside it.
  *
- * JSON-RPC batching (a top-level array) was removed from MCP in revision 2025-06-18 and
- * is refused rather than half-implemented — a server that accepted a batch would owe an
- * array response that no supported revision defines.
+ * Top-level batch handling is revision-dependent and therefore lives in the HTTP handler.
+ * An array reaching this function is one malformed member inside an accepted legacy batch.
  */
 export function classifyMessage(message) {
-  if (Array.isArray(message)) {
-    return {
-      kind: 'invalid',
-      id: null,
-      message: 'batched requests are not supported by this protocol revision',
-    };
-  }
-  if (message === null || typeof message !== 'object') {
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) {
     return { kind: 'invalid', id: null, message: 'a request must be a JSON object' };
   }
   if (message.jsonrpc !== '2.0') {

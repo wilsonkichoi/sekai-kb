@@ -13,12 +13,13 @@
 // server-initiated messages, or per-connection state has a documented scale-up path —
 // the SDK's McpAgent on Durable Objects — and takes on the paid product that implies.
 //
-// WHAT PROTECTS THIS ENDPOINT. Not CORS: MCP clients are desktop applications that send
-// no Origin header, so an origin allowlist would block every intended consumer and stop
-// no attacker (see src/protocol.mjs). Three of the four tools only re-serve files the
-// deployed site already publishes to the world. The fourth, `semantic_search`, spends
-// this account's shared 10k-neuron/day Workers AI allowance, so it — and only it —
-// charges a per-hashed-address rolling rate limit before embedding anything.
+// WHAT PROTECTS THIS ENDPOINT. MCP clients are desktop applications that normally send
+// no Origin header, and those requests remain accepted. Browser clients are not part of
+// the contract, so every request that does carry Origin is rejected. An allowlist derived
+// from the request URL would not close DNS rebinding: the attacker controls that hostname.
+// Three of the four tools only re-serve files the deployed site already publishes. The
+// fourth, `semantic_search`, spends this account's shared 10k-neuron/day Workers AI
+// allowance, so it also charges a per-hashed-address rolling rate limit before embedding.
 //
 // THE ENTRY MODULE EXPORTS ONLY HANDLERS. `main` in wrangler.toml points here, and the
 // Workers runtime walks this module's named exports expecting each to be a fetch handler
@@ -54,9 +55,9 @@ import {
   RPC,
   SERVER_VERSION,
   classifyMessage,
-  corsHeaders,
   jsonResponse,
   negotiateProtocolVersion,
+  protocolVersionForRequest,
   readBoundedText,
   rpcError,
   rpcResult,
@@ -208,18 +209,55 @@ async function dispatch(message, request, env, options) {
   return rpcError(id, RPC.METHOD_NOT_FOUND, `unknown method "${method}"`);
 }
 
+async function processMessage(raw, request, env, options, { batched = false } = {}) {
+  const message = classifyMessage(raw);
+  if (message.kind === 'invalid') {
+    return { body: rpcError(message.id, RPC.INVALID_REQUEST, message.message), invalid: true };
+  }
+  if (batched && message.method === 'initialize') {
+    return {
+      body: rpcError(message.id, RPC.INVALID_REQUEST, 'initialize cannot be part of a batch'),
+      invalid: true,
+    };
+  }
+  if (message.kind === 'notification') return { body: null, invalid: false };
+  return { body: await dispatch(message, request, env, options), invalid: false };
+}
+
+function validatedOriginHeaders(request) {
+  return request.headers.has('Origin') ? null : {};
+}
+
 /* -- transport ------------------------------------------------------------- */
 
 export async function handleRequest(request, env, options = {}) {
+  const originHeaders = validatedOriginHeaders(request);
+  if (originHeaders === null) {
+    return jsonResponse(
+      rpcError(null, RPC.INVALID_REQUEST, 'Origin headers are not accepted by this MCP endpoint'),
+      403,
+    );
+  }
+  const respond = (body, status = 200, extraHeaders = {}) =>
+    jsonResponse(body, status, { ...originHeaders, ...extraHeaders });
+
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+    return new Response(null, { status: 204, headers: originHeaders });
+  }
+
+  const protocolVersion = protocolVersionForRequest(request);
+  if (protocolVersion === null) {
+    return respond(
+      rpcError(null, RPC.INVALID_REQUEST, 'unsupported MCP-Protocol-Version header'),
+      400,
+    );
   }
 
   // A stateless server has no stream to open and no session to delete, so the two other
   // verbs Streamable HTTP defines are answered rather than left to 404 as if the
   // endpoint were wrong.
   if (request.method === 'GET') {
-    return jsonResponse(
+    return respond(
       rpcError(
         null,
         RPC.TRANSPORT_UNSUPPORTED,
@@ -230,14 +268,14 @@ export async function handleRequest(request, env, options = {}) {
     );
   }
   if (request.method === 'DELETE') {
-    return jsonResponse(
+    return respond(
       rpcError(null, RPC.TRANSPORT_UNSUPPORTED, 'this server keeps no session to terminate'),
       405,
       { Allow: 'POST, OPTIONS' },
     );
   }
   if (request.method !== 'POST') {
-    return jsonResponse(
+    return respond(
       rpcError(null, RPC.INVALID_REQUEST, `${request.method} is not supported`),
       405,
       { Allow: 'POST, OPTIONS' },
@@ -246,31 +284,52 @@ export async function handleRequest(request, env, options = {}) {
 
   const body = await readBoundedText(request);
   if (body.tooLarge) {
-    return jsonResponse(rpcError(null, RPC.INVALID_REQUEST, 'request body is too large'), 413);
+    return respond(rpcError(null, RPC.INVALID_REQUEST, 'request body is too large'), 413);
   }
 
   let parsed;
   try {
     parsed = JSON.parse(body.text);
   } catch (error) {
-    return jsonResponse(
+    return respond(
       rpcError(null, RPC.PARSE_ERROR, `request body is not valid JSON: ${error.message}`),
       400,
     );
   }
 
-  const message = classifyMessage(parsed);
-  if (message.kind === 'invalid') {
-    return jsonResponse(rpcError(message.id, RPC.INVALID_REQUEST, message.message), 400);
-  }
-  // A notification has no id, so JSON-RPC forbids a response body for it. 202 is what
-  // Streamable HTTP specifies: accepted, nothing to say back.
-  if (message.kind === 'notification') {
-    return new Response(null, { status: 202, headers: corsHeaders() });
+  if (Array.isArray(parsed)) {
+    if (protocolVersion !== '2025-03-26') {
+      return respond(
+        rpcError(
+          null,
+          RPC.INVALID_REQUEST,
+          'batched requests are not supported by this protocol revision',
+        ),
+        400,
+      );
+    }
+    if (parsed.length === 0) {
+      return respond(rpcError(null, RPC.INVALID_REQUEST, 'a batch must not be empty'), 400);
+    }
+    const responses = [];
+    for (const item of parsed) {
+      const outcome = await processMessage(item, request, env, options, { batched: true });
+      if (outcome.body !== null) responses.push(outcome.body);
+    }
+    if (responses.length === 0) {
+      return new Response(null, { status: 202, headers: originHeaders });
+    }
+    return respond(responses);
   }
 
-  const response = await dispatch(message, request, env, options);
-  return jsonResponse(response);
+  const outcome = await processMessage(parsed, request, env, options);
+  if (outcome.invalid) return respond(outcome.body, 400);
+  // A notification has no id, so JSON-RPC forbids a response body for it. 202 is what
+  // Streamable HTTP specifies: accepted, nothing to say back.
+  if (outcome.body === null) {
+    return new Response(null, { status: 202, headers: originHeaders });
+  }
+  return respond(outcome.body);
 }
 
 export default {
