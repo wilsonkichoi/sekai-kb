@@ -60,7 +60,15 @@ if (testFiles.length === 0) {
 console.log(`Running ${testFiles.length} worker test file(s):`);
 for (const file of testFiles) console.log(`  ${file}`);
 
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
+// One file at a time. Two worker suites (workers/chat/, workers/mcp/) install a
+// synthetic corpus artifact at the SAME shared path -- workers/lib/vectors.json, where
+// `npm run embeddings:build` writes the real one and where workers/lib/vectors.mjs
+// imports it from. Each installs it, imports its worker, and restores what it found.
+// Run concurrently (the runner's default is one process per CPU), one suite's restore
+// lands between the other's install and its import, and the second suite fails on a
+// missing module for reasons that have nothing to do with the code under test. The
+// suites are milliseconds each; serializing them costs nothing worth measuring.
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...testFiles], {
   cwd: ROOT,
   stdio: 'inherit',
 });

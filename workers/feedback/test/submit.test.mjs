@@ -6,7 +6,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import worker, { handleRequest, SQL } from '../src/index.mjs';
+import * as workerModule from '../src/index.mjs';
+import worker, { handleRequest } from '../src/index.mjs';
+import { assertHandlerOnlyExports } from '../../lib/test/entry-exports.mjs';
+import { SQL } from '../src/sql.mjs';
 import { createD1Stub, INSERT_COLUMNS } from './d1-stub.mjs';
 import {
   ISO_TIMESTAMP,
@@ -47,6 +50,10 @@ test('the module exports handleRequest, a default fetch handler, and four distin
     names.length,
     'the statements must be distinguishable by identity',
   );
+});
+
+test('the entry module exports only handlers, so the isolate can start', () => {
+  assertHandlerOnlyExports(workerModule, 'workers/feedback/src/index.mjs');
 });
 
 test('the default export delegates fetch to handleRequest', async () => {

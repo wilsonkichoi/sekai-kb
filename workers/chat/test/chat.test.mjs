@@ -19,7 +19,8 @@ import { spawnSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { COUNT, PRUNE, RECORD, RELEASE, createD1Stub } from './d1-stub.mjs';
+import { COUNT, PRUNE, RECORD, RELEASE, createD1Stub } from '../../lib/test/d1-stub.mjs';
+import { assertHandlerOnlyExports } from '../../lib/test/entry-exports.mjs';
 import {
   ALLOWED_ORIGIN,
   CLIENT_IP,
@@ -45,10 +46,16 @@ import {
 // The fixture is deliberately NOT named vectors.json: both machine gates skip that
 // basename, so a fixture carrying it would be scanned by nobody. This name is what
 // makes DoD 8's "synthetic, place-free" property machine-checked.
+//
+// It is installed at workers/lib/vectors.json, where `npm run embeddings:build` writes
+// the real artifact and where workers/lib/vectors.mjs imports it from — one artifact for
+// every worker that retrieves, so chat and MCP cannot query two different corpora. The
+// fixture itself lives beside that module for the same reason: workers/mcp/ installs
+// the same bytes.
 const fixturePath = fileURLToPath(
-  new URL('./fixtures/corpus-vectors.fixture.json', import.meta.url),
+  new URL('../../lib/test/fixtures/corpus-vectors.fixture.json', import.meta.url),
 );
-const artifactPath = fileURLToPath(new URL('../vectors.json', import.meta.url));
+const artifactPath = fileURLToPath(new URL('../../lib/vectors.json', import.meta.url));
 const fixtureBytes = readFileSync(fixturePath);
 const originalArtifact = existsSync(artifactPath) ? readFileSync(artifactPath) : null;
 mkdirSync(dirname(artifactPath), { recursive: true });
@@ -84,7 +91,12 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 
 const workerModule = await import('../src/index.mjs');
-const { CHAT_MODEL, EMBED_MODEL, REFUSAL_SENTENCE, SQL, handleRequest, default: worker } = workerModule;
+const { REFUSAL_SENTENCE, handleRequest, default: worker } = workerModule;
+// The model ids and the statements come from the modules that OWN them, not from the
+// entry module: `main` may export only handlers, or the isolate fails at startup
+// (workers/lib/test/entry-exports.mjs).
+const { CHAT_MODEL, EMBED_MODEL } = await import('../src/models.mjs');
+const { SQL } = await import('../src/sql.mjs');
 
 // The fixture's six chunks are unit vectors chosen to rank strictly against the
 // default query [10, 0, 0]: alpha 1.000, bravo 0.898, charlie 0.709, delta 0.504,
@@ -125,6 +137,10 @@ describe('public module and model contract', () => {
       assert.equal(typeof SQL[key], 'string', `SQL.${key} must be a string`);
       assert.ok(SQL[key].length > 0, `SQL.${key} must not be empty`);
     }
+  });
+
+  test('the entry module exports only handlers, so the isolate can start', () => {
+    assertHandlerOnlyExports(workerModule, 'workers/chat/src/index.mjs');
   });
 
   test('default fetch exposes the same successful handler path', async () => {

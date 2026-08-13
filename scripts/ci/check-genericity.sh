@@ -91,7 +91,7 @@ fi
 #    template marker, and the derived worker artifacts are dropped by filename:
 #    workers/*/wrangler.generated.toml (written by npm run worker-config — it
 #    carries the instance's own origin and worker names by design) and
-#    workers/chat/vectors.json (written by npm run embeddings:build — it carries
+#    workers/lib/vectors.json (written by npm run embeddings:build — it carries
 #    every article's title, url, and body text). Both are gitignored, and a
 #    committed one would evade this skip only by being tracked, which
 #    scripts/ci/check-worker-config.mjs fails on.

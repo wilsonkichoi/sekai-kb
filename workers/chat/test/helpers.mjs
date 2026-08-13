@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { createD1Stub } from './d1-stub.mjs';
+import { createD1Stub } from '../../lib/test/d1-stub.mjs';
 
 export const ALLOWED_ORIGIN = 'https://kb.example.invalid';
 export const OTHER_ORIGIN = 'https://other.example.invalid';

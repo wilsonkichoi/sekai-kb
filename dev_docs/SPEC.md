@@ -176,11 +176,12 @@ sekai-kb/
 
 Schema: `place {name, brandSuffix?, tagline, domain, locale, languages}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
-`features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og}`,
+`features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og, mcp}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
 `workers? {feedback?, feedbackDatabaseId?, feedbackRateLimitMax?,
 feedbackRateLimitWindowSeconds?, chat?, chatDatabaseId?, chatRateLimitMax?,
-chatRateLimitWindowSeconds?, chatRelevanceFloor?, og?}`,
+chatRateLimitWindowSeconds?, chatRelevanceFloor?, og?, mcp?, mcpDatabaseId?,
+mcpRateLimitMax?, mcpRateLimitWindowSeconds?, mcpRelevanceFloor?}`,
 `seo {defaultOgImage, twitterHandle?}`,
 `home {hero, stats, doors, coverStory, randomDiscovery, features, exhibitions, recentUpdates, contribute}`.
 Init-time: written only by the `npm run init`

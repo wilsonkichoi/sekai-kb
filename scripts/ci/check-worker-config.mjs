@@ -54,7 +54,7 @@
 //     either: the generator only rewrites keys the template already has, so a
 //     template with no D1 block generates a deploy config with no `env.DB`);
 //   - a derived worker artifact tracked by git. Two exist: wrangler.generated.toml
-//     (`npm run worker-config`) and workers/chat/vectors.json (`npm run
+//     (`npm run worker-config`) and workers/lib/vectors.json (`npm run
 //     embeddings:build`). Both are gitignored and both are skipped by name in the two
 //     machine gates, so committing one would smuggle place identity past them -- the
 //     deploy config through its origin and worker names, the vector index through every
@@ -155,6 +155,17 @@ const EXPECTED = {
       RATE_LIMIT_MAX: '5',
       RATE_LIMIT_WINDOW_SECONDS: '3600',
     },
+    d1Bindings: ['DB'],
+  },
+  mcp: {
+    vars: {
+      SITE_ORIGIN: '',
+      SITE_NAME: '',
+      RATE_LIMIT_MAX: '20',
+      RATE_LIMIT_WINDOW_SECONDS: '3600',
+      RELEVANCE_FLOOR: '0.46',
+    },
+    aiBinding: 'AI',
     d1Bindings: ['DB'],
   },
   og: {

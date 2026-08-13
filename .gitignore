@@ -30,7 +30,7 @@ workers/*/wrangler.generated.toml
 # derived corpus embeddings (written by `npm run embeddings:build`). Article titles,
 # URLs, and body text are place identity, and workers/ is a code tree that may carry
 # none of it — so the retrieval index is rebuilt at deploy time, never committed.
-workers/chat/vectors.json
+workers/lib/vectors.json
 
 # printable QR sheet (written by `npm run qr:sheet`). It is a print artifact for the
 # contexts declared in knowledge/chat/_contexts.md, regenerated whenever those change,

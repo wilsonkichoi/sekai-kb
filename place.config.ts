@@ -49,6 +49,12 @@ export interface PlaceConfig {
     social: boolean;
     analytics: boolean;
     og: boolean;
+    /**
+     * The remote MCP endpoint (`workers/mcp/`). Like every other worker-backed
+     * capability, it needs BOTH this flag and a non-empty `workers.mcp`, and it is
+     * absent-safe: a config written before this key existed reads as off.
+     */
+    mcp: boolean;
   };
   /**
    * Outbound identity links. `repo` + `email` are always rendered (footer,
@@ -124,6 +130,33 @@ export interface PlaceConfig {
     chatRelevanceFloor?: number;
     /** URL of this instance's deployed `workers/og/` worker. */
     og?: string;
+    /**
+     * URL of this instance's deployed `workers/mcp/` worker — the remote MCP endpoint
+     * an AI client registers once and then reaches this knowledge base through.
+     */
+    mcp?: string;
+    /** D1 `database_id` for the MCP worker's rolling rate-limit state. */
+    mcpDatabaseId?: string;
+    /**
+     * Accepted `semantic_search` calls per hashed address in the rolling window.
+     * Template default `20`. That tool is the only one spending this account's shared
+     * Workers AI allowance; the other three re-serve files the site already publishes
+     * and cost no budget. `docs/runbook/DEPLOY.md` §Deploying the MCP worker.
+     */
+    mcpRateLimitMax?: number;
+    /**
+     * Length of that rolling window, in seconds. Template default `3600`.
+     * `docs/runbook/DEPLOY.md` §Deploying the MCP worker.
+     */
+    mcpRateLimitWindowSeconds?: number;
+    /**
+     * Cosine score a corpus passage must reach for `semantic_search` to return it,
+     * within `0..1`. Template default `0.46`, measured against the demo corpus — a
+     * separating value is a property of YOUR corpus, so re-measure it and record the
+     * answer here. `docs/runbook/DEPLOY.md` §Tuning the relevance floor has the
+     * procedure; the same measurement serves the chat worker's floor.
+     */
+    mcpRelevanceFloor?: number;
   };
   seo: {
     defaultOgImage: string;
@@ -268,6 +301,7 @@ const config: PlaceConfig = {
     social: false,
     analytics: false,
     og: false,
+    mcp: false,
   },
   links: {
     repo: 'https://github.com/wilsonkichoi/sekai-kb',

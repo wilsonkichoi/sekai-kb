@@ -611,9 +611,15 @@ and caches in global scope.
 ### Corpus embeddings
 
 `npm run embeddings:build` turns `knowledge/` into the retrieval index the chat
-worker queries. It chunks every article at roughly 300-500 words on `##` heading
-boundaries, embeds each chunk with `@cf/baai/bge-m3` through the Workers AI REST
-API, and writes `workers/chat/vectors.json`.
+worker and the MCP worker's `semantic_search` tool both query. It chunks every
+article at roughly 300-500 words on `##` heading boundaries, embeds each chunk with
+`@cf/baai/bge-m3` through the Workers AI REST API, and writes
+`workers/lib/vectors.json`.
+
+**One artifact, two workers.** It lives beside the shared retrieval code in
+`workers/lib/` rather than inside either worker, and `wrangler deploy` bundles the
+same bytes into each, so chat and MCP cannot answer out of two different corpora.
+Redeploy **both** after a rebuild, or the one you skipped keeps the older index.
 
 **The artifact is gitignored, so a deploy must rebuild it first.** It carries every
 article's title, URL, and body text, and `workers/` is a code tree that may hold no
@@ -691,7 +697,7 @@ rather than querying a vector service.
 
 ### Deploying the chat worker
 
-Build the corpus embeddings first. The generated `workers/chat/vectors.json` is a
+Build the corpus embeddings first. The generated `workers/lib/vectors.json` is a
 required module import, so `wrangler deploy` fails if the artifact is absent. Rebuild
 it after every `knowledge/` change before redeploying the worker.
 
@@ -813,7 +819,7 @@ corpus, and your corpus is not that corpus.** Re-measure it after your content s
 2. Assemble two lists of questions: ten or so your articles genuinely answer, and five
    or so about places or topics your knowledge base never mentions.
 3. Embed each question with `@cf/baai/bge-m3` and score it against every chunk in
-   `workers/chat/vectors.json`, exactly as the worker does: L2-normalize the query and
+   `workers/lib/vectors.json`, exactly as the worker does: L2-normalize the query and
    take its dot product with each stored vector divided by 127.
 4. Compare the best score per question across the two lists. Set the floor in the gap
    between them.
@@ -871,6 +877,131 @@ model in the loop or a brittle string match against a free-tier model's phrasing
 the report and confirm each answer is grounded in what it cites and that the refusal
 questions refused. An absent manifest exits 0 with "no evaluation set", so an instance
 that never writes one is not broken.
+
+### Deploying the MCP worker
+
+`workers/mcp/` is a remote [Model Context Protocol](https://modelcontextprotocol.io)
+server: an AI client registers its URL once and can then list your topics, read an
+article, keyword-search, and search by meaning, without cloning anything.
+
+**Deploy it only if you need it.** `/llms.txt` and `/kb/` already serve any consumer
+able to fetch a URL, at zero infrastructure cost, and they are the primary AI path.
+This worker exists for what those cannot do: clients that fetch no arbitrary URLs, a
+tool a user opts into once rather than a URL they must remember, and semantic search.
+
+It is **stateless** — no Durable Objects, no sessions — which is what keeps it inside
+the Workers free tier. An instance that outgrows that (per-connection state,
+server-initiated messages) moves to the MCP SDK's `McpAgent` on Durable Objects, which
+is a paid product; nothing here has to change until then.
+
+Build the corpus embeddings first. `workers/lib/vectors.json` is a required module
+import for `semantic_search`, so `wrangler deploy` fails if the artifact is absent.
+
+**1. Generate the worker config and create its D1 database.** The database holds only
+hashed-address rolling rate-limit counters, exactly as the chat worker's does.
+
+```bash
+npm run worker-config
+npx wrangler d1 create <place-slug>-mcp \
+  --config workers/mcp/wrangler.generated.toml
+```
+
+Put the printed id in the instance-owned config and regenerate:
+
+```ts
+workers: {
+  mcp: '',
+  mcpDatabaseId: 'PASTE_THE_DATABASE_ID',
+},
+```
+
+```bash
+npm run worker-config
+npx wrangler d1 migrations apply <place-slug>-mcp --remote \
+  --config workers/mcp/wrangler.generated.toml
+```
+
+**2. Set the IP-hash salt.** `semantic_search` refuses to run without it rather than
+hashing addresses unsalted. It stores `sha256(address + salt)`, never the address.
+
+```bash
+openssl rand -hex 32 | npx wrangler secret put IP_HASH_SALT \
+  --config workers/mcp/wrangler.generated.toml
+```
+
+**3. Deploy and record the endpoint.**
+
+```bash
+npx wrangler deploy --config workers/mcp/wrangler.generated.toml
+```
+
+```ts
+features: { mcp: true, /* ... */ },
+workers: {
+  mcp: 'https://<place-slug>-mcp.<subdomain>.workers.dev',
+  mcpDatabaseId: '…',
+},
+```
+
+Rebuild and redeploy the static site afterwards: `llms.txt` lists the MCP endpoint
+only when `features.mcp` is on **and** `workers.mcp` is non-empty, so an endpoint that
+is not yet deployed is never advertised.
+
+**4. Connect a client.** Most MCP clients take a remote Streamable-HTTP server as a URL.
+The shape below is what a client's own config file expects; check yours for the exact
+key names.
+
+```json
+{
+  "mcpServers": {
+    "place-kb": {
+      "type": "http",
+      "url": "https://<place-slug>-mcp.<subdomain>.workers.dev"
+    }
+  }
+}
+```
+
+A client that lists `list_topics`, `get_article`, `search`, and `semantic_search` after
+connecting has a working endpoint. To check it by hand:
+
+```bash
+curl -s -X POST https://<place-slug>-mcp.<subdomain>.workers.dev \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+**This endpoint is deliberately not origin-locked.** MCP clients are desktop
+applications and editors: they send no `Origin` header, so the exact-match CORS the
+chat and feedback workers use would reject every intended consumer while stopping
+nobody, since a non-browser client is not bound by CORS at all. Three of the four tools
+only re-serve files your site already publishes to the world. The fourth,
+`semantic_search`, is the one that spends your Workers AI allowance, and it is the one
+the rate limit below applies to.
+
+<!-- worker-vars: mcp -->
+
+| Name | Required | Source | Meaning |
+|---|---|---|---|
+| `AI` | yes | `[ai] binding = "AI"` | Workers AI binding used to embed a `semantic_search` query. |
+| `DB` | yes | `[[d1_databases]] binding = "DB"` | Exact rolling-window rate-limit state. |
+| `SITE_ORIGIN` | yes | `place.domain` | Origin the three site-backed tools fetch `/kb/*` from. |
+| `SITE_NAME` | yes | `place.name` | Server name an MCP client shows for this endpoint. |
+| `IP_HASH_SALT` | yes (secret) | `wrangler secret put` | Salt for the stored address hash. Missing or blank makes `semantic_search` refuse. |
+| `RATE_LIMIT_MAX` | no | template (`20`), override `workers.mcpRateLimitMax` | Accepted `semantic_search` calls per hashed address in the rolling window. |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | template (`3600`), override `workers.mcpRateLimitWindowSeconds` | Exact rolling-window duration in seconds. |
+| `RELEVANCE_FLOOR` | no | template (`0.46`), override `workers.mcpRelevanceFloor` | Cosine score a passage must reach for `semantic_search` to return it. Nothing clears it means the tool returns nothing, which is the honest answer. |
+
+The three overridable rows work exactly as the chat worker's do — set the
+`workers.<key>` in `place.config.ts` rather than editing the committed template, and
+`npm run worker-config` writes your value into the generated config. §Tuning the
+relevance floor below is the same procedure for both workers; they read one corpus, so
+one measurement serves both floors.
+
+The rate limit is keyed on `sha256(address + salt)`, which is **per public address, not
+per person**. An MCP client is usually one person on one connection, so the default is
+more generous per user than the same number is on the chat page; a shared machine or an
+office behind one NAT still shares one budget.
 
 ### QR codes for physical places
 

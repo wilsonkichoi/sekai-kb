@@ -43,6 +43,73 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **A remote MCP server (`workers/mcp/`), behind `features.mcp`.** A stateless
+  Streamable-HTTP [Model Context Protocol](https://modelcontextprotocol.io) endpoint
+  exposing four read-only tools: `list_topics`, `get_article`, `search`, and
+  `semantic_search`. An AI client registers the URL once and reaches the knowledge base
+  through it, with no clone and no URLs to remember.
+
+  `/llms.txt` and `/kb/` remain the **primary** AI-access path — they already serve any
+  consumer able to fetch a URL, at zero infrastructure cost. This worker is for what
+  they cannot do: clients that fetch no arbitrary URLs, a persistent registered tool
+  rather than a URL a user must recall, and `semantic_search`, which no static file can
+  answer. `llms.txt` lists the endpoint only when `features.mcp` is on **and**
+  `workers.mcp` is non-empty.
+
+  Three of the four tools hold no build-time copy: `list_topics`, `get_article`, and
+  `search` fetch the deployed site's own `/kb/` files with an edge cache TTL, so they are
+  current with `main` by construction and the site stays the single source. Only
+  `semantic_search` reads the bundled corpus.
+
+  Stateless means no Durable Objects, which is what keeps it inside the Workers free
+  tier. `McpAgent` on Durable Objects is the documented scale-up path for an instance
+  that needs sessions; it is a paid product and nothing here changes until then.
+
+  The endpoint is deliberately **not** origin-locked, unlike the chat and feedback
+  workers: MCP clients are desktop applications that send no `Origin` header, so an
+  allowlist would reject every intended consumer and stop nobody. What protects it is a
+  per-hashed-address rolling rate limit on `semantic_search` — the only tool that spends
+  the account's shared Workers AI allowance. The other three re-serve files the site
+  already publishes. `docs/runbook/DEPLOY.md` §Deploying the MCP worker has the full
+  procedure, the client config shape, and the var table.
+
+- **`npm run test:mcp`**, wired into CI: the site-side surface gate, the four tools
+  (including an unknown slug, a zero-match keyword search, and a semantic query below
+  the relevance floor returning nothing rather than the least-bad passages), and the
+  JSON-RPC transport's malformed-request classes.
+
+### Changed
+
+- **Corpus retrieval moved to `workers/lib/`, and the corpus artifact moved with it.**
+  `npm run embeddings:build` now writes `workers/lib/vectors.json` instead of
+  `workers/chat/vectors.json`, and the decode, normalization, and cosine ranking that
+  the chat worker carried are now shared modules (`workers/lib/corpus.mjs` for the pure
+  ranking, `workers/lib/vectors.mjs` for the artifact binding). The rolling rate limit
+  and its statements moved the same way (`workers/lib/ratelimit.mjs`).
+
+  Two workers now retrieve, and two bundled artifacts would be two corpora the moment
+  one deploy lagged the other, with nothing to say so. One artifact beside the code that
+  reads it removes that failure mode by construction. Its treatment is otherwise
+  unchanged: still derived, still gitignored, still skipped by BASENAME in both machine
+  gates (so no gate's scan set changed), and still a `npm run worker-config:check`
+  failure if git ever tracks one.
+
+  **Upgrade note:** an instance that has run `npm run embeddings:build` has a stale
+  `workers/chat/vectors.json` after merging this release. It is gitignored and nothing
+  reads it any more; delete it and re-run `npm run embeddings:build` to produce the
+  artifact at the new path, then redeploy **both** the chat and MCP workers. A deploy
+  attempted before the rebuild fails on the missing module rather than shipping an empty
+  index. No `place.config.ts` edit is required: `features.mcp` and every `workers.mcp*`
+  key are absent-safe, and a config that sets none of them keeps the MCP endpoint off
+  and the chat worker behaving exactly as before.
+
+- **`npm run test:workers` runs worker suites one file at a time.** The chat and MCP
+  suites install a synthetic corpus artifact at the same shared path, and the runner's
+  default file-level concurrency let one suite's restore land between the other's
+  install and its import.
+
 ## [1.1.4] — 2026-08-11
 
 Feedback worker rate-limit vars gain a place.config.ts override path, the PlaceConfig declaration is stated once with a drift gate, and the chat worker supplies its refusal sentence directly.

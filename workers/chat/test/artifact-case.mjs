@@ -3,10 +3,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createD1Stub } from './d1-stub.mjs';
+import { createD1Stub } from '../../lib/test/d1-stub.mjs';
 import { ALLOWED_ORIGIN, SALT, SITE_NAME, createAiStub, postJson, validPayload } from './helpers.mjs';
 
-const artifactPath = fileURLToPath(new URL('../vectors.json', import.meta.url));
+const artifactPath = fileURLToPath(new URL('../../lib/vectors.json', import.meta.url));
 const original = readFileSync(artifactPath);
 const fixture = JSON.parse(original.toString('utf8'));
 const mode = process.argv[2];
@@ -27,7 +27,8 @@ if (mode === 'model') {
 
 writeFileSync(artifactPath, `${JSON.stringify(fixture, null, 2)}\n`);
 try {
-  const { handleRequest, SQL } = await import(`../src/index.mjs?artifact-case=${mode}`);
+  const { handleRequest } = await import(`../src/index.mjs?artifact-case=${mode}`);
+  const { SQL } = await import('../src/sql.mjs');
   const response = await handleRequest(postJson(validPayload()), {
     AI: createAiStub({ query: [10, 0, 0] }),
     DB: createD1Stub(SQL),

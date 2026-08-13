@@ -1,0 +1,35 @@
+# wrangler.toml — the MCP Worker's deploy template. Instance identity is generated
+# from place.config.ts into the gitignored wrangler.generated.toml.
+#
+# Stateless Streamable-HTTP MCP server: no Durable Object binding, no [migrations]
+# block, no session storage. That is what keeps it inside the Workers free tier
+# (ADR 005). An adopter who needs sessions or server-initiated messages moves to the
+# MCP SDK's McpAgent on Durable Objects, which is a paid product and a different
+# worker; nothing here has to change until then.
+#
+# The bundled corpus artifact is workers/lib/vectors.json, shared with workers/chat/.
+# `npm run embeddings:build` writes it and `wrangler deploy` bundles it, so build it
+# before deploying or the module import fails.
+
+name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"
+main = "src/index.mjs"
+compatibility_date = "2026-08-07"
+
+[vars]
+SITE_ORIGIN = ""
+SITE_NAME = ""
+RATE_LIMIT_MAX = "20"
+RATE_LIMIT_WINDOW_SECONDS = "3600"
+# Cosine score a passage must reach for semantic_search to return it. Nothing clears
+# it -> the tool returns no results at all, rather than the least-bad ones. Tuned per
+# corpus; docs/runbook/DEPLOY.md has the measurement procedure.
+RELEVANCE_FLOOR = "0.46"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"
+database_id = "REPLACE_VIA_NPM_RUN_WORKER_CONFIG"
+migrations_dir = "migrations"

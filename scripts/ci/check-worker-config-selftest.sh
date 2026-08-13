@@ -492,13 +492,13 @@ git -C "$COPY" init -q
 assert_guard_passes "$COPY" "a git repository with no derived artifact tracked"
 FEEDBACK_WORKER="$(dirname "$COPY/$REL")"
 printf 'name = "planted"\n' > "$FEEDBACK_WORKER/wrangler.generated.toml"
-mkdir -p "$COPY/workers/chat"
-printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/chat/vectors.json"
+mkdir -p "$COPY/workers/lib"
+printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/lib/vectors.json"
 git -C "$COPY" add -A
 assert_guard_catches "$COPY" "a tracked generated worker config" \
   "$(basename "$FEEDBACK_WORKER")/wrangler.generated.toml"
 assert_guard_catches "$COPY" "a tracked generated embedding index" \
-  "workers/chat/vectors.json"
+  "workers/lib/vectors.json"
 
 # 7. DROPPED AI: the registered chat worker must keep the Workers AI binding.
 COPY="$(fresh_copy_template dropped-ai)"
@@ -863,13 +863,13 @@ git -C "$COPY" init -q
 assert_guard_passes "$COPY" "a marker-less git repository with no derived artifact tracked"
 INSTANCE_WORKER="$(dirname "$COPY/$REL")"
 printf 'name = "planted"\n' > "$INSTANCE_WORKER/wrangler.generated.toml"
-mkdir -p "$COPY/workers/chat"
-printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/chat/vectors.json"
+mkdir -p "$COPY/workers/lib"
+printf '{"schema":"rag-v1","count":0}\n' > "$COPY/workers/lib/vectors.json"
 git -C "$COPY" add -A
 assert_guard_catches "$COPY" "a tracked generated worker config in an instance" \
   "$(basename "$INSTANCE_WORKER")/wrangler.generated.toml"
 assert_guard_catches "$COPY" "a tracked generated embedding index in an instance" \
-  "workers/chat/vectors.json"
+  "workers/lib/vectors.json"
 
 # 30. RETUNED TUNING VAR: the class this whole change exists for. A relevance floor
 # an instance measured against its own corpus is theirs to set, so the build stays

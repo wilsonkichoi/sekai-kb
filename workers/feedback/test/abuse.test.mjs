@@ -10,7 +10,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handleRequest, SQL } from '../src/index.mjs';
+import { handleRequest } from '../src/index.mjs';
+import { SQL } from '../src/sql.mjs';
 import { PRUNE, RECORD, RELEASE, createD1Stub } from './d1-stub.mjs';
 import {
   CLIENT_IP,

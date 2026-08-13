@@ -15,6 +15,8 @@
 // ASCII and carries no denylisted place term.
 
 import { test, describe } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 import {
@@ -32,6 +34,7 @@ import {
   embedInput,
   assertFullCoverage,
   buildArtifact,
+  OUTPUT_PATH,
 } from '../scripts/core/build-embeddings.mjs';
 
 /* ------------------------------------------------------------------ fixtures */
@@ -898,5 +901,44 @@ describe('DoD 5: buildArtifact', () => {
   test('the artifact JSON-serializes and reparses to the same object', () => {
     const artifact = build();
     assert.deepEqual(JSON.parse(JSON.stringify(artifact)), artifact);
+  });
+});
+
+/* ------------------------------------------------- the artifact's one location */
+
+describe('the output path is stated once and derived everywhere else', () => {
+  // LB-95 DoD 7: the artifact moved from workers/chat/ to workers/lib/ so chat and the
+  // MCP worker bundle ONE corpus. That path is restated in files no script can derive
+  // it from, and each restatement is load-bearing: `.gitignore` is what keeps a corpus
+  // index carrying every article's title, url, and body text out of the repository, and
+  // workers/lib/vectors.mjs is what the deployed workers actually import. A move that
+  // updates the builder alone would silently start committing the index -- the two
+  // machine gates skip it by BASENAME, so nothing else would notice.
+  const repoFile = (rel) =>
+    readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), 'utf8');
+
+  test('the builder writes into workers/lib/, beside the shared retrieval code', () => {
+    assert.equal(OUTPUT_PATH, 'workers/lib/vectors.json');
+  });
+
+  test('.gitignore ignores exactly that path', () => {
+    const ignored = repoFile('.gitignore')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
+    assert.ok(
+      ignored.includes(OUTPUT_PATH),
+      `.gitignore must carry "${OUTPUT_PATH}"; it lists ${JSON.stringify(ignored.filter((l) => l.includes('vectors')))}`,
+    );
+  });
+
+  test('the worker module imports the artifact the builder writes', () => {
+    const source = repoFile('workers/lib/vectors.mjs');
+    const basename = OUTPUT_PATH.split('/').pop();
+    assert.match(
+      source,
+      new RegExp(`from '\\./${basename.replace('.', '\\.')}'`),
+      `workers/lib/vectors.mjs must import ./${basename}`,
+    );
   });
 });

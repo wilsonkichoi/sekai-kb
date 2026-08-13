@@ -4,7 +4,11 @@
  * Chunks every article under knowledge/, embeds each chunk with bge-m3 through the
  * Workers AI REST API, and writes ONE derived artifact:
  *
- *   workers/chat/vectors.json   {schema, model, dim, quant, builtAt, count, chunks, vectors}
+ *   workers/lib/vectors.json   {schema, model, dim, quant, builtAt, count, chunks, vectors}
+ *
+ * ONE artifact, beside the retrieval code that reads it (workers/lib/vectors.mjs), for
+ * every Worker that retrieves: workers/chat/ and workers/mcp/ both bundle these bytes at
+ * `wrangler deploy`, so two deployments cannot answer out of two different corpora.
  *
  * The artifact is GITIGNORED and never committed: it carries article titles, URLs, and
  * body text, and workers/ is a code tree that may hold no place identity (AGENTS.md iron
@@ -108,7 +112,15 @@ export const MIN_TOKENS = 100;
 export const OVERLAP_TOKENS = 50;
 
 const API_BASE = 'https://api.cloudflare.com/client/v4/accounts';
-const OUTPUT_PATH = 'workers/chat/vectors.json';
+/**
+ * Where the artifact is written, repository-relative.
+ *
+ * Exported because it is stated in four other places that cannot derive it: `.gitignore`,
+ * the import in `workers/lib/vectors.mjs`, and the two machine gates' skip comments. A
+ * test asserts this value against the first two, so a future move fails a suite instead
+ * of quietly committing a corpus index the gates walk straight past.
+ */
+export const OUTPUT_PATH = 'workers/lib/vectors.json';
 const RETRY_BASE_MS = 500;
 
 /* ── chunking ─────────────────────────────────────────────────────────────────── */

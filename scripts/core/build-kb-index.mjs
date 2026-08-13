@@ -21,6 +21,8 @@ import matter from 'gray-matter';
 
 const ROOT = process.cwd();
 const placeConfig = (await import(resolve(ROOT, 'place.config.ts'))).default;
+const { resolveMcp } = await import(resolve(ROOT, 'src/lib/mcp.ts'));
+const mcp = resolveMcp(placeConfig);
 
 const { name: placeName, domain, tagline } = placeConfig.place;
 const { repo } = placeConfig.links;
@@ -123,6 +125,14 @@ lines.push('');
 lines.push(`- Topics index: ${SITE}/kb/topics.json`);
 lines.push(`- Full-text search index: ${SITE}/kb/search-index.json`);
 lines.push(`- Per-article markdown: ${SITE}/kb/articles/{category}/{slug}.md`);
+// The static endpoints above serve any consumer able to fetch a URL, which is why they
+// are listed first and unconditionally. The MCP endpoint is listed only when this
+// instance actually runs one, and it is for what the static protocol cannot do: clients
+// that fetch no arbitrary URLs, and meaning-based search. `resolveMcp` is the absent-safe
+// read of both halves (src/lib/mcp.ts), so a config predating either key lists nothing.
+if (mcp.enabled) {
+  lines.push(`- MCP endpoint (Streamable HTTP): ${mcp.endpoint}`);
+}
 lines.push('');
 lines.push(`## Articles (${articles.length})`);
 lines.push('');

@@ -1,34 +1,38 @@
 // workers/chat/src/index.mjs — retrieval-augmented chat on Cloudflare Workers AI.
+//
+// Retrieval (the corpus artifact, its decode, and the cosine ranking) and the rolling
+// rate limit live in workers/lib/, shared with workers/mcp/. Both workers query the same
+// corpus, so one bundled artifact and one ranking implementation is what stops two
+// deployments from answering out of two different indexes.
+//
+// THE ENTRY MODULE EXPORTS ONLY HANDLERS. `main` in wrangler.toml points here, and the
+// Workers runtime walks this module's named exports expecting each to be a fetch handler
+// or a Durable Object class: a plain string or object among them fails the isolate at
+// STARTUP with "Incorrect type for map entry '<name>'", before any request. Unit tests
+// never see it, because `node --test` imports the module rather than starting workerd.
+// So the model ids and the SQL a suite needs live in ./models.mjs and ./sql.mjs and are
+// imported from there, never re-exported from here. `REFUSAL_SENTENCE` may stay: it is a
+// function, and the runtime accepts those. workers/lib/test/entry-exports.mjs is the
+// assertion that keeps this true.
 
-import vectorArtifact from '../vectors.json' with { type: 'json' };
+import {
+  DEFAULT_RELEVANCE_FLOOR,
+  DEFAULT_TOP_K,
+  relevanceFloorVar,
+  retrieve,
+} from '../../lib/corpus.mjs';
+import { CHAT_MODEL, EMBED_MODEL } from './models.mjs';
+import { loadCorpus } from '../../lib/vectors.mjs';
+import {
+  DEFAULT_RATE_LIMIT_MAX,
+  DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+  consumeRateLimit,
+  hashAddress,
+  positiveIntVar,
+} from '../../lib/ratelimit.mjs';
 
 import { SQL } from './sql.mjs';
 
-export { SQL };
-
-export const EMBED_MODEL = '@cf/baai/bge-m3';
-export const CHAT_MODEL = '@cf/zai-org/glm-4.7-flash';
-
-const DEFAULT_RATE_LIMIT_MAX = 20;
-const DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 3600;
-/**
- * Cosine score a chunk must reach to enter the prompt. Below it, a chunk is not
- * retrieved at all, so it never becomes a citation.
- *
- * Top-k alone cannot express "nothing here is relevant": it slices a fixed count
- * off a sorted list, so a question the corpus cannot answer still returns the five
- * least-bad matches and cites them. The floor is what makes an empty retrieval --
- * and therefore an empty citation payload, and a model with no excerpts to answer
- * from -- reachable.
- *
- * The default is measured, not chosen: on the template's demo corpus, questions
- * about places the corpus never mentions top out at 0.435 while the weakest
- * genuinely answerable question reaches 0.484. This sits in that gap. It is
- * deliberately a deploy-time var (`RELEVANCE_FLOOR`) rather than a constant,
- * because the separating value depends on the corpus: see
- * `docs/runbook/DEPLOY.md` for how to re-measure it against your own articles.
- */
-const DEFAULT_RELEVANCE_FLOOR = 0.46;
 const MAX_BODY_BYTES = 32 * 1024;
 const MIN_MESSAGE_CHARS = 2;
 const MAX_MESSAGE_CHARS = 1000;
@@ -40,7 +44,7 @@ const MAX_HISTORY_ENTRIES = 20;
  * would start to dominate the embedded text instead of biasing it.
  */
 const MAX_HINT_CHARS = 200;
-const TOP_K = 5;
+const TOP_K = DEFAULT_TOP_K;
 
 /**
  * The refusal a reader gets when the corpus cannot support their question, written
@@ -63,8 +67,6 @@ const TOP_K = 5;
 export const REFUSAL_SENTENCE = (siteName) =>
   `The ${siteName} knowledge base does not cover that, so you may want to browse it for a related article.`;
 
-let decodedArtifact;
-
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
@@ -85,24 +87,6 @@ function json(body, status, origin, extraHeaders = {}) {
 
 function badRequest(error, field, origin) {
   return json({ error, field }, 400, origin);
-}
-
-function positiveIntVar(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-/**
- * A var holding a cosine score, so the accepted range is [0, 1]. Zero is a real
- * value -- it disables the floor -- which is why this cannot reuse
- * `positiveIntVar`'s "> 0 or fall back" rule. Anything unparseable, negative, or
- * above 1 falls back rather than failing the request: a mistyped tuning var must
- * not take chat down, and the default is a safe retrieval policy.
- */
-function unitIntervalVar(value, fallback) {
-  if (value === undefined || value === null || String(value).trim() === '') return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : fallback;
 }
 
 function isNonBlankString(value) {
@@ -170,80 +154,6 @@ function validatePayload(payload) {
     }
   }
   return null;
-}
-
-async function hashIp(ip, salt) {
-  const bytes = new TextEncoder().encode(`${ip}${salt}`);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function decodeArtifact() {
-  if (decodedArtifact) return decodedArtifact;
-  if (vectorArtifact?.model !== EMBED_MODEL) {
-    throw new Error('embedding artifact model does not match this worker');
-  }
-  if (
-    vectorArtifact?.schema !== 'rag-v1' ||
-    vectorArtifact?.quant !== 'i8-unit' ||
-    !Number.isInteger(vectorArtifact?.dim) ||
-    vectorArtifact.dim <= 0 ||
-    !Array.isArray(vectorArtifact?.chunks) ||
-    vectorArtifact?.count !== vectorArtifact.chunks.length ||
-    typeof vectorArtifact?.vectors !== 'string'
-  ) {
-    throw new Error('embedding artifact metadata is incompatible with this worker');
-  }
-
-  const binary = atob(vectorArtifact.vectors);
-  const vectors = new Int8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    const value = binary.charCodeAt(index);
-    vectors[index] = value > 127 ? value - 256 : value;
-  }
-  if (vectors.length !== vectorArtifact.count * vectorArtifact.dim) {
-    throw new Error('embedding artifact vector length does not match its metadata');
-  }
-
-  decodedArtifact = Object.freeze({
-    dim: vectorArtifact.dim,
-    chunks: vectorArtifact.chunks,
-    vectors,
-  });
-  return decodedArtifact;
-}
-
-function normalize(vector) {
-  let sumSquares = 0;
-  for (const value of vector) sumSquares += value * value;
-  const magnitude = Math.sqrt(sumSquares);
-  if (!Number.isFinite(magnitude) || magnitude === 0) return null;
-  return vector.map((value) => value / magnitude);
-}
-
-function retrieve(queryVector, artifact, floor = DEFAULT_RELEVANCE_FLOOR) {
-  const normalized = normalize(queryVector);
-  if (!normalized || normalized.length !== artifact.dim) {
-    throw new Error('query embedding dimension does not match the corpus artifact');
-  }
-
-  const ranked = artifact.chunks.map((chunk, chunkIndex) => {
-    let score = 0;
-    const offset = chunkIndex * artifact.dim;
-    for (let dim = 0; dim < artifact.dim; dim += 1) {
-      score += normalized[dim] * (artifact.vectors[offset + dim] / 127);
-    }
-    return { chunk, score };
-  });
-  ranked.sort((left, right) => right.score - left.score);
-  // Filter before slicing, so "nothing is relevant" is expressible as an empty
-  // result rather than collapsing into the five least-bad matches.
-  return ranked
-    .filter(({ score }) => score >= floor)
-    .slice(0, TOP_K)
-    .map(({ chunk }) => chunk);
 }
 
 function systemPrompt(siteName, chunks) {
@@ -342,23 +252,18 @@ async function applyRateLimit(request, env, origin) {
     return json({ error: 'server_misconfigured' }, 500, origin);
   }
 
-  const ipHash = await hashIp(request.headers.get('CF-Connecting-IP') || '', salt);
-  const max = positiveIntVar(env.RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_MAX);
-  const windowSeconds = positiveIntVar(
-    env.RATE_LIMIT_WINDOW_SECONDS,
-    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
-  );
-  const now = Math.floor(Date.now() / 1000);
+  const ipHash = await hashAddress(request.headers.get('CF-Connecting-IP') || '', salt);
+  const verdict = await consumeRateLimit(env.DB, ipHash, {
+    max: positiveIntVar(env.RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_MAX),
+    windowSeconds: positiveIntVar(
+      env.RATE_LIMIT_WINDOW_SECONDS,
+      DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+    ),
+  });
+  if (verdict.allowed) return null;
 
-  await env.DB.prepare(SQL.RATE_LIMIT_PRUNE).bind(ipHash, now - windowSeconds).run();
-  await env.DB.prepare(SQL.RATE_LIMIT_RECORD).bind(ipHash, now).run();
-  const usage = await env.DB.prepare(SQL.RATE_LIMIT_COUNT).bind(ipHash).first();
-  if (Number(usage?.total ?? 0) <= max) return null;
-
-  await env.DB.prepare(SQL.RATE_LIMIT_RELEASE).bind(ipHash, now).run();
-  const oldest = Number(usage?.oldest ?? now);
   return json({ error: 'rate_limited' }, 429, origin, {
-    'Retry-After': String(Math.max(1, oldest + windowSeconds - now)),
+    'Retry-After': String(verdict.retryAfterSeconds),
   });
 }
 
@@ -408,9 +313,9 @@ export async function handleRequest(request, env) {
   const rateLimitResponse = await applyRateLimit(request, env, allowedOrigin);
   if (rateLimitResponse) return rateLimitResponse;
 
-  let artifact;
+  let corpus;
   try {
-    artifact = decodeArtifact();
+    corpus = loadCorpus();
   } catch (error) {
     return json({ error: 'embedding_artifact_incompatible', detail: error.message }, 503, allowedOrigin);
   }
@@ -440,11 +345,10 @@ export async function handleRequest(request, env) {
 
   let retrieved;
   try {
-    retrieved = retrieve(
-      embedded?.data?.[0],
-      artifact,
-      unitIntervalVar(env.RELEVANCE_FLOOR, DEFAULT_RELEVANCE_FLOOR),
-    );
+    retrieved = retrieve(embedded?.data?.[0], corpus, {
+      floor: relevanceFloorVar(env.RELEVANCE_FLOOR, DEFAULT_RELEVANCE_FLOOR),
+      topK: TOP_K,
+    }).map(({ chunk }) => chunk);
   } catch (error) {
     return json({ error: 'query_embedding_incompatible', detail: error.message }, 503, allowedOrigin);
   }

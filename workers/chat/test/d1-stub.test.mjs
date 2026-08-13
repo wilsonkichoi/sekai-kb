@@ -1,5 +1,12 @@
 /**
- * Self-test of the test harness (workers/chat/test/d1-stub.mjs).
+ * Self-test of the test harness (workers/lib/test/d1-stub.mjs) against the chat
+ * worker's shipped migration.
+ *
+ * The stub and the statements it routes are shared (workers/lib/), but the DATABASE is
+ * not: every worker deploys its own account-scoped D1, so every worker ships its own
+ * migrations/0001_init.sql. Part 2 below is therefore per worker — it proves the shared
+ * statements run against THIS worker's shipped schema. workers/mcp/ carries the same
+ * assertion over its own migration.
  *
  * The stub is identity-routed: it never parses SQL, it re-implements the rolling-window
  * semantics in JavaScript. Two things follow, and this file covers both.
@@ -25,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
-import { COUNT, PRUNE, RECORD, RELEASE, createD1Stub } from './d1-stub.mjs';
+import { COUNT, PRUNE, RECORD, RELEASE, createD1Stub } from '../../lib/test/d1-stub.mjs';
 
 const NOW = 1_700_000_000;
 const WINDOW = 3600;

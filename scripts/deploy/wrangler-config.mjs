@@ -82,6 +82,11 @@ export const WORKER_VAR_OVERRIDES = {
     RATE_LIMIT_MAX: { configKey: 'feedbackRateLimitMax', kind: 'count' },
     RATE_LIMIT_WINDOW_SECONDS: { configKey: 'feedbackRateLimitWindowSeconds', kind: 'count' },
   },
+  mcp: {
+    RATE_LIMIT_MAX: { configKey: 'mcpRateLimitMax', kind: 'count' },
+    RATE_LIMIT_WINDOW_SECONDS: { configKey: 'mcpRateLimitWindowSeconds', kind: 'count' },
+    RELEVANCE_FLOOR: { configKey: 'mcpRelevanceFloor', kind: 'unitInterval' },
+  },
 };
 
 /**

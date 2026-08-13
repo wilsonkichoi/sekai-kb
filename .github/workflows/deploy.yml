@@ -141,6 +141,14 @@ jobs:
       # failure classes is a CI gate rather than one someone may remember to run.
       - name: Chat page, gate, contexts, and evaluation runner contract
         run: npm run test:chat
+      # The MCP endpoint: the site-side absent-safe surface gate, the four tools
+      # (including an unknown slug, a zero-match keyword search, and a semantic query
+      # under the relevance floor), and the JSON-RPC transport's malformed-request
+      # classes. `test:workers` below also runs the two worker suites through its tree
+      # walk; this step is what makes them a named gate that a reader of the workflow
+      # can find, and what pins the site-side gate that lives under tests/.
+      - name: MCP surface gate, tools, and transport contract
+        run: npm run test:mcp
       # The printable QR sheet: the URL a scanned code resolves to, and the round trip
       # proving each card's own inline code decodes back to that URL. A wrong code is
       # invisible until somebody prints it, mounts it, and scans it, so the encoding is

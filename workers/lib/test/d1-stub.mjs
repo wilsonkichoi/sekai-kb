@@ -1,6 +1,12 @@
 /**
- * Identity-routed D1 stub for the chat worker rolling rate-limit contract.
- * The stub never parses SQL text. Exported SQL string identity is the public seam.
+ * Identity-routed D1 stub for the rolling rate-limit contract in
+ * workers/lib/ratelimit.mjs, shared by every worker suite that exercises it
+ * (workers/chat/, workers/mcp/).
+ *
+ * The stub never parses SQL text. Exported SQL string identity is the public seam, which
+ * is why it lives beside the module that owns those strings: one stub and one statement
+ * set cannot drift from each other. workers/feedback/ keeps its own copy because its
+ * statement set is larger (it also routes INSERT_FEEDBACK).
  */
 
 const PRUNE = 'prune';
@@ -33,18 +39,18 @@ export function createD1Stub(SQL) {
     if (sql === SQL.RATE_LIMIT_RECORD) return RECORD;
     if (sql === SQL.RATE_LIMIT_COUNT) return COUNT;
     if (sql === SQL.RATE_LIMIT_RELEASE) return RELEASE;
-    throw new Error(`chat d1 stub: unknown statement ${String(sql).slice(0, 80)}`);
+    throw new Error(`rate-limit d1 stub: unknown statement ${String(sql).slice(0, 80)}`);
   }
 
   function requireArgs(kind, args, count) {
     if (args.length !== count) {
-      throw new Error(`chat d1 stub: ${kind} expected ${count} args, got ${args.length}`);
+      throw new Error(`rate-limit d1 stub: ${kind} expected ${count} args, got ${args.length}`);
     }
     if (typeof args[0] !== 'string' || args[0].length === 0) {
-      throw new Error(`chat d1 stub: ${kind} requires a non-empty ip hash`);
+      throw new Error(`rate-limit d1 stub: ${kind} requires a non-empty ip hash`);
     }
     for (const value of args.slice(1)) {
-      if (!Number.isFinite(value)) throw new Error(`chat d1 stub: ${kind} requires numeric time args`);
+      if (!Number.isFinite(value)) throw new Error(`rate-limit d1 stub: ${kind} requires numeric time args`);
     }
   }
 

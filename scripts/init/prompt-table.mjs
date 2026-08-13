@@ -2,8 +2,8 @@
  * prompt-table.mjs — the schema-driven prompt table for `npm run init`.
  *
  * Every wizard question is a ROW in PROMPTS, not flow code: adding a future
- * prompt (features.mcp, an analytics ID) means adding a table entry, never new
- * flow logic. Both the interactive runner and the non-interactive
+ * prompt (an analytics ID, the next worker's URL) means adding a table entry,
+ * never new flow logic. Both the interactive runner and the non-interactive
  * `--answers <json>` mode resolve answers through this same table, in the same
  * order, into the same resolved-config object that feeds the single writer —
  * so the two paths cannot drift and produce byte-identical output.
@@ -399,6 +399,7 @@ export const PROMPTS = [
   { id: 'features.social', question: 'Show social links (footer + SEO)?', kind: 'boolean', default: false },
   { id: 'features.analytics', question: 'Enable analytics?', kind: 'boolean', default: false },
   { id: 'features.og', question: 'Enable per-article OG images (needs a worker)?', kind: 'boolean', default: false },
+  { id: 'features.mcp', question: 'Enable the remote MCP endpoint for AI clients (needs a worker)?', kind: 'boolean', default: false },
   {
     id: 'links.repo',
     question: 'GitHub repository URL of this instance',
@@ -439,6 +440,14 @@ export const PROMPTS = [
   {
     id: 'workers.og',
     question: 'OG image worker URL (blank until you deploy workers/og)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^https?:\/\/\S+$/.test(v) ? null : `"${v}" is not a URL`,
+  },
+  {
+    id: 'workers.mcp',
+    question: 'MCP worker URL (blank until you deploy workers/mcp)',
     kind: 'text',
     default: '',
     validate: (v) =>
