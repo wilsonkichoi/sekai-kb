@@ -118,6 +118,52 @@ tags, never framework `main`** (ADR 004, SPEC
   synthetic fixture places, the prebuild that emits it, the `llms.txt` link to it, and
   the path set the `/ai` page renders from.
 
+- **An opt-in CI corpus refresh (`.github/workflows/corpus-refresh.yml`).** The corpus
+  artifact is built from `knowledge/` and bundled into a Worker at `wrangler deploy`, so
+  a manual-only path means the deployed retrieval index is a snapshot of the last hand
+  deploy: publish an article and neither `/chat` nor the MCP endpoint's
+  `semantic_search` can find it. On a push to `main` touching `knowledge/**`, this
+  workflow rebuilds the corpus and redeploys the workers that bundle it.
+
+  **It does nothing until an adopter opts in**, and it is the only workflow in this
+  repository that deploys a Cloudflare Worker. Every other worker deploy stays a hand
+  deploy with the operator's own credentials. The exception is bounded by four
+  properties: push to `main` only and never `pull_request` (a workflow holding a deploy
+  credential must not run pull-request code); opt-in through repository secrets whose
+  absence makes the job exit 0 having deployed nothing, leaving CI green; top-level
+  `permissions: contents: read` with no write scope anywhere in the file; and a token
+  blast radius stated in `docs/runbook/DEPLOY.md` §Refreshing the corpus from CI —
+  `Workers AI: Read + Edit` for the embedding call plus `Workers Scripts: Edit` for the
+  deploy, with the revocation path beside it.
+
+  The deploy targets are derived from the source tree (which workers import the
+  artifact) intersected with what the instance has actually deployed (`features.*` on
+  and `workers.*` recorded), so a worker whose database, secrets, and route were never
+  set up is never published from CI, and a future worker that bundles the artifact is
+  picked up with no edit to the workflow.
+
+  **Upgrade note:** nothing to do at merge time — the workflow ships inert, and an
+  instance that configures no secrets keeps the hand-deploy path and a green CI. But
+  `AGENTS.md` is instance-owned (`merge=ours`), so the reworded rule does **not** reach
+  your copy through this merge. Your `AGENTS.md` §Where things live still says workers
+  are deployed by hand and never by CI, which is now false for the two corpus-bundling
+  workers; edit that sentence by hand, the same way ADR 010's rewording of iron rule 3
+  had to be applied. `docs/runbook/DEPLOY.md` is framework-owned and arrives with the
+  merge. No `place.config.ts` key changes: the deploy targets read `features.chat` /
+  `features.mcp` and `workers.chat` / `workers.mcp`, which already exist and are
+  absent-safe. If you do opt in, the CI token is broader than the local
+  embedding-only one — see `docs/runbook/DEPLOY.md` §Refreshing the corpus from CI for
+  the exact scopes, the blast radius, and how to revoke.
+
+- **`npm run corpus-refresh:check` (plus its self-test) and `npm run
+  test:corpus-refresh`**, both wired into CI. The guard asserts the four bounds above
+  from the workflow file itself — including the *absence* of a pull-request trigger,
+  which is the property that keeps a deploy credential away from pull-request code —
+  and holds `AGENTS.md` and `docs/runbook/DEPLOY.md` to the amended rule. The unit
+  suite proves the no-op path: the opt-in decision is a script rather than a workflow
+  `if:` expression precisely so that "no credentials configured, exit 0, deploy
+  nothing" is provable on every pull request instead of only after it ships.
+
 ### Changed
 
 - **`llms.txt` now names the site the way the rest of the site does.** Its heading was

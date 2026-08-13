@@ -1,0 +1,116 @@
+name: Corpus refresh
+
+# Rebuild the retrieval corpus and redeploy the workers that bundle it, so publishing
+# an article changes what chat and the MCP endpoint's semantic_search can answer.
+#
+# This is the ONE workflow in this repository that deploys a Cloudflare Worker. Every
+# other worker deploy is an operator action with credentials on their own machine
+# (docs/runbook/DEPLOY.md). The exception exists because the corpus artifact is built
+# from knowledge/ and bundled at deploy time, so leaving it manual means the deployed
+# index is a snapshot of the last hand deploy. It is bounded by four properties, and
+# scripts/ci/check-corpus-refresh.mjs asserts every one of them on every pull request:
+#
+#   1. PUSH TO main ONLY, plus manual dispatch. Never `pull_request`: a workflow
+#      carrying a deploy credential that runs pull-request code hands that credential
+#      to anyone who opens a pull request. The guard asserts the ABSENCE of that
+#      trigger, not merely the presence of these.
+#   2. OPT-IN, ABSENT-SAFE. With no credentials configured the gate step below reports
+#      "SKIPPED", every later step is skipped, and the run is green. That is the
+#      default state of a fresh clone: nothing here happens until an adopter decides
+#      it should.
+#   3. LEAST PRIVILEGE. `contents: read` at the top level and on the only job. Nothing
+#      in this workflow needs a write scope on this repository -- it writes to
+#      Cloudflare, with a credential, not to git.
+#   4. DOCUMENTED BLAST RADIUS. The token is broader than the local embedding-only one:
+#      `Workers AI: Read + Edit` for the embedding call plus `Workers Scripts: Edit`
+#      for the deploy. docs/runbook/DEPLOY.md states the scopes, what opting in grants,
+#      and how to revoke.
+#
+# A manual dispatch from a branch other than `main` is a deliberate dry run: it
+# rebuilds the corpus (proving the token works) and deploys nothing.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'knowledge/**'
+  workflow_dispatch:
+
+# Least privilege: this workflow needs nothing from this repository beyond reading it.
+permissions:
+  contents: read
+
+# Never cancel an in-flight refresh: a cancelled run can leave one bundling worker
+# redeployed and another on the older corpus, which is the split this job exists to
+# prevent. Runs queue instead.
+concurrency:
+  group: corpus-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Rebuild the corpus and redeploy the workers that bundle it
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      # The opt-in decision, and the only step that runs unconditionally. It exits 0
+      # either way and prints which variables were missing; it never prints a value.
+      - name: Corpus refresh opt-in gate
+        id: gate
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
+        run: node scripts/deploy/corpus-refresh-gate.mjs
+
+      - uses: actions/setup-node@v5
+        if: steps.gate.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      # --force: the same cross-platform optional-dependency validation issue
+      # documented in deploy.yml's build job.
+      - name: Install dependencies
+        if: steps.gate.outputs.configured == 'true'
+        run: npm ci --force
+
+      # Chunk knowledge/ and embed every chunk through the Workers AI REST API, writing
+      # workers/lib/vectors.json. Identical to the documented local command; CI supplies
+      # the same two variables from repository secrets.
+      - name: Rebuild the corpus embeddings
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
+        run: npm run embeddings:build
+
+      # The deploy targets are derived from the source tree (which workers import the
+      # artifact) intersected with what this instance has actually deployed (feature
+      # flag on and endpoint recorded), so a worker whose D1 database, secrets, and
+      # route were never set up is never published from here. An empty list is a
+      # supported outcome, not a failure.
+      #
+      # The ref condition is what keeps a manual dispatch from a branch a dry run.
+      - name: Redeploy the workers that bundle the corpus
+        if: steps.gate.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_AI_TOKEN }}
+        run: |
+          set -euo pipefail
+          npm run worker-config
+          targets="$(npm run --silent corpus-workers)"
+          if [ -z "$targets" ]; then
+            echo "No deployed worker bundles the corpus artifact: every bundling worker" \
+                 "is either switched off in place.config.ts or has no recorded endpoint." \
+                 "The rebuilt corpus reaches production at your next hand deploy."
+            exit 0
+          fi
+          for worker in $targets; do
+            echo "::group::wrangler deploy workers/$worker"
+            npx wrangler deploy --config "workers/$worker/wrangler.generated.toml"
+            echo "::endgroup::"
+          done

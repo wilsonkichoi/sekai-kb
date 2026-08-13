@@ -31,7 +31,18 @@ the semiont probe, and the content working set.
   content and the init wizard removes them.
 - **Cloudflare Workers:** `workers/*/` — one directory per worker, each with its own
   `wrangler.toml` (placeholders only), `migrations/`, and `node:test` suite. Deployed
-  by hand, never by CI; see [DEPLOY.md §Cloudflare Workers](docs/runbook/DEPLOY.md).
+  by hand, with one narrow exception: `.github/workflows/corpus-refresh.yml` rebuilds
+  the corpus artifact and redeploys the workers that bundle it, because that artifact
+  is built from `knowledge/` and bundled at deploy time, so a manual-only path means
+  the deployed retrieval index is a snapshot of the last hand deploy. The exception is
+  bounded by four properties, all machine-checked by
+  `npm run corpus-refresh:check`: push to `main` only and never `pull_request`;
+  opt-in through a repository secret whose absence makes the job no-op green;
+  `permissions: contents: read` with no write scope anywhere in the file; and a token
+  blast radius stated in the runbook (`Workers AI: Read + Edit` for the embedding call
+  plus `Workers Scripts: Edit` for the deploy). Every other worker and every other
+  reason stays hand-deployed; see
+  [DEPLOY.md §Cloudflare Workers](docs/runbook/DEPLOY.md).
 - **Editorial canon:** `docs/playbook/` — [ARTICLE-PLAYBOOK.md](docs/playbook/ARTICLE-PLAYBOOK.md)
   (voice, structure, quality bar), [REWRITE-PIPELINE.md](docs/playbook/REWRITE-PIPELINE.md)
   (the write/rewrite process), [FACTCHECK-PIPELINE.md](docs/playbook/FACTCHECK-PIPELINE.md)

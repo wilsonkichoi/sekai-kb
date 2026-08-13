@@ -74,6 +74,18 @@ jobs:
       - name: Self-test — the maintainer-doc guard fails on every planted defect class
         run: npm run framework-docs:selftest
 
+      # The CI-deploy exception (corpus-refresh.yml is the one workflow that deploys a
+      # Worker). Asserts the four properties that exception was granted on — no
+      # pull-request trigger, every credential step gated on the opt-in, no write scope
+      # anywhere in the file, deploy restricted to main — plus the two documents that
+      # tell an adopter the rule. A `pull_request:` line added here for convenience
+      # would fail nothing else in this repository and would hand a Cloudflare deploy
+      # credential to anyone who opens a pull request.
+      - name: CI-deploy exception contract (triggers, opt-in gating, permissions, prose)
+        run: npm run corpus-refresh:check
+      - name: Self-test — the CI-deploy exception guard fails on every planted defect class
+        run: npm run corpus-refresh:selftest
+
       # ADR 004/005: every phase closes with a tagged release that instance #1 adopts.
       # Template mode only — an adopted instance has no framework ROADMAP to check.
       - name: ROADMAP exit-gate contract (tag, instance adoption, confirm, packet defined)
@@ -185,6 +197,13 @@ jobs:
       # schema 7.2b, 9.1, and 11.2 read from drifting.
       - name: Corpus embedding chunker and artifact contract
         run: npm run test:embeddings
+      # The CI refresh's opt-in decision and its deploy-target derivation. The no-op
+      # path — no credentials configured, exit 0, deploy nothing — is a script rather
+      # than a workflow `if:` expression precisely so it is provable here: a workflow
+      # expression can only be exercised by a run on the default branch, which is after
+      # the change has already shipped.
+      - name: Corpus refresh opt-in gate and deploy-target derivation
+        run: npm run test:corpus-refresh
       - run: npm run framework-release:selftest
       - run: npm run article-health:test
       - run: npm run article-health -- --all --profile=ci-deploy

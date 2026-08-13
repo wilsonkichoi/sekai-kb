@@ -194,7 +194,12 @@ credential).
 | `deploy`     | Publish `dist/` to GitHub Pages                                              | push to main only   |
 
 The workflow follows least-privilege: jobs that execute PR-authored code run
-with `contents: read`; only the deploy job holds the Pages write scopes. Watch a
+with `contents: read`; only the deploy job holds the Pages write scopes.
+
+There is a second workflow, `.github/workflows/corpus-refresh.yml`. It is the only
+one that deploys a Cloudflare Worker, it runs on push to `main` and manual dispatch
+only, and it does nothing until you configure its credentials — see
+[§Refreshing the corpus from CI](#refreshing-the-corpus-from-ci). Watch a
 run from the terminal:
 
 ```bash
@@ -278,10 +283,18 @@ curl -sI https://your-domain.example | head -5
 
 Dynamic capability runs on Cloudflare Workers, separate from the static site on
 GitHub Pages. Each worker lives in its own directory under `workers/` with its own
-`wrangler.toml`, and is deployed by hand — CI never deploys a worker, so nothing
-here runs on a push. `workers/feedback/` is the endpoint the feedback widget posts
-to; `workers/chat/` retrieves cited knowledge-base context and streams an answer;
-`workers/og/` renders per-article social-preview images on demand.
+`wrangler.toml`, and is deployed by hand. `workers/feedback/` is the endpoint the
+feedback widget posts to; `workers/chat/` retrieves cited knowledge-base context and
+streams an answer; `workers/og/` renders per-article social-preview images on demand;
+`workers/mcp/` serves the remote MCP endpoint.
+
+**One narrow exception, and it is opt-in.** The workers that bundle the corpus
+artifact — chat and MCP — can be redeployed from CI when you publish an article, so
+their retrieval index does not go stale between hand deploys. Nothing happens unless
+you configure the credentials yourself; see
+[§Refreshing the corpus from CI](#refreshing-the-corpus-from-ci) for what that grants
+and how to revoke it. Every other worker, and every other reason to deploy, is a
+hand deploy with your own credentials on your own machine.
 
 Everything below can stay inside the **free tier**: Workers, D1, and the shared
 Workers AI daily allocation.
@@ -624,9 +637,12 @@ Redeploy **both** after a rebuild, or the one you skipped keeps the older index.
 **The artifact is gitignored, so a deploy must rebuild it first.** It carries every
 article's title, URL, and body text, and `workers/` is a code tree that may hold no
 place identity (AGENTS.md iron rule 2). `npm run worker-config:check` fails if a
-`vectors.json` is ever committed. Nothing in the site build or in CI produces it:
-the build stays green with no Cloudflare credentials in the environment, and this
-command is a deliberate manual step.
+`vectors.json` is ever committed. The site build never produces it — `npm run build`
+stays green with no Cloudflare credentials in the environment, on your machine and in
+CI alike. Running this command is the default path, and it is a deliberate manual
+step. [§Refreshing the corpus from CI](#refreshing-the-corpus-from-ci) below is the
+opt-in alternative: the same command, run by a GitHub Actions job with credentials
+you supply.
 
 **1. Mint an API token.** In the Cloudflare dashboard under My Profile > API Tokens,
 use the **Workers AI** token template. If you create a custom token instead, running
@@ -694,6 +710,117 @@ rather than querying a vector service.
 |---|---|---|---|
 | `CF_ACCOUNT_ID` | yes | Cloudflare dashboard | The account that owns the Workers AI allowance. |
 | `CF_AI_TOKEN` | yes | API token, `Workers AI: Read` + `Workers AI: Edit` (or the Workers AI template) | Bearer token for the `ai/run` REST endpoint. |
+
+### Refreshing the corpus from CI
+
+Everything above is a manual step, and manual is where the corpus goes stale. The
+artifact is built from `knowledge/` and bundled into the worker at `wrangler deploy`,
+so the deployed retrieval index is a snapshot of the last time you ran those commands.
+Publish an article and chat cannot cite it; the MCP endpoint's `semantic_search`
+cannot find it. Nothing about the site build fixes that, because the site build does
+not produce the artifact.
+
+`.github/workflows/corpus-refresh.yml` closes the gap. On a push to `main` that
+touches `knowledge/**`, it rebuilds the corpus and redeploys the workers that bundle
+it. **It does nothing at all until you opt in**, and opting in means giving your CI a
+credential that can deploy Workers to your Cloudflare account. That is a real
+tradeoff, so read the four bounds before you decide.
+
+**1. Push to `main` only.** The workflow triggers on `push` to `main` with a
+`knowledge/**` path filter, plus a manual `workflow_dispatch`. It carries no
+`pull_request` trigger and must never gain one: a workflow that holds a deploy
+credential and runs pull-request code hands that credential to anyone who opens a
+pull request. `npm run corpus-refresh:check` asserts the *absence* of that trigger,
+not merely the presence of the others, and runs on every pull request.
+
+**2. Opt-in, and absent-safe.** With no credentials configured, the opt-in gate step
+reports `SKIPPED`, every step after it is skipped, and the run is green. That is the
+state of a fresh clone and of every instance that never opts in: the hand-deploy path
+above stays fully supported and nothing degrades. The same is true of a partial
+configuration — one secret without the other is treated as "not configured" rather
+than half-run.
+
+**3. Least privilege.** The workflow declares `permissions: contents: read` at the
+top level and on its only job, and no `permissions:` block in the file grants a write
+scope. It writes to Cloudflare, with your credential; it has no reason to write to
+your repository, and the guard fails the build if it ever gains that power.
+
+**4. A documented blast radius.** The token this job needs is strictly broader than
+the local embedding-only one documented above. It must carry the embedding permissions
+*and* the permission to deploy a Worker script:
+
+```
+Account | Workers AI | Read
+Account | Workers AI | Edit
+Account | Workers Scripts | Edit
+```
+
+An adopter who opts in accepts that a compromised Action, a malicious dependency in
+this workflow's own toolchain, or a bad merge to `main` can deploy a Worker in their
+name. The bounds above are what keep that proportionate; the opt-in is what keeps it
+your choice rather than the framework's.
+
+**Opting in.** Mint a token with the three permissions above, scoped to the single
+account you deploy from, then store it and the account id as **repository secrets**
+(Settings → Secrets and variables → Actions), under the same two names the local
+command uses:
+
+```bash
+gh secret set CF_ACCOUNT_ID
+gh secret set CF_AI_TOKEN
+```
+
+Both are required. Neither is ever printed by the job: the gate step reports which
+names were missing, never a value.
+
+**What it redeploys, and what it will not.** The job deploys a worker only when the
+worker's source imports the corpus artifact *and* your `place.config.ts` both enables
+the capability (`features.chat`, `features.mcp`) and records its endpoint
+(`workers.chat`, `workers.mcp`). A worker you have not deployed by hand at least once
+— no D1 database id, no `IP_HASH_SALT`, no endpoint recorded — is therefore never
+published from CI. The deploy targets are derived from the source tree rather than
+listed, so a future worker that bundles the artifact is picked up with no edit to the
+workflow.
+
+**Trying it without deploying.** A manual dispatch from a branch other than `main` is
+a dry run: it rebuilds the corpus, proving the token works, and deploys nothing. The
+deploy step is restricted to `refs/heads/main`.
+
+### What a deploy already refreshes
+
+The corpus artifact was the only stale index, and it is worth being precise about why
+the others never were. Every push to `main` runs `npm run build` in the Pages
+workflow, and npm runs the `prebuild` and `postbuild` chains around it
+(`package.json`):
+
+| Index | Rebuilt by | When |
+|---|---|---|
+| `src/content/` projection of `knowledge/` | `prebuild:sync` | every build |
+| `/kb/topics.json`, `/kb/articles/**`, `llms.txt`, `/kb/agent.md` | `prebuild:kb-index` | every build |
+| `/kb/search-minisearch*.json`, `/kb/search-index.json` | `prebuild:search` | every build |
+| The `/graph` node/edge set | rendered by `src/pages/graph.astro` from `src/content/`, contract-checked by `postbuild:graph` | every build |
+
+So the search index, the `/kb/` protocol files, and the graph are regenerated from
+`knowledge/` on every deploy by construction — they are build outputs of the site
+itself. The corpus vectors are not: they are produced by a separate command that calls
+a paid API and are bundled into a Worker rather than served from `dist/`, which is
+exactly why they needed a job of their own. `npm run corpus-refresh:check` fails if
+any of those four npm entries is renamed out from under this table.
+
+### Revoking the CI refresh
+
+Revocation is one action, and it takes effect on the next run:
+
+```bash
+gh secret delete CF_AI_TOKEN
+gh secret delete CF_ACCOUNT_ID
+```
+
+The job returns to its default no-op-green state — nothing else in the repository has
+to change, no workflow is edited, and the hand-deploy path is unaffected. To revoke
+the credential itself as well (the right move if it may have leaked), roll or delete
+the token in the Cloudflare dashboard under My Profile → API Tokens; that also stops
+any copy of it that is no longer in your repository.
 
 ### Deploying the chat worker
 

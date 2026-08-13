@@ -586,9 +586,11 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   **What it invalidates.** `ADR 005 §5`'s claim that `features.mcp` is the first post-cut
   config-schema addition, which phases 6 and 7 had already falsified; task 9.3 now writes the
   adopter upgrade playbook from the completed 6.4 and 7.4 runs. `AGENTS.md` §Where things
-  live and `docs/runbook/DEPLOY.md` §Corpus embeddings both state that Workers are deployed
-  by hand and never by CI, which task 9.4 amends by narrow exception in the same change that
-  ships the workflow.
+  live and `docs/runbook/DEPLOY.md` §Corpus embeddings both stated that Workers are deployed
+  by hand and are not deployed by CI; task 9.4 amended both by narrow exception in the same
+  change that shipped `.github/workflows/corpus-refresh.yml`, and
+  `scripts/ci/check-corpus-refresh.mjs` is the gate that holds the workflow to the four
+  bounds and the two documents to the amended rule.
 
   **What it does not change.** ADR 003 and ADR 005 stay Accepted, their blocks stay
   convertible, and 11.1's dependency on 8.1 is not weakened. The site must still build with

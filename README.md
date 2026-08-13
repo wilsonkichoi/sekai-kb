@@ -73,7 +73,10 @@ methodology). The `article-health` linter machine-enforces the mechanical parts.
   article into `knowledge/SNIPPET-INBOX.md`, you approve it by hand, and
   `npm run snippet:publish` posts it through an adapter.
 - **`workers/`** — Cloudflare Workers, one directory per worker (`workers/feedback/`
-  backs the feedback endpoint). Deployed by hand with `wrangler`, never by CI.
+  backs the feedback endpoint). Deployed by hand with `wrangler`, with one opt-in
+  exception: CI can redeploy the workers that bundle the retrieval corpus when you
+  publish an article, and does nothing until you configure its credentials
+  (`docs/runbook/DEPLOY.md` §Refreshing the corpus from CI).
 - **`scripts/visual/`** — visual regression tooling (`npm run visual:baseline` to
   capture, `npm run visual:check` to diff). Run `visual:baseline` once first.
 - **`.agent-toolkit/rules/`** — framework engineering rules that keep the build green.
