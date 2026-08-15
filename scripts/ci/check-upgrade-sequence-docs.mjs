@@ -52,8 +52,9 @@
 //   node scripts/ci/check-upgrade-sequence-docs.mjs             the gate
 //   node scripts/ci/check-upgrade-sequence-docs.mjs --selftest  non-vacuity proof
 //
-// This file lives under scripts/, which both machine gates scan: its source is pure
-// ASCII and carries no denylisted place term.
+// This file lives under scripts/, which both machine gates scan: its source carries no
+// CJK codepoints and no denylisted place term. It is not pure ASCII -- the stage
+// separator it splits and joins on is an arrow -- and neither gate asks for that.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

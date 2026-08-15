@@ -48,11 +48,17 @@
 // or the tree is not in a state that can be verified -- marker untouched, and --override
 // does not apply; 3 = no conclusion could be read at all -- marker untouched; 2 = usage.
 //
+// "Marker untouched" holds on the write path too, not only before it. The commit runs
+// the instance's own pre-commit hook, so it can fail on a tree this step already wrote
+// and staged; `writeMarker` restores the file and its index entry before that exit 1,
+// and says so. If the restore itself fails, the message says that instead -- it is the
+// one shape where the tree needs a human, so it is never reported as untouched.
+//
 // `scripts/upgrade/check-upgrade-state.sh` is the regression gate (case 16); case 12
 // pins the other half, that the merge itself never moves the marker.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -417,6 +423,48 @@ function readMarker(root) {
   }
 }
 
+/**
+ * Everything about the marker the write is about to change, working tree and index both,
+ * so a failure part-way through can put it back.
+ *
+ * Exit 1 promises an untouched marker, and the commit is the one step in this sequence
+ * running code this helper does not own: the template ships a `.husky/pre-commit` hook,
+ * so every instance runs a hook here, and a missing `user.email` or a held index lock
+ * fails the same way. Without a restore, that exit 1 leaves the tree carrying a written
+ * and staged marker while the diagnostic says the value was left alone -- which is the
+ * marker lying about what was verified, in miniature, on the path meant to prevent it.
+ *
+ * The index entry is captured rather than assumed: "untouched" means whatever `git add`
+ * found, not `git reset`'s idea of it, and this step must not silently unstage something
+ * an earlier step staged.
+ */
+function captureMarkerState(root) {
+  const path = resolve(root, FRAMEWORK_VERSION);
+  return {
+    path,
+    bytes: existsSync(path) ? readFileSync(path) : null,
+    // `<mode> <oid> <stage>\t<path>`, or '' when the path is not in the index at all.
+    entry: git(root, ['ls-files', '-s', '--', FRAMEWORK_VERSION], { allowFailure: true }) || '',
+  };
+}
+
+/** Put the marker back. Returns null on success, or why it could not be restored. */
+function restoreMarkerState(root, state) {
+  try {
+    if (state.bytes === null) rmSync(state.path, { force: true });
+    else writeFileSync(state.path, state.bytes);
+    const staged = /^(\d+) ([0-9a-f]+) \d+\t/.exec(state.entry);
+    if (staged) {
+      git(root, ['update-index', '--cacheinfo', `${staged[1]},${staged[2]},${FRAMEWORK_VERSION}`]);
+    } else {
+      git(root, ['rm', '--cached', '--quiet', '--', FRAMEWORK_VERSION], { allowFailure: true });
+    }
+    return null;
+  } catch (err) {
+    return err instanceof BumpError ? err.message : String(err?.message ?? err);
+  }
+}
+
 function writeMarker(root, version, { sha, summary, override }) {
   const head = git(root, ['rev-parse', 'HEAD']);
   if (head !== sha) {
@@ -427,16 +475,30 @@ function writeMarker(root, version, { sha, summary, override }) {
       EXIT_NOT_GREEN,
     );
   }
-  const path = resolve(root, FRAMEWORK_VERSION);
-  writeFileSync(path, `${version}\n`);
-  if (readFileSync(path, 'utf8').trim() !== version) {
-    throw new BumpError(`${FRAMEWORK_VERSION} is not ${version} after the write`, EXIT_NOT_GREEN);
+  const before = captureMarkerState(root);
+  try {
+    writeFileSync(before.path, `${version}\n`);
+    if (readFileSync(before.path, 'utf8').trim() !== version) {
+      throw new BumpError(`${FRAMEWORK_VERSION} is not ${version} after the write`, EXIT_NOT_GREEN);
+    }
+    git(root, ['add', '--', FRAMEWORK_VERSION]);
+    const body = override
+      ? `Verified: overridden by hand on ${sha}\nOverride: ${override}\n\n${summary}`
+      : `Verified: CI green on ${sha}\n\n${summary}`;
+    git(root, ['commit', '-m', `chore: ${FRAMEWORK_VERSION} -> ${version}`, '-m', body]);
+  } catch (err) {
+    if (!(err instanceof BumpError)) throw err;
+    const failure = restoreMarkerState(root, before);
+    throw new BumpError(
+      `${err.message}\n`
+      + (failure === null
+        ? `  ${FRAMEWORK_VERSION} was put back the way this step found it, working tree and\n`
+          + '  index both: nothing here records an adoption that was not completed.'
+        : `  ${FRAMEWORK_VERSION} could NOT be put back afterwards: ${failure}\n`
+          + `  check ${FRAMEWORK_VERSION} and \`git status\` by hand before re-running.`),
+      err.code,
+    );
   }
-  git(root, ['add', '--', FRAMEWORK_VERSION]);
-  const body = override
-    ? `Verified: overridden by hand on ${sha}\nOverride: ${override}\n\n${summary}`
-    : `Verified: CI green on ${sha}\n\n${summary}`;
-  git(root, ['commit', '-m', `chore: ${FRAMEWORK_VERSION} -> ${version}`, '-m', body]);
 }
 
 function bump(root, options) {

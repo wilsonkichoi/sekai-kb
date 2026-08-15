@@ -3230,6 +3230,38 @@ case_ci_verified_bump() { # workdir
   ok "case 16a: the bump commit sits on the exact tree CI verified"
   assert_bump_queried_head_sha "$inst" "$verified" "case 16a"
 
+  # A green conclusion whose COMMIT fails. The template ships a pre-commit hook, so
+  # every instance runs one here, and a rejected commit is the one failure that can
+  # land after the marker has already been written and staged. Exit 1 says the marker
+  # is untouched; this pins that the tree agrees -- file, index, and HEAD all back the
+  # way the step found them -- because a half-applied bump advertises an adoption whose
+  # commit never happened, which is the defect this helper exists to end wearing a
+  # different hat.
+  inst="$work/commit-fails"
+  build_bump_instance "$fw" "$inst" "case 16a"
+  verified="$(git -C "$inst" rev-parse HEAD)"
+  mkdir -p "$inst.hooks"
+  cat > "$inst.hooks/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+echo "pre-commit: refusing this commit" >&2
+exit 1
+HOOK
+  chmod +x "$inst.hooks/pre-commit"
+  git -C "$inst" config core.hooksPath "$inst.hooks"
+  run_bump "$inst" green "case 16a" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16a: bump whose commit was rejected exited $HELPER_STATUS (expected 1); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16a" "after a commit the hook rejected"
+  git -C "$inst" diff --cached --quiet \
+    || fail "case 16a: a rejected commit left the marker staged: $(git -C "$inst" diff --cached --name-only | tr '\n' ' ')"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 16a: a rejected commit left the tree dirty: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  [ "$(git -C "$inst" rev-parse HEAD)" = "$verified" ] \
+    || fail "case 16a: a rejected commit still moved HEAD off the verified tree $verified"
+  printf '%s' "$HELPER_ERR" | grep -Fq 'put back' \
+    || fail "case 16a: the diagnostic does not say the marker was put back: $HELPER_ERR"
+  ok "case 16a: a commit the instance's hook rejects leaves the marker, the index, and HEAD untouched"
+
   # --- 16b: a red conclusion never bumps ---------------------------------------
   inst="$work/red"
   build_bump_instance "$fw" "$inst" "case 16b"
