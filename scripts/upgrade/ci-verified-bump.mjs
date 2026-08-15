@@ -26,16 +26,24 @@
 // around one that does not.
 //
 // What it will NOT do: infer a conclusion. "No run found" is not success, an in-flight
-// run is not success, and an unreachable API is not success -- each stops with its own
-// diagnostic and leaves the marker exactly where the package-state restore put it. A
-// maintainer who knows better can pass --override <reason>, which is recorded in the
-// run output and on the commit, because an unverified adoption that leaves no trace is
-// the failure this helper exists to end.
+// run is not success, a green PARTIAL set is not success (GitHub creates a job's check
+// run only when that job becomes eligible, so an all-completed check list is a snapshot
+// until the workflow run itself is completed -- see `fetchWorkflowRuns`), and an
+// unreachable API is not success. Each stops with its own diagnostic and leaves the
+// marker exactly where the package-state restore put it. A maintainer who knows better
+// can pass --override <reason>, which is recorded in the run output and on the commit,
+// because an unverified adoption that leaves no trace is the failure this helper exists
+// to end.
 //
-// Exit codes: 0 = a green conclusion (or a recorded override) and the marker was
-// written and committed; 1 = a conclusion was read and it is not green, or the tree is
-// not in a state that can be verified -- marker untouched; 3 = no conclusion could be
-// read at all -- marker untouched; 2 = usage.
+// --override answers ONLY the unreadable case. A conclusion that was read and is red is
+// never overridable: "a red or failing run never bumps" is unconditional, and the two
+// situations differ in what the operator asserts -- "I verified this another way" versus
+// "I know it failed and am recording it as adopted".
+//
+// Exit codes: 0 = a green conclusion (or a recorded override of an UNREADABLE one) and
+// the marker was written and committed; 1 = a conclusion was read and it is not green,
+// or the tree is not in a state that can be verified -- marker untouched, and --override
+// does not apply; 3 = no conclusion could be read at all -- marker untouched; 2 = usage.
 //
 // `scripts/upgrade/check-upgrade-state.sh` is the regression gate (case 16); case 12
 // pins the other half, that the merge itself never moves the marker.
@@ -168,6 +176,51 @@ function classifyGhFailure(err) {
   return `\`gh\` failed and this step will not guess what that means:\n  ${detail}`;
 }
 
+function ghJson(repository, path) {
+  let raw;
+  try {
+    raw = execFileSync(
+      'gh',
+      ['api', path],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 },
+    );
+  } catch (err) {
+    throw unreadable(classifyGhFailure(err));
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw unreadable('the GitHub API answered with something this step could not parse as JSON.');
+  }
+}
+
+/**
+ * The workflow runs GitHub has for one exact commit.
+ *
+ * This is the completeness signal, and it is why the check-run list alone cannot be
+ * trusted. GitHub creates a job's check run only when that job becomes ELIGIBLE, so in
+ * a chained workflow the list is built up as the run proceeds: at the moment the first
+ * job finishes, `commits/<sha>/check-runs` holds exactly one entry, completed and
+ * green, while every job that could still fail has no check run yet. Measured on this
+ * repository's own `deploy.yml`, one run produced three such windows -- each job's
+ * `created_at` equal to its predecessor's `completed_at`. A poll landing in one of them
+ * would read an all-green partial set as a final verdict and write the marker on a tree
+ * whose remaining jobs had not started.
+ *
+ * A workflow run, by contrast, exists from the moment the workflow is triggered and
+ * reaches `completed` only when every one of its jobs has. So the rule is: every
+ * workflow run for this SHA must be completed BEFORE any check-run conclusion is read.
+ */
+function fetchWorkflowRuns(repository, sha) {
+  const payload = ghJson(repository, `repos/${repository}/actions/runs?head_sha=${sha}&per_page=100`);
+  const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+  return runs.map((run) => ({
+    name: typeof run?.name === 'string' ? run.name : '(unnamed workflow)',
+    status: run?.status ?? null,
+    url: run?.html_url ?? null,
+  }));
+}
+
 function fetchCheckRuns(repository, sha) {
   let raw;
   try {
@@ -197,6 +250,15 @@ function fetchCheckRuns(repository, sha) {
 /**
  * The conclusion for one exact commit, polled until it exists or the deadline passes.
  *
+ * Two conditions, and the first one is what makes the second meaningful:
+ *
+ *   1. At least one workflow run for this SHA, and EVERY workflow run completed. This
+ *      establishes that the check-run list is finished being built (see
+ *      `fetchWorkflowRuns`). Without it an all-completed check-run list is only a
+ *      snapshot, and a green snapshot taken between two jobs is not a green run.
+ *   2. Every check run completed. This catches a check that is not backed by an Actions
+ *      workflow run at all, which condition 1 cannot see.
+ *
  * An empty answer is deliberately NOT success: it is what a repository with Actions
  * disabled looks like, what a push that triggered no workflow looks like, and what a
  * run GitHub has not created yet looks like. The first two are terminal and the third
@@ -206,18 +268,40 @@ function fetchCheckRuns(repository, sha) {
 function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
   const deadline = Date.now() + timeoutSeconds * 1000;
   for (;;) {
+    const workflows = fetchWorkflowRuns(repository, sha);
+    const workflowsPending = workflows.filter((run) => run.status !== 'completed');
     const runs = fetchCheckRuns(repository, sha);
     const pending = runs.filter((run) => run.status !== 'completed');
-    if (runs.length > 0 && pending.length === 0) {
+    const settled = workflows.length > 0 && workflowsPending.length === 0
+      && runs.length > 0 && pending.length === 0;
+    if (settled) {
       const failing = runs.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion));
-      return { runs, failing };
+      return { runs, workflows, failing };
     }
     if (Date.now() >= deadline) {
-      if (runs.length === 0) {
+      if (workflows.length === 0 && runs.length === 0) {
         throw unreadable(
-          `GitHub reports no check run at all for ${sha} in ${repository}.\n`
+          `GitHub reports no workflow run and no check run at all for ${sha} in ${repository}.\n`
           + '  that is what Actions disabled on the repository looks like, and what a push\n'
           + '  that triggered no workflow looks like. It is never what success looks like.',
+        );
+      }
+      if (workflows.length === 0) {
+        throw unreadable(
+          `GitHub reports check runs for ${sha} in ${repository} but no workflow run:\n`
+          + `    ${runs.map((run) => run.name).join(', ')}\n`
+          + '  without a workflow run there is nothing that says the check list is complete, so\n'
+          + '  a green reading here could be a partial one. This step will not guess; if you\n'
+          + '  verified the tree another way, record that with --override "<reason>".',
+        );
+      }
+      if (workflowsPending.length > 0) {
+        throw unreadable(
+          `CI has not completed for ${sha} in ${repository}: `
+          + `${workflowsPending.map((run) => `${run.name} (${run.status})`).join(', ')} still running.\n`
+          + '  a workflow run that is not completed can still create jobs that fail, so the\n'
+          + '  checks it has produced so far are not a verdict.\n'
+          + '  raise --timeout-seconds, or wait for the run and re-run this step.',
         );
       }
       throw unreadable(
@@ -311,23 +395,28 @@ function bump(root, options) {
   const checks = `${runs.length} check${runs.length === 1 ? '' : 's'}: `
     + runs.map((run) => run.name).join(', ');
 
+  // A conclusion that WAS read and is red is not overridable, and that asymmetry is the
+  // contract rather than an oversight: "a red or failing run never bumps" is
+  // unconditional, while the override exists for CI that could not be read at all. The
+  // two cases differ in what the operator would be asserting. Overriding an unreadable
+  // conclusion says "I verified this another way"; overriding a red one says "I know it
+  // failed and I am recording it as adopted anyway", which is the exact claim the marker
+  // must never carry. The fix for red is to fix the failure.
   if (failing.length > 0) {
     const named = failing
       .map((run) => `${run.name} (${run.conclusion ?? 'no conclusion'})${run.url ? ` -- ${run.url}` : ''}`)
       .join('\n    ');
-    if (!options.override) {
-      throw new BumpError(
-        `CI is not green on ${sha} in ${repository}:\n    ${named}\n`
-        + `  ${FRAMEWORK_VERSION} is left at ${readFileSync(resolve(root, FRAMEWORK_VERSION), 'utf8').trim()},`
-        + ' the value captured before the merge.\n'
-        + '  fix the failure, push again, and re-run this step against the new head.',
-        EXIT_NOT_GREEN,
-      );
-    }
-    const summary = `${PREFIX}: CI is NOT green on ${sha} (${named.replace(/\n\s+/g, '; ')});`
-      + ` adopted on an explicit override: ${options.override}`;
-    writeMarker(root, version, { sha, summary, override: options.override });
-    return [summary, `${PREFIX}: ${FRAMEWORK_VERSION} -> ${version}`];
+    throw new BumpError(
+      `CI is not green on ${sha} in ${repository}:\n    ${named}\n`
+      + `  ${FRAMEWORK_VERSION} is left at ${readFileSync(resolve(root, FRAMEWORK_VERSION), 'utf8').trim()},`
+      + ' the value captured before the merge.\n'
+      + '  fix the failure, push again, and re-run this step against the new head.'
+      + (options.override
+        ? '\n  --override does NOT apply here: it records an adoption whose CI could not be\n'
+          + '  READ, and this one was read. A failing run never bumps.'
+        : ''),
+      EXIT_NOT_GREEN,
+    );
   }
 
   const summary = `${PREFIX}: CI is green on ${sha} in ${repository} (${checks})`;

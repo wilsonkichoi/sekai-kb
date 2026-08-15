@@ -71,7 +71,7 @@ const BUMP_HELPER = 'scripts/upgrade/ci-verified-bump.mjs';
 const PUSH = /git push /;
 
 /** The push is conditional on a remote existing, so a no-remote tree still reaches the helper. */
-const REMOTE_GUARD = /git remote get-url origin[\s\S]{0,120}git push /;
+const REMOTE_GUARD = /if git remote get-url origin[^\n]*then\s*\n\s*git push /;
 
 /** The bump shown with an explicit reason — the only documented way past an unreadable conclusion. */
 const OVERRIDE_INVOCATION = /node "\$BUMP_HELPER" bump[^\n]*--override "[^"]+"/;
@@ -167,7 +167,7 @@ function checkPreflightExemptsSweptArtifact(skill, { stages }) {
     return;
   }
   const text = preflight[0];
-  if (!/untracked[\s\S]{0,200}retired|retired[\s\S]{0,200}untracked/i.test(text)) {
+  if (!/retired/i.test(text)) {
     failure(
       `${SKILL}: the step 0 preflight stops on a dirty tree with no exception for an `
       + `untracked artifact at a retired path. That artifact is what step ${heading[1]} `
@@ -179,6 +179,20 @@ function checkPreflightExemptsSweptArtifact(skill, { stages }) {
       `${SKILL}: the step 0 preflight does not defer the retired artifact to step `
       + `${heading[1]}, the step that identifies and removes it. Without the pointer the `
       + 'exception reads as permission to delete by hand',
+    );
+  }
+  // The deferral is only safe if something downstream actually settles it. Step 0 cannot
+  // classify a dirty path -- the list of retired paths lives in the target release's
+  // helper, which is not bootstrapped until the sweep step -- so the sweep step must
+  // re-read the tree and stop on whatever it did not recognize. Without that assertion
+  // the preflight's exception becomes a hole: a dirty tree waved through at step 0 and
+  // never checked again reaches the merge.
+  const sweepSection = new RegExp(String.raw`^## ${heading[1]}\.[\s\S]*?(?=^## )`, 'm').exec(skill);
+  if (!sweepSection || !/git status --porcelain/.test(sweepSection[0])) {
+    failure(
+      `${SKILL}: step ${heading[1]} never re-reads the working tree, so the dirty-tree `
+      + 'decision the preflight defers to it is never actually made. A path the sweep '
+      + 'does not recognize would reach the merge unexamined',
     );
   }
 }
@@ -407,12 +421,18 @@ const SELFTEST_DEFECTS = [
   },
   {
     label: 'the preflight stops on a dirty tree with no exception for the artifact it later sweeps',
+    // Scoped to the preflight section, so this plants the real defect -- a step 0 that
+    // knows nothing about retired paths -- rather than deleting the concept repo-wide.
     mutate: (docs) => ({
       ...docs,
-      skill: docs.skill.replace(
-        /One exception, and it is not a[\s\S]*?do not delete anything by hand here\./,
-        '',
-      ),
+      skill: docs.skill.replace(/^## 0\.[\s\S]*?(?=^## )/m, (section) => section.replaceAll(/retired/gi, 'unrelated')),
+    }),
+  },
+  {
+    label: 'the sweep step never re-reads the tree, so the deferred dirty-tree decision is never made',
+    mutate: (docs) => ({
+      ...docs,
+      skill: docs.skill.replace(/^## 3d\.[\s\S]*?(?=^## 4\.)/m, (section) => section.replaceAll('git status --porcelain', 'git status --short --branch')),
     }),
   },
   {
@@ -448,7 +468,7 @@ const SELFTEST_DEFECTS = [
     label: 'the runbook pushes unguarded, so a no-remote tree never reaches the helper',
     mutate: (docs) => ({
       ...docs,
-      runbook: docs.runbook.replaceAll(/git remote get-url origin[\s\S]*?\|\| echo "no origin[^"]*"/g, 'git push origin HEAD'),
+      runbook: docs.runbook.replaceAll(/if git remote get-url origin[\s\S]*?\nfi\n/g, 'git push origin HEAD\n'),
     }),
   },
   {
@@ -499,7 +519,7 @@ const SELFTEST_DEFECTS = [
     // a bare line -- a mutation that silently matches nothing proves nothing.
     mutate: (docs) => ({
       ...docs,
-      changelog: docs.changelog.replace(/git remote get-url origin[\s\S]*?\|\| echo "no origin[^"]*"\n/, ''),
+      changelog: docs.changelog.replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
     }),
   },
 ];

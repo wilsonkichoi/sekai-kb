@@ -70,12 +70,20 @@ npm run version:check
   "framework upgrade clobbered my `place.config.ts`" report.
 - **`.sekai-template` present** → this is the framework itself, not an instance.
   Stop; `/sekai-upgrade` is an instance operation.
-- **Working tree not clean** → stop and tell the user to commit or stash first. A
-  merge onto a dirty tree is unrecoverable-in-place. One exception, and it is not a
-  judgment call: an **untracked derived artifact at a path a past release retired**
-  is not work to commit or stash — nothing writes it, nothing reads it, and nothing
-  ignores it any more. Name it, keep going, and let step 3d remove it. Step 3d is
-  also what identifies it, so do not delete anything by hand here.
+- **Working tree not clean** → a merge onto a dirty tree is unrecoverable-in-place, so
+  this must be settled before step 4 — but **do not settle it here, and do not judge any
+  path by eye.** Some dirty paths are the user's work and some are an **untracked derived
+  artifact at a path a past release retired**, which is not work to commit or stash:
+  nothing writes it, nothing reads it, and nothing ignores it any more. Telling those
+  apart is not a judgment call and must not become one — the list of retired paths lives
+  inside the target release's helper, which **step 3d** bootstraps and this step cannot
+  reach, because the framework remote is not even fetched until step 1. So: record every
+  path `git status --porcelain` printed, tell the user the tree is dirty and that step 3d
+  will classify it, and carry the list there. Delete nothing by hand.
+  - Warn the user about the two remedies that look obvious and are wrong for a retired
+    artifact: committing it adds an unignored derived file to their repository, and
+    `git stash` without `-u` does not touch an untracked file at all, so the tree stays
+    dirty.
 - Note `VERSION` as the adopter's own release and `FRAMEWORK-VERSION` as the
   framework "from" version. `/sekai-upgrade` changes only the latter.
 
@@ -282,6 +290,19 @@ node "$STALE_HELPER" sweep
 - Releases before v1.1.6 did not ship this helper, so `git show` fails loudly on
   such a target. That is the correct answer: there was no retired path to sweep.
 
+**This is where step 0's dirty tree is settled**, and it is settled mechanically —
+against the release's own list of retired paths, never by eye:
+
+```bash
+git status --porcelain
+```
+
+Empty means every path step 0 recorded was a retired artifact and the helper removed it;
+the merge can proceed. Anything still listed is something this release does not
+recognize, so it is the user's work and their call: **stop here** and hand them the list.
+That stop is the dirty-tree stop step 0 deferred, now made with the information step 0
+did not have.
+
 ## 4. Merge the tag (never `main`)
 
 ```bash
@@ -484,9 +505,14 @@ git diff --cached --quiet || git commit -m "chore: reconcile starter files for s
 # No `origin` at all? There is nothing to push and no run to read, but the sequence
 # must still REACH the helper: it is the only thing that records an adoption, and its
 # override is the only way to record one nothing verified. So do not stop here.
-git remote get-url origin >/dev/null 2>&1 \
-  && git push origin HEAD \
-  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+# An `if`, not `&&`/`||`: chained that way a FAILED push (rejected non-fast-forward, a
+# protected branch) would fall through to the same message and misreport itself as a
+# missing remote. A push that fails is a hard stop; only a missing remote is not.
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin HEAD
+else
+  echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+fi
 
 # Same tag-first rule as every helper above.
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"

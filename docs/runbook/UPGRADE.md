@@ -320,9 +320,14 @@ git commit --no-edit
 # No `origin` at all? There is nothing to push and no run to read, but the sequence
 # must still REACH the helper: it is the only thing that records an adoption, and its
 # override is the only way to record one nothing verified. So do not stop here.
-git remote get-url origin >/dev/null 2>&1 \
-  && git push origin HEAD \
-  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+# An `if`, not `&&`/`||`: chained that way a FAILED push (rejected non-fast-forward, a
+# protected branch) would fall through to the same message and misreport itself as a
+# missing remote. A push that fails is a hard stop; only a missing remote is not.
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin HEAD
+else
+  echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+fi
 # Until the helper runs, FRAMEWORK-VERSION still holds the OLD value that step 6
 # restored. It writes the marker only on a green conclusion for this exact head SHA,
 # asserts the read-back, and commits it there; exit 1 = not green, exit 3 = no
@@ -346,7 +351,16 @@ ever again.
 #    it is per-clone, not version-controlled). Harmless to re-run:
 git config merge.ours.driver true
 
-# 1. Working tree clean? (stash or commit first — a merge onto a dirty tree bites.)
+# 1. Working tree clean? A merge onto a dirty tree bites, so this must be settled
+#    before step 5 — but NOT here, and not by eye. Some dirty paths are your work and
+#    some are a derived artifact stranded at a path a past release retired, which is
+#    not work to commit or stash. The list of retired paths lives in the target
+#    release's helper, which step 4b below bootstraps; this step cannot reach it,
+#    because the framework tags are not fetched yet. So: note what this prints, and
+#    carry the list to step 4b, which classifies it. Delete nothing by hand.
+#    Two remedies that look obvious and are wrong for a retired artifact: committing
+#    it adds an unignored derived file to your repository, and `git stash` without -u
+#    does not touch an untracked file at all.
 git status --porcelain
 
 # 2. VERSION is your instance release and never changes here. Pick a framework
@@ -414,6 +428,13 @@ STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"
 git show "$TARGET":scripts/upgrade/stale-artifacts.mjs > "$STALE_HELPER"
 node "$STALE_HELPER" sweep
 
+#    This is where step 1's dirty tree is settled, against the release's own list of
+#    retired paths rather than by eye. Empty means every path step 1 printed was a
+#    retired artifact and the sweep removed it. Anything still listed is something
+#    this release does not recognize, so it is your work and your call — stop and
+#    deal with it before merging.
+git status --porcelain
+
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
 
@@ -468,9 +489,14 @@ git diff --cached --quiet || git commit -m "chore: reconcile starter files for $
 # No `origin` at all? There is nothing to push and no run to read, but the sequence
 # must still REACH the helper: it is the only thing that records an adoption, and its
 # override is the only way to record one nothing verified. So do not stop here.
-git remote get-url origin >/dev/null 2>&1 \
-  && git push origin HEAD \
-  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+# An `if`, not `&&`/`||`: chained that way a FAILED push (rejected non-fast-forward, a
+# protected branch) would fall through to the same message and misreport itself as a
+# missing remote. A push that fails is a hard stop; only a missing remote is not.
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin HEAD
+else
+  echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+fi
 
 # 10. Bump only on a green conclusion for that exact head SHA — never by branch
 #     name, because a branch can advance between the push and the poll. The helper

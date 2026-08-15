@@ -3010,30 +3010,68 @@ if [ -f "$STALE_HELPER_SRC" ]; then
   cp "$STALE_HELPER_SRC" "$STALE_HELPER"
 fi
 
-# A stubbed `gh` answering the one endpoint the helper calls, driven by
-# $GH_STUB_SCENARIO and logging every invocation to $GH_STUB_LOG. Each scenario is a
-# real GitHub answer: a completed green check set, a completed set with one failure,
-# a commit with no check runs at all (Actions disabled on the repository, or no
-# workflow triggered by the push), a run still in flight, a SHA GitHub has never seen
-# (the merge was not pushed), and a network failure.
+# A stubbed `gh` answering the TWO endpoints the helper calls, driven by
+# $GH_STUB_SCENARIO and logging every invocation to $GH_STUB_LOG. It dispatches on the
+# requested path, because the helper reads the workflow-run list to know whether the
+# check-run list is finished being built, and the whole point of the `partial` scenario
+# below is that those two endpoints disagree.
+#
+# Each scenario is a real GitHub answer: a completed green run, a completed run with one
+# failing check, a commit with nothing at all (Actions disabled on the repository, or no
+# workflow triggered by the push), a run still in flight, a run whose check list is green
+# so far while the workflow itself is still going (the partial-set trap), checks with no
+# workflow run behind them, a SHA GitHub has never seen (the merge was not pushed), and a
+# network failure.
 write_gh_stub() { # bindir
   mkdir -p "$1"
   cat > "$1/gh" <<'GHSTUB'
 #!/usr/bin/env bash
 set -u
 if [ -n "${GH_STUB_LOG:-}" ]; then printf '%s\n' "$*" >> "$GH_STUB_LOG"; fi
+
+# Which endpoint is being asked for. The helper reads workflow runs first, then check
+# runs; a scenario answers each one separately.
+endpoint=checks
+case "$*" in
+  *actions/runs*) endpoint=workflows ;;
+esac
+
+wf() { # status
+  printf '%s\n' "{\"total_count\":1,\"workflow_runs\":[{\"name\":\"Deploy\",\"status\":\"$1\",\"conclusion\":null,\"html_url\":\"https://github.com/example-owner/example-instance/actions/runs/1\"}]}"
+}
+wf_none() { printf '%s\n' '{"total_count":0,"workflow_runs":[]}'; }
+
+checks_green() {
+  printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+}
+
 case "${GH_STUB_SCENARIO:-green}" in
   green)
-    printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    if [ "$endpoint" = workflows ]; then wf completed; else checks_green; fi
     ;;
   red)
-    printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"failure","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    if [ "$endpoint" = workflows ]; then wf completed
+    else printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"failure","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    fi
     ;;
   empty)
-    printf '%s\n' '{"total_count":0,"check_runs":[]}'
+    if [ "$endpoint" = workflows ]; then wf_none; else printf '%s\n' '{"total_count":0,"check_runs":[]}'; fi
     ;;
   pending)
-    printf '%s\n' '{"total_count":1,"check_runs":[{"name":"Test","status":"in_progress","conclusion":null,"html_url":"https://github.com/example-owner/example-instance/runs/1"}]}'
+    if [ "$endpoint" = workflows ]; then wf in_progress
+    else printf '%s\n' '{"total_count":1,"check_runs":[{"name":"Test","status":"in_progress","conclusion":null,"html_url":"https://github.com/example-owner/example-instance/runs/1"}]}'
+    fi
+    ;;
+  partial)
+    # The defect shape: every check run that EXISTS is completed and green, while the
+    # workflow run that will still create Build and Deploy is in flight. Reading the
+    # check list alone here answers "green" for a tree whose remaining jobs have not run.
+    if [ "$endpoint" = workflows ]; then wf in_progress; else checks_green; fi
+    ;;
+  checks-without-workflow)
+    # Completed green checks with no workflow run behind them: nothing establishes that
+    # the list is complete, so there is no verdict to read.
+    if [ "$endpoint" = workflows ]; then wf_none; else checks_green; fi
     ;;
   not-found)
     printf '%s\n' 'gh: No commit found for SHA (HTTP 422)' >&2
@@ -3201,6 +3239,27 @@ case_ci_verified_bump() { # workdir
     || fail "case 16c: the in-flight diagnostic does not say the run had not concluded: $HELPER_ERR"
   assert_framework_version "$inst" "v1.0.0" "case 16c" "after an in-flight run"
 
+  # The partial-set trap, and the one shape that LOOKS green. GitHub creates a job's
+  # check run only when that job becomes eligible, so between two chained jobs the check
+  # list holds nothing but completed, successful runs while the jobs that could still
+  # fail have not been created. Measured on this repository's own deploy.yml, one run
+  # produced three such windows. A helper that reads the check list alone bumps here.
+  run_bump "$inst" partial "case 16c" bump --target v1.0.1 --timeout-seconds 0 --poll-seconds 1
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump on an all-green PARTIAL check set exited $HELPER_STATUS (expected 3); a workflow run still in flight can create jobs that fail, so its checks so far are not a verdict; stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after a green partial set with the workflow still running"
+  printf '%s' "$HELPER_ERR" | grep -Fq 'still running' \
+    || fail "case 16c: the partial-set diagnostic does not say the workflow had not completed: $HELPER_ERR"
+
+  # Completed green checks with no workflow run behind them: nothing establishes that
+  # the check list is finished, so there is no verdict to read.
+  run_bump "$inst" checks-without-workflow "case 16c" bump --target v1.0.1 --timeout-seconds 0 --poll-seconds 1
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump on checks with no workflow run exited $HELPER_STATUS (expected 3); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after checks with no workflow run behind them"
+  printf '%s' "$HELPER_ERR" | grep -Fq 'no workflow run' \
+    || fail "case 16c: the diagnostic does not name the missing workflow run: $HELPER_ERR"
+
   # No remote at all: there is nowhere for a CI run to exist, and the helper must say
   # that rather than treat the absence as success.
   git -C "$inst" remote remove origin
@@ -3222,16 +3281,19 @@ case_ci_verified_bump() { # workdir
     || fail "case 16d: --override with no reason exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
   assert_framework_version "$inst" "v1.0.0" "case 16d" "after a reasonless override"
 
+  # An override does NOT reach a conclusion that was READ and is red. DoD 2 states that
+  # a red or failing run never bumps, without condition; DoD 3 grants the override only
+  # for CI that cannot be read. The two assert different things — "I verified this
+  # another way" versus "I know it failed and am recording it as adopted" — and only the
+  # first is a claim the marker may carry.
   run_bump "$inst" red "case 16d" bump --target v1.0.1 --timeout-seconds 0 \
     --override "example-owner accepted the known-red check by hand"
-  [ "$HELPER_STATUS" -eq 0 ] \
-    || fail "case 16d: an explicit override exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
-  assert_framework_version "$inst" "v1.0.1" "case 16d" "after an explicit override"
-  printf '%s' "$HELPER_OUT" | grep -Fq 'example-owner accepted the known-red check by hand' \
-    || fail "case 16d: the override reason is not in the run output: $HELPER_OUT"
-  git -C "$inst" log -1 --format=%B | grep -Fq 'example-owner accepted the known-red check by hand' \
-    || fail "case 16d: the override reason is not recorded on the commit that carries the unverified bump"
-  ok "case 16d: an override needs an explicit reason and that reason survives in the output and the commit"
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16d: --override on a read red conclusion exited $HELPER_STATUS (expected 1: a failing run never bumps); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16d" "after an override attempt on a red conclusion"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Fq -- '--override does NOT apply here' \
+    || fail "case 16d: the refusal does not tell the operator why the override did not apply: $HELPER_ERR"
+  ok "case 16d: a read red conclusion refuses the override and leaves the marker at its pre-merge value"
 
   # The override must reach the UNREADABLE shapes too, not just a red conclusion —
   # that is the case DoD 3 and the Upgrade note describe (Actions disabled, offline,
@@ -3551,9 +3613,9 @@ documented_push_block() {
   awk '
     /^### Upgrade note/ { note = 1; next }
     note && /^## / { exit }
-    note && /^git remote get-url origin/ { emit = 1 }
+    note && /^if git remote get-url origin/ { emit = 1 }
     emit { print }
-    emit && /echo "no origin/ { exit }
+    emit && /^fi$/ { exit }
   ' "$ROOT/CHANGELOG.md"
 }
 

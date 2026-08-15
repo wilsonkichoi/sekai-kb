@@ -63,9 +63,28 @@ tags, never framework `main`** (ADR 004, SPEC
   found" is never treated as success.** Adopting anyway requires
   `--override "<reason>"`, which is recorded in the run output and on the commit.
 
+  **A green partial answer is not a green run.** GitHub creates a job's check run only
+  when that job becomes *eligible*, so in a chained workflow the check list is built up
+  as the run proceeds: at the moment the first job finishes, the list holds exactly one
+  entry, completed and green, while every job that could still fail has no check run yet.
+  On this repository's own `deploy.yml` one run produced three such windows — each job's
+  `created_at` equal to its predecessor's `completed_at` — against a 20-second default
+  poll. So the helper requires the **workflow run** for the SHA to be completed before it
+  reads any check-run conclusion; a workflow run exists from the moment it is triggered
+  and completes only when all of its jobs have. Checks with no workflow run behind them
+  stop too, because nothing there says the list is finished.
+
+  **`--override` answers only the unreadable case.** A conclusion that was read and is
+  red is never overridable: "a red or failing run never bumps" is unconditional, and the
+  two situations assert different things — "I verified this another way" versus "I know
+  it failed and am recording it as adopted". Only the first is a claim the marker may
+  carry, and the refusal says so.
+
   New helper `scripts/upgrade/ci-verified-bump.mjs`, bootstrapped from the target tag
   like every other upgrade helper. `npm run upgrade:check` gains case 16 (green, red,
-  every unreadable shape, the recorded override, and the usage contract) and
+  every unreadable shape — including a green partial set whose workflow is still running,
+  and checks with no workflow run behind them — the recorded override, the refusal to
+  override a red conclusion, and the usage contract) and
   `npm run upgrade:selftest` proves it non-vacuous. `npm run upgrade-sequence:check` is
   a new gate deriving the documented sequence from the skill, so the spec and the
   runbook cannot describe an upgrade the skill does not perform.
@@ -180,9 +199,12 @@ disposition without the removal — it writes nothing. If you already deleted it
 the sweep says there was nothing to remove. Your current corpus at
 `workers/lib/vectors.json` is never touched.
 
-From v1.1.6 onward no adopter meets this stop again: the rewritten step 0 recognizes an
-untracked artifact at a retired path as the one thing that is not work to commit or
-stash, names it, and lets step 3d remove it.
+From v1.1.6 onward no adopter meets this stop again. The rewritten step 0 does not decide
+a dirty tree at all: it records the paths and carries them to step 3d, which classifies
+every one against the release's own list of retired paths and then re-reads the tree.
+Anything the sweep does not recognize stops the upgrade there — the same stop, made where
+the information to make it exists. Nothing is judged by eye at a step that has no list to
+judge against.
 
 **2. Instead of the old bump step — push first, then bump through the helper.** Your
 installed step 9 (runbook step 8) writes `FRAMEWORK-VERSION` directly, before anything
@@ -194,9 +216,14 @@ committed:
 # No `origin` at all? There is nothing to push and no run to read, but the sequence
 # must still REACH the helper: it is the only thing that records an adoption, and its
 # override is the only way to record one nothing verified. So do not stop here.
-git remote get-url origin >/dev/null 2>&1 \
-  && git push origin HEAD \
-  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+# An `if`, not `&&`/`||`: chained that way a FAILED push (rejected non-fast-forward, a
+# protected branch) would fall through to the same message and misreport itself as a
+# missing remote. A push that fails is a hard stop; only a missing remote is not.
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin HEAD
+else
+  echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
+fi
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
 git show sekai-kb-v1.1.6:scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
 node "$BUMP_HELPER" bump --target sekai-kb-v1.1.6
