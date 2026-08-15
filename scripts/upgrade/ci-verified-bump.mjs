@@ -217,6 +217,7 @@ function fetchWorkflowRuns(repository, sha) {
   return runs.map((run) => ({
     name: typeof run?.name === 'string' ? run.name : '(unnamed workflow)',
     status: run?.status ?? null,
+    conclusion: run?.conclusion ?? null,
     url: run?.html_url ?? null,
   }));
 }
@@ -259,6 +260,10 @@ function fetchCheckRuns(repository, sha) {
  *   2. Every check run completed. This catches a check that is not backed by an Actions
  *      workflow run at all, which condition 1 cannot see.
  *
+ * The verdict is then read from BOTH lists, because neither is a superset of the other:
+ * a check run can exist with no workflow run behind it, and a workflow run can fail
+ * with no check run behind it.
+ *
  * An empty answer is deliberately NOT success: it is what a repository with Actions
  * disabled looks like, what a push that triggered no workflow looks like, and what a
  * run GitHub has not created yet looks like. The first two are terminal and the third
@@ -275,7 +280,16 @@ function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
     const settled = workflows.length > 0 && workflowsPending.length === 0
       && runs.length > 0 && pending.length === 0;
     if (settled) {
-      const failing = runs.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion));
+      // Both lists carry conclusions, and both are authoritative. A workflow run that
+      // failed at STARTUP -- invalid workflow YAML, which is what a badly resolved
+      // conflict under `.github/workflows/` produces on exactly this merge -- is
+      // completed with a failing conclusion and never created a job, so no check run
+      // represents it. It is visible here and nowhere else. A run that failed because
+      // one of its jobs failed is named twice; that is noise, not a wrong answer.
+      const failing = [
+        ...workflows.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion)),
+        ...runs.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion)),
+      ];
       return { runs, workflows, failing };
     }
     if (Date.now() >= deadline) {
@@ -334,6 +348,20 @@ function assertVerifiableTree(root) {
       + '  resolve them, finalize the merge, and push before verifying.',
       EXIT_NOT_GREEN,
     );
+  }
+}
+
+/**
+ * The marker's current value, for a diagnostic that quotes what the tree was left at.
+ * An unreadable file is not an error here: this runs only inside the not-green message,
+ * where an ENOENT thrown outside `BumpError` would replace the failing check's name with
+ * a stack trace -- losing the one thing the operator needs.
+ */
+function readMarker(root) {
+  try {
+    return readFileSync(resolve(root, FRAMEWORK_VERSION), 'utf8').trim();
+  } catch {
+    return '(unreadable)';
   }
 }
 
@@ -408,7 +436,7 @@ function bump(root, options) {
       .join('\n    ');
     throw new BumpError(
       `CI is not green on ${sha} in ${repository}:\n    ${named}\n`
-      + `  ${FRAMEWORK_VERSION} is left at ${readFileSync(resolve(root, FRAMEWORK_VERSION), 'utf8').trim()},`
+      + `  ${FRAMEWORK_VERSION} is left at ${readMarker(root)},`
       + ' the value captured before the merge.\n'
       + '  fix the failure, push again, and re-run this step against the new head.'
       + (options.override

@@ -355,9 +355,9 @@ git config merge.ours.driver true
 #    before step 5 — but NOT here, and not by eye. Some dirty paths are your work and
 #    some are a derived artifact stranded at a path a past release retired, which is
 #    not work to commit or stash. The list of retired paths lives in the target
-#    release's helper, which step 4b below bootstraps; this step cannot reach it,
+#    release's helper, which step 4e below bootstraps; this step cannot reach it,
 #    because the framework tags are not fetched yet. So: note what this prints, and
-#    carry the list to step 4b, which classifies it. Delete nothing by hand.
+#    carry the list to step 4e, which classifies it. Delete nothing by hand.
 #    Two remedies that look obvious and are wrong for a retired artifact: committing
 #    it adds an unignored derived file to your repository, and `git stash` without -u
 #    does not touch an untracked file at all.
@@ -421,7 +421,8 @@ node "$DIVERGENCE_HELPER" report --target "$TARGET"
 #     reads, and nothing regenerates. The corpus artifact holds every article's
 #     title, URL, and body text, and both machine gates skip it by BASENAME — so at
 #     the retired path it is unignored, unreviewed content in a code tree, and it is
-#     what makes step 1's clean-tree check fail on your next upgrade.
+#     what step 1 keeps reporting as a dirty path on every later upgrade — and what a
+#     v1.1.5-or-older upgrade stops on outright, before it can reach this sweep.
 #     A path is removed only when the file is untracked AND its bytes really are
 #     that artifact; anything else there is reported by path and left alone.
 STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"

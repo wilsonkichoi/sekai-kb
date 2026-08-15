@@ -3017,11 +3017,12 @@ fi
 # below is that those two endpoints disagree.
 #
 # Each scenario is a real GitHub answer: a completed green run, a completed run with one
-# failing check, a commit with nothing at all (Actions disabled on the repository, or no
-# workflow triggered by the push), a run still in flight, a run whose check list is green
-# so far while the workflow itself is still going (the partial-set trap), checks with no
-# workflow run behind them, a SHA GitHub has never seen (the merge was not pushed), and a
-# network failure.
+# failing check, a run that failed at startup and therefore created no check run at all
+# while a second workflow's check is green, a commit with nothing at all (Actions disabled
+# on the repository, or no workflow triggered by the push), a run still in flight, a run
+# whose check list is green so far while the workflow itself is still going (the
+# partial-set trap), checks with no workflow run behind them, a SHA GitHub has never seen
+# (the merge was not pushed), and a network failure.
 write_gh_stub() { # bindir
   mkdir -p "$1"
   cat > "$1/gh" <<'GHSTUB'
@@ -3036,8 +3037,13 @@ case "$*" in
   *actions/runs*) endpoint=workflows ;;
 esac
 
-wf() { # status
-  printf '%s\n' "{\"total_count\":1,\"workflow_runs\":[{\"name\":\"Deploy\",\"status\":\"$1\",\"conclusion\":null,\"html_url\":\"https://github.com/example-owner/example-instance/actions/runs/1\"}]}"
+wf() { # status [conclusion]
+  # A completed run always carries a conclusion and an unfinished one never does, so the
+  # conclusion is an argument rather than a constant: the helper reads it, and a stub
+  # that hardcoded null would answer "no conclusion" for a run GitHub reports as green.
+  conclusion=null
+  if [ $# -ge 2 ]; then conclusion="\"$2\""; fi
+  printf '%s\n' "{\"total_count\":1,\"workflow_runs\":[{\"name\":\"Deploy\",\"status\":\"$1\",\"conclusion\":$conclusion,\"html_url\":\"https://github.com/example-owner/example-instance/actions/runs/1\"}]}"
 }
 wf_none() { printf '%s\n' '{"total_count":0,"workflow_runs":[]}'; }
 
@@ -3047,11 +3053,22 @@ checks_green() {
 
 case "${GH_STUB_SCENARIO:-green}" in
   green)
-    if [ "$endpoint" = workflows ]; then wf completed; else checks_green; fi
+    if [ "$endpoint" = workflows ]; then wf completed success; else checks_green; fi
     ;;
   red)
-    if [ "$endpoint" = workflows ]; then wf completed
+    if [ "$endpoint" = workflows ]; then wf completed failure
     else printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"failure","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    fi
+    ;;
+  workflow-red-no-checks)
+    # The startup-failure shape, and the one red answer that exists ONLY at the workflow
+    # level. A run that fails to start never creates a job, so it has no check run to
+    # represent it -- while a second workflow's check run is green. Reading check runs
+    # alone answers "green" for a tree whose main workflow never ran a line.
+    if [ "$endpoint" = workflows ]; then
+      printf '%s\n' '{"total_count":2,"workflow_runs":[{"name":"Deploy","status":"completed","conclusion":"startup_failure","html_url":"https://github.com/example-owner/example-instance/actions/runs/1"},{"name":"Corpus refresh","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/actions/runs/2"}]}'
+    else
+      printf '%s\n' '{"total_count":1,"check_runs":[{"name":"refresh","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"}]}'
     fi
     ;;
   empty)
@@ -3204,6 +3221,23 @@ case_ci_verified_bump() { # workdir
   printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Eqi 'fix|re-?run|resolve|push|again' \
     || fail "case 16b: the refusal does not say what to do next: $HELPER_ERR"
   ok "case 16b: a failing conclusion leaves the marker at its pre-merge value and names the failing check"
+
+  # The workflow-level red shape. A run that fails at STARTUP -- invalid workflow YAML,
+  # which is what a badly resolved conflict under .github/workflows/ produces on exactly
+  # this merge -- is completed with a failing conclusion and never created a job, so no
+  # check run represents it. Every check run present is green, so a verdict read from
+  # check runs alone bumps on a tree whose main workflow never ran a line.
+  inst="$work/workflow-red"
+  build_bump_instance "$fw" "$inst" "case 16b"
+  run_bump "$inst" workflow-red-no-checks "case 16b" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16b: bump on a workflow run that failed at startup exited $HELPER_STATUS (expected 1); it created no check run, so the check-run list alone reads green; stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16b" "after a workflow run that failed at startup"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 16b: a refused bump still wrote to the tree: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Fq 'startup_failure' \
+    || fail "case 16b: the refusal does not name the workflow run that failed: $HELPER_ERR"
+  ok "case 16b: a workflow run that failed with no check run behind it never bumps"
 
   # --- 16c: unreadable CI stops rather than guessing ---------------------------
   # Four distinct unreadable shapes, each of which a naive implementation would be

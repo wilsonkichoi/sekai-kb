@@ -252,8 +252,9 @@ step's input, not a duplicate of it. What it adds over the post-merge conflict l
 everything git resolves silently: a file the instance changed that the framework did
 not is kept without a conflict, and the user never learns they are carrying it.
 
-- It reads the merge base, so it runs **before** the merge, on the clean tree
-  preflight already required.
+- It reads the merge base, so it runs **before** the merge. It reads committed state
+  only, so a tree still carrying the dirty paths step 0 recorded — step 3d is what
+  settles those, and it runs after this — does not affect its answer.
 - It **writes nothing** — no state file, no staged path, no side taken. There is no
   reconcile step for it, and it is never run after the merge.
 - Exit 0 with a "no merge base" report is the correct answer on the first
@@ -270,8 +271,9 @@ untracked copy at the old path that nothing ignores, nothing reads, and nothing
 regenerates. That is not clutter: the corpus artifact carries every article's title,
 URL, and body text, and both machine gates skip it by **basename** — so at the
 retired path it is unignored, unreviewed content sitting in a code tree. It also
-makes `git status --porcelain` non-empty, which is what step 0 stops on, so it
-compounds until something removes it.
+makes `git status --porcelain` non-empty, which is what step 0 records and defers to
+here — and what a v1.1.5-or-older step 0 stops the whole upgrade on — so it compounds
+until something removes it.
 
 ```bash
 # Same tag-first rule as every helper above: the release being merged is the
