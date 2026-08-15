@@ -539,6 +539,15 @@ bug. What the helper does with each answer:
   the SHA, because `corpus-refresh.yml` is filtered on `knowledge/**` and the merge
   does not touch it. That answer is red, not unreadable, so `--override` does not
   reach it.
+- **Green, but the bump commit was refused (also exit 1)** → the second shape of
+  exit 1, and the one that names no failing check. The commit runs your instance's
+  own `pre-commit` hook (the template ships one), so it can fail on a tree this step
+  has already written and staged. The helper restores `FRAMEWORK-VERSION` to its
+  pre-merge bytes *and* its prior index entry before exiting, and the message says it
+  put them back — so read the message rather than the exit code alone. If the restore
+  itself failed the message says that instead, and only then does the tree need you.
+  Fix what the hook objected to and re-run this step; CI stays green on the same head,
+  so nothing has to be pushed again.
 - **No conclusion readable (exit 3)** → says which case it hit (no remote
   configured, `gh` unavailable, the API unreachable, GitHub has never seen this SHA
   so the merge was never pushed, no workflow run and no check run at all — Actions

@@ -330,8 +330,11 @@ else
 fi
 # Until the helper runs, FRAMEWORK-VERSION still holds the OLD value that step 6
 # restored. It writes the marker only on a green conclusion for this exact head SHA,
-# asserts the read-back, and commits it there; exit 1 = not green, exit 3 = no
-# conclusion could be read. Neither touches the file.
+# asserts the read-back, and commits it there. Exit 1 = not green (it names the
+# failing check), OR green but the bump commit was refused by your own pre-commit
+# hook -- that shape names no check, and the helper puts the file and its index entry
+# back before exiting, so read the message rather than the code alone. Exit 3 = no
+# conclusion could be read. None of them leaves the marker moved.
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
 git show "$TARGET":scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
 node "$BUMP_HELPER" bump --target "$TARGET"
@@ -507,7 +510,11 @@ fi
 #     workflow YAML, which is what a badly resolved conflict under .github/workflows/
 #     produces on this merge) never creates a job, and it is usually the only run for
 #     the SHA, since corpus-refresh.yml is filtered on knowledge/** and the merge does
-#     not touch it. Exit 3 = no conclusion could be read at all: no remote, gh
+#     not touch it. Exit 1 has a SECOND shape that names no check: CI was green but
+#     the bump commit was refused by your own pre-commit hook. The helper restores the
+#     marker and its index entry before exiting and says so, so read the message, not
+#     just the code; fix what the hook objected to and re-run this step, since CI is
+#     still green on the same head. Exit 3 = no conclusion could be read at all: no remote, gh
 #     unavailable, the API unreachable, a SHA GitHub has never seen (you did not
 #     push), no workflow run and no check run at all (Actions disabled, or no workflow
 #     triggered), every run concluded without running anything, or a run still in
