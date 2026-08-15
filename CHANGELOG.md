@@ -43,6 +43,66 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/sekai-upgrade` records an adoption only after the instance's own CI is green on
+  the merged tree.** The bump used to run inside the pre-push commit sequence, right
+  after `npm run build` — so by construction no CI run existed at the moment
+  `FRAMEWORK-VERSION` was written, and `npm run build` is a strict subset of what the
+  workflow runs. On the v1.1.5 adoption that gap was not theoretical: the marker
+  advertised the new release for about four hours while the adopted head was failing a
+  CI-only gate, and a write cannot be moved back after its own verification.
+
+  The skill now pushes the merged branch, reads the conclusion GitHub recorded for that
+  **exact head SHA** (never by branch name — a branch can advance between the push and
+  the poll), and writes the marker only on a green one. A failing conclusion names the
+  failing check and leaves the marker at the pre-merge value `package-state.mjs`
+  restored. An unreadable one — no remote, `gh` unavailable, the API unreachable, a SHA
+  GitHub has never seen, no check run at all (Actions disabled, or no workflow
+  triggered), a run still in flight — stops and says which case it hit. **"No run
+  found" is never treated as success.** Adopting anyway requires
+  `--override "<reason>"`, which is recorded in the run output and on the commit.
+
+  New helper `scripts/upgrade/ci-verified-bump.mjs`, bootstrapped from the target tag
+  like every other upgrade helper. `npm run upgrade:check` gains case 16 (green, red,
+  every unreadable shape, the recorded override, and the usage contract) and
+  `npm run upgrade:selftest` proves it non-vacuous. `npm run upgrade-sequence:check` is
+  a new gate deriving the documented sequence from the skill, so the spec and the
+  runbook cannot describe an upgrade the skill does not perform.
+
+  This step reaches the network mid-upgrade, and on an instance the push it requires
+  **deploys**. That is deliberate: an instance has local and production sharing one
+  build and no staging tier, so verifying against the tier that exists beats recording
+  an adoption nothing checked.
+
+- **The upgrade sweeps derived artifacts stranded at a retired path.** When v1.1.5 moved
+  the corpus artifact to `workers/lib/vectors.json` the `.gitignore` line moved with it,
+  so every instance that had run `npm run embeddings:build` before upgrading kept an
+  untracked ~88KB `workers/chat/vectors.json` holding every article's title, URL, and
+  body text. Both machine gates skip it by basename, so nothing saw it — and being
+  untracked, it is also what makes the *next* upgrade's clean-tree preflight fail.
+
+  New helper `scripts/upgrade/stale-artifacts.mjs`, run before the merge. It removes a
+  retired path only when the file is untracked **and** its bytes really are that
+  artifact; a tracked file or one whose bytes are something else is reported by path and
+  left alone. `npm run upgrade:check` case 17 covers all four shapes.
+
+### Upgrade note
+
+Two things change in how you run an upgrade, and neither touches `place.config.ts`:
+
+1. **The version bump now needs a push first.** `/sekai-upgrade` pushes the merged
+   branch, waits for your CI, and bumps `FRAMEWORK-VERSION` only if that run is green.
+   If your instance's CI is unreachable (Actions disabled, no remote, offline) the
+   upgrade stops with the marker unchanged rather than recording an unverified
+   adoption; pass `--override "<reason>"` to the bump helper to adopt anyway, and the
+   reason is kept in the commit. On an instance, that push deploys.
+2. **A stale `workers/chat/vectors.json` is removed for you.** If you upgraded to
+   v1.1.5 and followed its Upgrade note you already deleted it and nothing happens. If
+   you did not, this upgrade removes it, reports the path it removed, and leaves
+   anything else at that path alone. Your corpus at `workers/lib/vectors.json` is
+   untouched.
+
 ## [1.1.5] — 2026-08-13
 
 Adds a remote MCP server, an /ai page, a /kb/agent.md boot file, and an opt-in CI corpus-refresh workflow; moves corpus retrieval to shared workers/lib/ and fixes llms.txt brand naming.

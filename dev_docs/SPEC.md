@@ -75,8 +75,12 @@ buys conflict-free upgrades, not because the local edit is forbidden.
 `VERSION` records an instance's own release. `FRAMEWORK-VERSION` records the
 adopted Sekai release. The template carries only `FRAMEWORK-VERSION`; init creates
 adopter `VERSION`. Each repository's npm manifest mirrors its own release SSOT without
-the leading `v`. The `/sekai-upgrade` skill wraps fetch → capture adopter package state →
-merge tag → reconcile mixed-ownership manifests → build-verify → conflict report.
+the leading `v`. The `/sekai-upgrade` skill wraps
+fetch tags → capture adopter package state → sweep retired artifact paths → merge the tag → reconcile mixed-ownership manifests → conflict report → build-verify → push the merged branch → read the CI conclusion for that head → bump FRAMEWORK-VERSION.
+The marker moves only on a green conclusion for that exact head SHA: an adoption is
+what the marker records, and `npm run build` is a strict subset of the instance's CI,
+so a locally-green merge can and did ship a red adopted tree. `npm run
+upgrade-sequence:check` derives this sentence from the skill.
 Framework and instances use the same directory shape except for adopter-only `VERSION`
 and the maintainer docs, which adoption removes:
 

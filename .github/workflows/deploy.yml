@@ -74,6 +74,19 @@ jobs:
       - name: Self-test — the maintainer-doc guard fails on every planted defect class
         run: npm run framework-docs:selftest
 
+      # The upgrade sequence is stated in three places — the skill that performs it,
+      # the engineering spec that summarizes it, and the runbook that hand-drives it.
+      # This derives it from the skill and fails when either other document describes
+      # a different upgrade, or when the bump escapes the CI-verified helper. Prose
+      # about this exact sequence has already been believed over the code once: the
+      # spec said "build-verify" while the skill wrote the version marker in the same
+      # breath, so no CI run existed at bump time and one adoption recorded a release
+      # whose merged tree was red.
+      - name: Upgrade-sequence statements match the skill
+        run: npm run upgrade-sequence:check
+      - name: Self-test — the upgrade-sequence guard fails on every planted defect class
+        run: npm run upgrade-sequence:selftest
+
       # The CI-deploy exception (corpus-refresh.yml is the one workflow that deploys a
       # Worker). Asserts the four properties that exception was granted on — no
       # pull-request trigger, every credential step gated on the opt-in, no write scope

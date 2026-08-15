@@ -13,6 +13,8 @@
     "upgrade:check": "bash scripts/upgrade/check-upgrade-state.sh",
     "upgrade:selftest": "bash scripts/upgrade/check-upgrade-state.sh --selftest",
     "upgrade:package-selftest": "node scripts/upgrade/check-package-state.mjs",
+    "upgrade-sequence:check": "node scripts/ci/check-upgrade-sequence-docs.mjs",
+    "upgrade-sequence:selftest": "node scripts/ci/check-upgrade-sequence-docs.mjs --selftest",
     "dev": "npm run prebuild && astro dev",
     "sync": "bash scripts/core/sync.sh",
     "prebuild": "npm run prebuild:sync && run-p prebuild:kb-index prebuild:search prebuild:content-dates prebuild:git-info prebuild:related prebuild:changelog prebuild:map-markers prebuild:dashboard && npm run prebuild:latest",

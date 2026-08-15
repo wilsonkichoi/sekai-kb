@@ -47,3 +47,26 @@ run explicitly through `/sekai-release` (ADR 007).
   it costs contributors an upstream-first habit.
 - The fork-vs-rewrite failure mode cannot structurally recur between sekai-kb and its
   instances.
+
+## Addendum (2026-08-15): the framework-version bump moves behind CI
+
+The sequence above ends "build-verify → conflict report → framework-version bump", and
+that ordering is what made the marker unreliable. `npm run build` is a strict subset of
+what an instance's CI runs, and the bump sat inside the same pre-push commit sequence —
+so at the moment `FRAMEWORK-VERSION` was written, no CI run for that tree existed by
+construction. On the v1.1.5 adoption the marker advertised the release for about four
+hours while the merged head was failing a CI-only gate, and a write cannot be moved back
+after its own verification.
+
+From v1.1.6 the skill pushes the merged branch, reads the conclusion GitHub recorded for
+that **exact head SHA**, and writes the marker only on a green one
+(`scripts/upgrade/ci-verified-bump.mjs`). A non-green conclusion, and every shape where
+no conclusion can be read at all, leave the marker at the pre-merge value; adopting
+anyway requires an explicit `--override "<reason>"` that is recorded in the run output
+and on the commit.
+
+This decision's substance is unchanged — instances still track immutable tags, and the
+merge is still deterministic. What changed is when the adoption is *recorded*. The
+sequence is no longer restated here: `.agents/skills/sekai-upgrade/SKILL.md` declares it
+and `npm run upgrade-sequence:check` derives every other statement of it from that
+declaration, so the paragraph above is history rather than a current claim.

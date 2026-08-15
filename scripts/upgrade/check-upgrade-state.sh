@@ -174,6 +174,45 @@
 #       recommends, so an instance that upstreamed its edit meets it on the very
 #       release that brings the edit back.
 #
+# Case 16 covers the fifth helper, `scripts/upgrade/ci-verified-bump.mjs`, which owns
+# the one write case 12 leaves open — the post-verification bump itself:
+#
+#   node scripts/upgrade/ci-verified-bump.mjs bump --target <tag|vX.Y.Z> [--repo <dir>]
+#     [--remote <name>] [--poll-seconds <n>] [--timeout-seconds <n>] [--override <reason>]
+#
+#   The marker moves only after the instance's own CI has reported a conclusion for
+#   the EXACT head SHA of the merged tree. Exit 0 green (written and committed) / 1
+#   non-green (untouched) / 3 no conclusion readable (untouched) / 2 usage.
+#
+#  16a. A green conclusion bumps, commits, and the bump commit sits directly on the
+#       verified head — the marker describes the tree CI actually saw.
+#  16b. A failing conclusion leaves the marker at the pre-merge value case 12 restored,
+#       names the failing check, and says what to do next.
+#  16c. Every unreadable shape stops instead of guessing: no check run for the SHA
+#       (Actions disabled, or no workflow triggered), a network failure, a SHA GitHub
+#       has never seen (the merge was not pushed), a run still in flight past the
+#       deadline, and no remote configured at all. "No run found" is never success.
+#  16d. A maintainer override needs an explicit reason, which is recorded in the run
+#       output and on the commit that carries the unverified bump.
+#  16e. Usage: missing --target, an unknown flag, and an unknown subcommand all refuse
+#       without touching the marker.
+#
+#   `gh` is stubbed on PATH and logs its arguments, so the fixtures also pin that the
+#   conclusion is resolved by head SHA and never by branch name — a branch can advance
+#   between the push and the poll.
+#
+# Case 17 covers the sixth helper, `scripts/upgrade/stale-artifacts.mjs`:
+#
+#   node scripts/upgrade/stale-artifacts.mjs report [--repo <dir>]
+#   node scripts/upgrade/stale-artifacts.mjs sweep  [--repo <dir>]
+#
+#   A corpus artifact left at a retired path is untracked and no longer gitignored, so
+#   it holds every article's text where no gate can see it (both machine gates skip it
+#   by basename) and it makes the next upgrade's clean-tree preflight fail. `sweep`
+#   removes it only when it is untracked AND its bytes really are that artifact;
+#   anything else at that path — a hand-written file, a tracked one — is reported by
+#   path and never deleted.
+#
 # Three option-contract checks close the loop from the other side:
 #
 #   - `reconcile` must REJECT `--from-tag` (exit 2). Reconciliation derives from the
@@ -192,7 +231,7 @@
 #     an adopter reading a list missing the tree their edit is in.
 #
 # `--selftest` proves the suite is non-vacuous: it re-runs cases 1, 2, 6, 7, 8, 9,
-# 10, 11, 12, 12c, 13, 14, 15a and 15f with their load-bearing step DELIBERATELY SKIPPED and
+# 10, 11, 12, 12c, 13, 14, 15a, 15f, 16 and 17 with their load-bearing step DELIBERATELY SKIPPED and
 # requires each
 # case's own assertions to FAIL. A skipped run that passes means the case
 # cannot detect the regression it exists to guard, and --selftest exits nonzero. No
@@ -2936,6 +2975,414 @@ case_divergence_usage() { # workdir
 }
 
 # ---------------------------------------------------------------------------
+# Case 16 — the bump happens only after the instance's own CI has gone green on
+# the merged tree (`scripts/upgrade/ci-verified-bump.mjs`).
+#
+#   node scripts/upgrade/ci-verified-bump.mjs bump --target <tag|vX.Y.Z> [--repo <dir>]
+#     [--remote <name>] [--poll-seconds <n>] [--timeout-seconds <n>] [--override <reason>]
+#
+#   Exit 0 = a green conclusion was read for the exact head SHA and the marker was
+#   written and committed; 1 = a non-green conclusion, marker untouched; 3 = no
+#   conclusion could be read at all, marker untouched; 2 = usage.
+#
+# Case 12 pins the other half of this contract: the merge itself never moves the
+# marker. Before this case the step that moved it ran `npm run build` and wrote the
+# file in the same breath, so no CI run existed at bump time by construction and the
+# marker could — and on one real adoption did — advertise a release whose merged tree
+# was red.
+#
+# `gh` is stubbed on PATH rather than reached over the network: the point under test
+# is the DECISION the helper makes from a conclusion, and every scenario below is a
+# real answer GitHub gives. The stub also logs its arguments, which is what pins
+# "resolved by head SHA, never by branch name" — a branch can advance between the push
+# and the poll, and the marker must describe the tree that was actually verified.
+# ---------------------------------------------------------------------------
+
+BUMP_HELPER_SRC="$ROOT/scripts/upgrade/ci-verified-bump.mjs"
+BUMP_HELPER="$TMP/helper/ci-verified-bump.mjs"
+if [ -f "$BUMP_HELPER_SRC" ]; then
+  cp "$BUMP_HELPER_SRC" "$BUMP_HELPER"
+fi
+
+STALE_HELPER_SRC="$ROOT/scripts/upgrade/stale-artifacts.mjs"
+STALE_HELPER="$TMP/helper/stale-artifacts.mjs"
+if [ -f "$STALE_HELPER_SRC" ]; then
+  cp "$STALE_HELPER_SRC" "$STALE_HELPER"
+fi
+
+# A stubbed `gh` answering the one endpoint the helper calls, driven by
+# $GH_STUB_SCENARIO and logging every invocation to $GH_STUB_LOG. Each scenario is a
+# real GitHub answer: a completed green check set, a completed set with one failure,
+# a commit with no check runs at all (Actions disabled on the repository, or no
+# workflow triggered by the push), a run still in flight, a SHA GitHub has never seen
+# (the merge was not pushed), and a network failure.
+write_gh_stub() { # bindir
+  mkdir -p "$1"
+  cat > "$1/gh" <<'GHSTUB'
+#!/usr/bin/env bash
+set -u
+if [ -n "${GH_STUB_LOG:-}" ]; then printf '%s\n' "$*" >> "$GH_STUB_LOG"; fi
+case "${GH_STUB_SCENARIO:-green}" in
+  green)
+    printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    ;;
+  red)
+    printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"failure","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
+    ;;
+  empty)
+    printf '%s\n' '{"total_count":0,"check_runs":[]}'
+    ;;
+  pending)
+    printf '%s\n' '{"total_count":1,"check_runs":[{"name":"Test","status":"in_progress","conclusion":null,"html_url":"https://github.com/example-owner/example-instance/runs/1"}]}'
+    ;;
+  not-found)
+    printf '%s\n' 'gh: No commit found for SHA (HTTP 422)' >&2
+    exit 1
+    ;;
+  network)
+    printf '%s\n' 'dial tcp: lookup api.github.com: no such host' >&2
+    exit 1
+    ;;
+  *)
+    printf 'gh stub: unknown scenario\n' >&2
+    exit 64
+    ;;
+esac
+GHSTUB
+  chmod +x "$1/gh"
+}
+
+GH_STUB_BIN="$TMP/ghbin"
+write_gh_stub "$GH_STUB_BIN"
+
+# The bump helper, honoring the --selftest skip toggle. This IS the load-bearing step
+# for cases 16 and 17: skipping it must break the green sub-case's "the marker moved"
+# assertion AND the non-green sub-cases' exit-code assertions, so neither half can
+# decay into a test an absent helper would satisfy.
+run_bump() { # dir scenario label [args...]
+  local dir="$1" scenario="$2"
+  shift 2
+  shift   # label, unused beyond readability at the call site
+  if [ "${SKIP_RECONCILE:-0}" = "1" ]; then
+    echo "   (selftest: ci-verified-bump DELIBERATELY SKIPPED)"
+    HELPER_STATUS=0
+    HELPER_OUT=""
+    HELPER_ERR=""
+    return 0
+  fi
+  HELPER_STATUS=0
+  if [ ! -f "$BUMP_HELPER" ]; then
+    HELPER_STATUS=127
+    HELPER_OUT=""
+    HELPER_ERR="ci-verified-bump.mjs does not exist at $BUMP_HELPER_SRC"
+    return 0
+  fi
+  ( cd "$dir" \
+    && PATH="$GH_STUB_BIN:$PATH" GH_STUB_SCENARIO="$scenario" GH_STUB_LOG="$dir.gh-stub.log" \
+       node "$BUMP_HELPER" "$@" ) \
+    > "$TMP/stdout.txt" 2> "$TMP/stderr.txt" || HELPER_STATUS=$?
+  HELPER_OUT="$(cat "$TMP/stdout.txt")"
+  HELPER_ERR="$(cat "$TMP/stderr.txt")"
+}
+
+# One adopted instance, merged to fw-v2 and reconciled, standing exactly where the
+# upgrade's bump step begins: the merge is finalized and FRAMEWORK-VERSION still reads
+# the pre-merge value the package-state restore put back.
+build_bump_instance() { # framework-dir instance-dir label
+  local fw="$1" inst="$2" label="$3" state
+  git clone -q "$fw" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  printf 'v7.0.0\n' > "$inst/VERSION"
+  write_npm_manifests "$inst" "example-instance" versioned "7.0.0"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt Example framework at fw-v1"
+
+  state="$(run_package_capture "$inst" "$label")"
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  ( cd "$inst" && node "$PACKAGE_HELPER" reconcile "$state" ) >/dev/null 2>&1 \
+    || fail "$label: package-state reconcile failed while staging the fixture"
+  finalize_merge "$inst" "$label"
+  assert_framework_version "$inst" "v1.0.0" "$label" "before the bump step"
+
+  # A GitHub-shaped remote the stub can be asked about. Nothing is pushed to it: the
+  # helper learns whether GitHub has this SHA from the API answer, which is the only
+  # thing that is true of a real remote too.
+  git -C "$inst" remote remove origin 2>/dev/null || true
+  git -C "$inst" remote add origin https://github.com/example-owner/example-instance.git
+}
+
+# The SHA is passed in rather than read back from HEAD: a successful bump adds a commit,
+# so HEAD afterwards is NOT the commit that was verified — which is the whole point.
+assert_bump_queried_head_sha() { # dir verified-sha label
+  local log
+  log="$1.gh-stub.log"
+  [ -f "$log" ] || fail "$3: the helper never called gh at all"
+  grep -Fq "$2" "$log" \
+    || fail "$3: the helper did not ask about the verified head SHA $2; it asked: $(cat "$log")"
+  if grep -Eq '(--branch|/main\b|refs/heads/main)' "$log"; then
+    fail "$3: the helper resolved the conclusion by branch rather than by head SHA: $(cat "$log")"
+  fi
+  ok "$3: the conclusion was resolved for the exact head SHA, never by branch name"
+}
+
+case_ci_verified_bump() { # workdir
+  local work="$1" fw inst
+  fw="$work/fw"
+  mkdir -p "$work"
+  build_version_framework "$fw" versioned
+
+  # --- 16a: a green conclusion bumps, commits, and records the verified SHA -----
+  inst="$work/green"
+  build_bump_instance "$fw" "$inst" "case 16a"
+  local verified
+  verified="$(git -C "$inst" rev-parse HEAD)"
+  # `--target` takes the release being adopted; the fixture framework's tags are
+  # fw-vN, so the marker value is passed in its own v-prefixed form.
+  run_bump "$inst" green "case 16a" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 16a: bump on a green conclusion exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.1" "case 16a" "after a green conclusion"
+  assert_framework_version_committed "$inst" "v1.0.1" "case 16a"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 16a: the bump left the working tree dirty: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  [ "$(git -C "$inst" rev-parse HEAD^)" = "$verified" ] \
+    || fail "case 16a: the bump commit does not sit directly on the verified head $verified"
+  ok "case 16a: the bump commit sits on the exact tree CI verified"
+  assert_bump_queried_head_sha "$inst" "$verified" "case 16a"
+
+  # --- 16b: a red conclusion never bumps ---------------------------------------
+  inst="$work/red"
+  build_bump_instance "$fw" "$inst" "case 16b"
+  run_bump "$inst" red "case 16b" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16b: bump on a failing conclusion exited $HELPER_STATUS (expected 1); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16b" "after a failing conclusion (the captured pre-merge value)"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 16b: a refused bump still wrote to the tree: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Fq 'Test' \
+    || fail "case 16b: the refusal does not name the failing check: $HELPER_ERR"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Eqi 'fix|re-?run|resolve|push|again' \
+    || fail "case 16b: the refusal does not say what to do next: $HELPER_ERR"
+  ok "case 16b: a failing conclusion leaves the marker at its pre-merge value and names the failing check"
+
+  # --- 16c: unreadable CI stops rather than guessing ---------------------------
+  # Four distinct unreadable shapes, each of which a naive implementation would be
+  # tempted to read as "nothing failed, therefore green".
+  inst="$work/unreadable"
+  build_bump_instance "$fw" "$inst" "case 16c"
+
+  run_bump "$inst" empty "case 16c" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump with no check run for the head SHA exited $HELPER_STATUS (expected 3); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -Eqi 'disabl|no (workflow|run|check)' \
+    || fail "case 16c: the no-run diagnostic does not name what it hit: $HELPER_ERR"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after an empty check-run answer"
+
+  run_bump "$inst" network "case 16c" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump with a network failure exited $HELPER_STATUS (expected 3); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -qi 'network' \
+    || fail "case 16c: the network diagnostic does not name the network: $HELPER_ERR"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after a network failure"
+
+  run_bump "$inst" not-found "case 16c" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump on a SHA GitHub has never seen exited $HELPER_STATUS (expected 3); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -qi 'push' \
+    || fail "case 16c: the unknown-SHA diagnostic does not say the merge was never pushed: $HELPER_ERR"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after an unknown-SHA answer"
+
+  run_bump "$inst" pending "case 16c" bump --target v1.0.1 --timeout-seconds 0 --poll-seconds 1
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump on a run still in flight exited $HELPER_STATUS (expected 3); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -Eqi 'still|progress|complet|wait' \
+    || fail "case 16c: the in-flight diagnostic does not say the run had not concluded: $HELPER_ERR"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after an in-flight run"
+
+  # No remote at all: there is nowhere for a CI run to exist, and the helper must say
+  # that rather than treat the absence as success.
+  git -C "$inst" remote remove origin
+  run_bump "$inst" green "case 16c" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump with no remote exited $HELPER_STATUS (expected 3); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_ERR" | grep -qi 'remote' \
+    || fail "case 16c: the no-remote diagnostic does not name the missing remote: $HELPER_ERR"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "with no remote configured"
+  ok "case 16c: every unreadable shape stops with its own diagnostic and leaves the marker unchanged"
+
+  # --- 16d: the maintainer override is explicit and recorded -------------------
+  # DoD 3 allows an override only if it is explicit and appears in the run output.
+  # An override with no reason is a usage error, not a quiet yes.
+  inst="$work/override"
+  build_bump_instance "$fw" "$inst" "case 16d"
+  run_bump "$inst" red "case 16d" bump --target v1.0.1 --timeout-seconds 0 --override
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "case 16d: --override with no reason exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16d" "after a reasonless override"
+
+  run_bump "$inst" red "case 16d" bump --target v1.0.1 --timeout-seconds 0 \
+    --override "example-owner accepted the known-red check by hand"
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 16d: an explicit override exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.1" "case 16d" "after an explicit override"
+  printf '%s' "$HELPER_OUT" | grep -Fq 'example-owner accepted the known-red check by hand' \
+    || fail "case 16d: the override reason is not in the run output: $HELPER_OUT"
+  git -C "$inst" log -1 --format=%B | grep -Fq 'example-owner accepted the known-red check by hand' \
+    || fail "case 16d: the override reason is not recorded on the commit that carries the unverified bump"
+  ok "case 16d: an override needs an explicit reason and that reason survives in the output and the commit"
+
+  # --- 16e: usage contract ------------------------------------------------------
+  inst="$work/usage"
+  build_bump_instance "$fw" "$inst" "case 16e"
+  run_bump "$inst" green "case 16e" bump --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "case 16e: bump with no --target exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+  run_bump "$inst" green "case 16e" bump --target v1.0.1 --from-tag fw-v2 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "case 16e: bump with an unknown flag exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+  run_bump "$inst" green "case 16e" bogus-subcommand
+  [ "$HELPER_STATUS" -eq 2 ] \
+    || fail "case 16e: an unknown subcommand exited $HELPER_STATUS (expected 2); stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16e" "after every usage error"
+  ok "case 16e: missing --target, an unknown flag, and an unknown subcommand all refuse without touching the marker"
+}
+
+# ---------------------------------------------------------------------------
+# Case 17 — the stale corpus artifact a retired path leaves behind
+# (`scripts/upgrade/stale-artifacts.mjs`).
+#
+#   node scripts/upgrade/stale-artifacts.mjs report [--repo <dir>]
+#   node scripts/upgrade/stale-artifacts.mjs sweep  [--repo <dir>]
+#
+# When the corpus artifact moved to workers/lib/vectors.json the `.gitignore` line
+# moved with it, so any instance that had built a corpus before upgrading keeps an
+# untracked, no-longer-ignored copy at the old path holding every article's text.
+# Both machine gates skip it by basename, so nothing else in the repository sees it,
+# and it makes `git status --porcelain` non-empty — which is what the NEXT upgrade's
+# clean-tree preflight stops on.
+#
+# The sweep removes it only when it is really that artifact and really untracked.
+# Anything else at that path is REPORTED by path and never deleted: an upgrade that
+# deletes a file it has not identified is a worse defect than the one it is fixing.
+# ---------------------------------------------------------------------------
+
+STALE_ARTIFACT_PATH="workers/chat/vectors.json"
+
+run_stale() { # dir subcommand [args...]
+  local dir="$1"
+  shift
+  if [ "${SKIP_RECONCILE:-0}" = "1" ] && [ "$1" = "sweep" ]; then
+    echo "   (selftest: stale-artifacts sweep DELIBERATELY SKIPPED)"
+    HELPER_STATUS=0
+    HELPER_OUT=""
+    HELPER_ERR=""
+    return 0
+  fi
+  HELPER_STATUS=0
+  if [ ! -f "$STALE_HELPER" ]; then
+    HELPER_STATUS=127
+    HELPER_OUT=""
+    HELPER_ERR="stale-artifacts.mjs does not exist at $STALE_HELPER_SRC"
+    return 0
+  fi
+  node "$STALE_HELPER" "$@" --repo "$dir" > "$TMP/stdout.txt" 2> "$TMP/stderr.txt" || HELPER_STATUS=$?
+  HELPER_OUT="$(cat "$TMP/stdout.txt")"
+  HELPER_ERR="$(cat "$TMP/stderr.txt")"
+}
+
+# The shape scripts/core/build-embeddings.mjs really writes.
+write_corpus_artifact() { # file
+  mkdir -p "$(dirname "$1")"
+  cat > "$1" <<'EOF'
+{
+  "schema": 1,
+  "model": "@cf/example/embed",
+  "dim": 4,
+  "quant": "int8",
+  "builtAt": "2026-01-01T00:00:00.000Z",
+  "count": 1,
+  "chunks": [{ "slug": "example", "title": "Example article", "text": "Example body text." }],
+  "vectors": [[1, 2, 3, 4]]
+}
+EOF
+}
+
+case_stale_corpus_artifact() { # workdir
+  local work="$1" inst
+  inst="$work/instance"
+  mkdir -p "$work"
+  init_repo "$inst"
+  lay_instance_skeleton "$inst"
+  write_instance_agents_md "$inst/AGENTS.md" no-reference
+  mkdir -p "$inst/workers/chat" "$inst/workers/lib"
+  printf 'export default { fetch: () => new Response("ok") };\n' > "$inst/workers/chat/index.mjs"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Example instance"
+
+  # --- the real shape: untracked, at the retired path, with the artifact's bytes
+  write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
+  [ -n "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 17: fixture guard — the stale artifact does not even show up as untracked, so there is nothing to sweep"
+
+  run_stale "$inst" report
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 17: report exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
+  printf '%s' "$HELPER_OUT" | grep -Fq "$STALE_ARTIFACT_PATH" \
+    || fail "case 17: report does not name the stale artifact by path: $HELPER_OUT"
+  [ -f "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 17: report deleted the artifact; reporting writes nothing"
+  ok "case 17: report names the stale artifact by path and writes nothing"
+
+  run_stale "$inst" sweep
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 17: sweep exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  [ ! -e "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 17: the stale corpus artifact survives the sweep"
+  printf '%s' "$HELPER_OUT" | grep -Fq "$STALE_ARTIFACT_PATH" \
+    || fail "case 17: the sweep does not say which path it removed: $HELPER_OUT"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 17: the tree is still dirty after the sweep: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  ok "case 17: the sweep removes the untracked stale corpus artifact and says so by path"
+
+  # --- an empty tree is a no-op, not a failure
+  run_stale "$inst" sweep
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 17: a second sweep with nothing to remove exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
+  ok "case 17: a sweep with nothing to remove is a clean no-op"
+
+  # --- NOT the artifact: some other JSON parked at that path is reported, never deleted
+  mkdir -p "$inst/workers/chat"
+  printf '{ "note": "hand-written, not the corpus artifact" }\n' > "$inst/$STALE_ARTIFACT_PATH"
+  run_stale "$inst" sweep
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 17: sweep over an unrecognized file exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
+  [ -f "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 17: the sweep deleted a file at that path that is NOT the corpus artifact"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Fq "$STALE_ARTIFACT_PATH" \
+    || fail "case 17: an unrecognized file was neither removed nor reported by path"
+  ok "case 17: a file at that path that is not the corpus artifact is reported, never deleted"
+  rm -f "$inst/$STALE_ARTIFACT_PATH"
+
+  # --- TRACKED at that path: a different defect (worker-config:check owns it), and
+  # deleting a tracked file behind the user's back is never this helper's call.
+  write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
+  git -C "$inst" add -f -- "$STALE_ARTIFACT_PATH"
+  git -C "$inst" commit -q -m "Track the artifact (the shape this helper must refuse)"
+  run_stale "$inst" sweep
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 17: sweep over a tracked artifact exited $HELPER_STATUS (expected 0); stderr: '$HELPER_ERR'"
+  [ -f "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 17: the sweep deleted a TRACKED file"
+  [ -n "$(git -C "$inst" ls-files -- "$STALE_ARTIFACT_PATH")" ] \
+    || fail "case 17: the sweep untracked a committed path"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -qi 'track' \
+    || fail "case 17: a tracked artifact was not reported as tracked: $HELPER_OUT $HELPER_ERR"
+  ok "case 17: a tracked file at that path is reported and left alone"
+}
+
+# ---------------------------------------------------------------------------
 # Documented-bootstrap contract — the flags the adopter-facing docs tell a user to
 # run must be flags the helper actually accepts.
 #
@@ -3049,6 +3496,46 @@ EOF
     esac
   done
   ok "documented flags: both upgrade documents invoke the divergence report with --target and no option it rejects"
+}
+
+# The same derivation for the two helpers the CI-verified bump added. Both documents
+# invoke them, and `--target` is the option the whole bump depends on, so a rename that
+# left the prose behind would print a usage error at the one moment it is read — after
+# the merge has been pushed and before the marker has moved.
+case_new_helper_flags_documented() {
+  local doc cmd flag flags accepted used var src
+
+  accepted_options_for bump "$BUMP_HELPER_SRC" | grep -qx -- '--target' \
+    || fail "documented flags: the CI-verified bump helper's COMMAND_OPTIONS no longer gives bump --target"
+  accepted_options_for bump "$BUMP_HELPER_SRC" | grep -qx -- '--override' \
+    || fail "documented flags: the CI-verified bump helper's COMMAND_OPTIONS no longer gives bump --override, so the recorded-override path the docs describe cannot be taken"
+
+  for var in BUMP_HELPER STALE_HELPER; do
+    case "$var" in
+      BUMP_HELPER)  src="$BUMP_HELPER_SRC" ;;
+      STALE_HELPER) src="$STALE_HELPER_SRC" ;;
+    esac
+    for doc in $UPGRADE_DOCS; do
+      used=""
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        cmd="$(printf '%s' "$line" | sed -n "s/.*node \"\\\$$var\" *\([a-z][a-z-]*\).*/\1/p")"
+        [ -n "$cmd" ] || fail "documented flags: $(basename "$doc") invokes \$$var with no subcommand: $line"
+        accepted="$(accepted_options_for "$cmd" "$src")"
+        [ -n "$accepted$cmd" ] || fail "documented flags: \$$var has no command table for \`$cmd\`"
+        flags="$(printf '%s' "$line" | grep -o -- '--[a-z-]*' || true)"
+        for flag in $flags; do
+          printf '%s\n' "$accepted" | grep -qx -- "$flag" \
+            || fail "documented flags: $(basename "$doc") tells the user to pass $flag to \`$cmd\`, which \$$var's option table does not accept"
+        done
+        used="$used $cmd"
+      done <<EOF
+$(grep -- "node \"\$$var\"" "$doc")
+EOF
+      [ -n "$used" ] || fail "documented flags: $(basename "$doc") never invokes \$$var, so the step it performs is undocumented there"
+    done
+  done
+  ok "documented flags: both upgrade documents invoke the CI-verified bump and the stale-artifact sweep with options their tables accept"
 }
 
 # The framework-owned roots the report walks are a statement the adopter-facing
@@ -3169,16 +3656,25 @@ run_all_cases() {
   echo "── option contract: the divergence report refuses rather than guessing ──"
   case_divergence_usage "$TMP/case15-usage"
   echo ""
+  echo "── case 16: the bump happens only after CI is green on the merged head ──"
+  case_ci_verified_bump "$TMP/case16"
+  echo ""
+  echo "── case 17: the stale corpus artifact at the retired path ──"
+  case_stale_corpus_artifact "$TMP/case17"
+  echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
   echo ""
   echo "── documented bootstrap: the docs' helper options are options the parser accepts ──"
   case_documented_flags_exist
   echo ""
+  echo "── documented bootstrap: the CI-verified bump and stale-artifact sweep options ──"
+  case_new_helper_flags_documented
+  echo ""
   echo "── documented roots: the docs name every framework-owned root the report walks ──"
   case_divergence_roots_documented
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, and the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes) hold on every fixture above."
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes), the CI-verified bump (green / red / every unreadable shape / recorded override), and the stale corpus-artifact sweep hold on every fixture above."
 }
 
 # Run one case with its load-bearing step skipped, in a subshell whose EXIT trap is
@@ -3219,7 +3715,13 @@ run_selftest() {
   # still rests on what the report must SAY, so it cannot decay into a test that a
   # helper printing nothing at all would pass.
   expect_case_to_fail case_divergence_converged "$TMP/selftest-case15f" "case 15f (divergence report, converged path)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a and 15f all fail when their load-bearing step is skipped."
+  # 16's non-green sub-cases assert that the marker did NOT move, which a skipped bump
+  # satisfies trivially. Running the whole case here is what keeps it non-vacuous: the
+  # skip toggle also forces the reported exit status to 0, so the red and unreadable
+  # sub-cases fail on their exit-code assertions rather than on the marker alone.
+  expect_case_to_fail case_ci_verified_bump "$TMP/selftest-case16" "case 16 (CI-verified bump)"
+  expect_case_to_fail case_stale_corpus_artifact "$TMP/selftest-case17" "case 17 (stale corpus artifact)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16 and 17 all fail when their load-bearing step is skipped."
 }
 
 main() {

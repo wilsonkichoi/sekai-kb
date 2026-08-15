@@ -114,8 +114,10 @@ the absent-safe contract in practice, not permission to omit an Upgrade note.
 ### 6. Verify the recorded framework version
 
 The detailed flow restores the old `FRAMEWORK-VERSION` during the merge and changes
-it only after `npm run build` passes. Read it back, compare it with the selected
-tag, and confirm the tag is an ancestor of the branch:
+it only after **your own CI** has reported green on the merged head you pushed —
+`npm run build` is a fast local filter, not the verification the adoption is
+recorded on. Read the marker back, compare it with the selected tag, and confirm the
+tag is an ancestor of the branch:
 
 ```bash
 test "$(cat FRAMEWORK-VERSION)" = "$TARGET_VERSION" \
@@ -125,6 +127,12 @@ git merge-base --is-ancestor "$TARGET" HEAD
 
 The successful read-back and ancestry check are the upgrade receipt. `VERSION`
 and `package.json.version` remain the adopter release version and do not change.
+
+The verified sequence, in full:
+
+```text
+fetch tags → capture adopter package state → sweep retired artifact paths → merge the tag → reconcile mixed-ownership manifests → conflict report → build-verify → push the merged branch → read the CI conclusion for that head → bump FRAMEWORK-VERSION
+```
 
 ---
 
@@ -291,18 +299,23 @@ comm -13 <(git ls-tree -r --name-only ORIG_HEAD -- knowledge/ | sort) \
   | while read -r f; do git rm -f -- "$f"; done
 ```
 
-Build-verify, finalize, record the version:
+Build-verify locally, finalize, push, and record the version only after CI has
+reported green on the pushed head — the same order as the routine flow below, for
+the same reason:
 
 ```bash
 npm run build
 git commit --no-edit
-# Until this line FRAMEWORK-VERSION still holds the OLD value that step 6 restored.
-# Assert the bump instead of assuming the write took: a silent failure here leaves
-# your instance reporting a framework version it never adopted.
-printf '%s\n' "$TARGET_VERSION" > FRAMEWORK-VERSION
+git push origin HEAD
+# Until the helper runs, FRAMEWORK-VERSION still holds the OLD value that step 6
+# restored. It writes the marker only on a green conclusion for this exact head SHA,
+# asserts the read-back, and commits it there; exit 1 = not green, exit 3 = no
+# conclusion could be read. Neither touches the file.
+BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
+git show "$TARGET":scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
+node "$BUMP_HELPER" bump --target "$TARGET"
 test "$(cat FRAMEWORK-VERSION)" = "$TARGET_VERSION" \
   || { echo "STOP: FRAMEWORK-VERSION is not $TARGET_VERSION after the bump"; exit 1; }
-git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> $TARGET_VERSION"
 ```
 
 From here on, upgrades are the routine flow below — no `--allow-unrelated-histories`
@@ -372,6 +385,19 @@ DIVERGENCE_HELPER="$(git rev-parse --git-dir)/sekai-framework-divergence.mjs"
 git show "$TARGET":scripts/upgrade/framework-divergence.mjs > "$DIVERGENCE_HELPER"
 node "$DIVERGENCE_HELPER" report --target "$TARGET"
 
+# 4e. Sweep retired artifact paths. A release that MOVES a derived artifact moves
+#     its .gitignore line with it, so if you built that artifact before the upgrade
+#     you keep an untracked copy at the old path that nothing ignores, nothing
+#     reads, and nothing regenerates. The corpus artifact holds every article's
+#     title, URL, and body text, and both machine gates skip it by BASENAME — so at
+#     the retired path it is unignored, unreviewed content in a code tree, and it is
+#     what makes step 1's clean-tree check fail on your next upgrade.
+#     A path is removed only when the file is untracked AND its bytes really are
+#     that artifact; anything else there is reported by path and left alone.
+STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"
+git show "$TARGET":scripts/upgrade/stale-artifacts.mjs > "$STALE_HELPER"
+node "$STALE_HELPER" sweep
+
 # 5. Merge the tag (never main). merge=ours keeps your content/config.
 git merge --no-ff "$TARGET" -m "chore: upgrade framework to $TARGET"
 
@@ -408,15 +434,40 @@ git diff --name-only --diff-filter=U
 #    git checkout --ours   -- <file> && git add <file>   # keep yours, knowingly
 #    git commit --no-edit                                # finalize the merge
 
-# 8. Build-verify, then record the newly adopted framework version. Until this
-#    point FRAMEWORK-VERSION still holds the OLD value that step 6 restored — that
-#    is the contract, not a bug. Assert the bump rather than assuming the write
-#    took effect.
+# 8. Build-verify locally. This is a fast filter, NOT the verification the adoption
+#    is recorded on: npm run build is a strict subset of what your CI runs, and the
+#    gates that live only in the workflow are the ones a framework merge is most
+#    likely to trip.
 npm run build
-printf '%s\n' "$TARGET_VERSION" > FRAMEWORK-VERSION
+
+# 9. Push the merged branch, then record the newly adopted framework version — in
+#    that order. Until the bump runs, FRAMEWORK-VERSION still holds the OLD value
+#    step 6 restored; that is the contract, not a bug. Commit anything step 7 or the
+#    starter-file reconcile left staged FIRST, so the head you push is the whole
+#    merged tree.
+#    On an instance, pushing main DEPLOYS (see DEPLOY.md §CI). That is the accepted
+#    cost of having no staging tier: the run this push triggers is the only place
+#    the merged tree is really verified.
+git diff --cached --quiet || git commit -m "chore: reconcile starter files for $TARGET"
+git push origin HEAD
+
+# 10. Bump only on a green conclusion for that exact head SHA — never by branch
+#     name, because a branch can advance between the push and the poll. The helper
+#     writes the marker, asserts the read-back, and commits it on the verified head.
+#     Exit 1 = CI is not green (it names the failing check). Exit 3 = no conclusion
+#     could be read at all: no remote, gh unavailable, the API unreachable, a SHA
+#     GitHub has never seen (you did not push), no check run at all (Actions
+#     disabled, or no workflow triggered), or a run still in flight. Both leave the
+#     marker alone. "No run found" is never success — do not write the file by hand.
+#     Adopting anyway is possible and must be recorded:
+#       node "$BUMP_HELPER" bump --target "$TARGET" --override "<why you accepted it>"
+BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
+git show "$TARGET":scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
+node "$BUMP_HELPER" bump --target "$TARGET"
+
+# 11. Read the marker back. The bump commit is not pushed for you.
 test "$(cat FRAMEWORK-VERSION)" = "$TARGET_VERSION" \
   || { echo "STOP: FRAMEWORK-VERSION is not $TARGET_VERSION after the bump"; exit 1; }
-git add FRAMEWORK-VERSION && git commit -m "chore: FRAMEWORK-VERSION -> $TARGET_VERSION"
 ```
 
 **New `place.config` keys never require surgery.** Every new config key defaults

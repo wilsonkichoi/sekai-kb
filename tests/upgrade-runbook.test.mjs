@@ -68,8 +68,22 @@ test('the adopter runbook explains absent-safe feature opt-in', () => {
   );
 });
 
-test('the adopter runbook verifies the FRAMEWORK-VERSION bump', () => {
-  assert.match(upgrade, /printf '%s\\n' "\$TARGET_VERSION" > FRAMEWORK-VERSION/);
+test('the adopter runbook gates the FRAMEWORK-VERSION bump on CI and verifies it', () => {
+  assert.match(
+    upgrade,
+    /node "\$BUMP_HELPER" bump --target "\$TARGET"/,
+    'the bump must go through the CI-verified helper, which reads the conclusion first',
+  );
+  assert.match(
+    upgrade,
+    /git show "\$TARGET":scripts\/upgrade\/ci-verified-bump\.mjs > "\$BUMP_HELPER"/,
+    'the bump helper is bootstrapped from the target tag like every other upgrade helper',
+  );
+  assert.doesNotMatch(
+    upgrade,
+    /(?:>|>>)\s*FRAMEWORK-VERSION\b/,
+    'a raw redirect into the marker is the retired form: it records an adoption nothing verified',
+  );
   assert.match(
     upgrade,
     /test "\$\(cat FRAMEWORK-VERSION\)" = "\$TARGET_VERSION"/,
