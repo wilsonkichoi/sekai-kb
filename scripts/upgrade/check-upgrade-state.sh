@@ -3460,6 +3460,30 @@ handoff_invocation() { # helper-basename — prints the subcommand
   ' "$ROOT/CHANGELOG.md"
 }
 
+# The clean-tree preflight of the skill RECEIVING this upgrade — the one that shipped
+# with the release being left. It is a bare `git status --porcelain` emptiness test with
+# no retired-artifact exception, because that exception is part of what the new release
+# adds and cannot be back-fitted into an immutable tag. Non-empty output = the upgrade
+# stops there, before the step that fetches and displays the target's Upgrade note.
+previous_release_step0_gate() { # instance — prints what the gate would stop on
+  git -C "$1" status --porcelain
+}
+
+# Whether the Upgrade note positions one helper's handoff before the upgrade
+# INVOCATION rather than inside it. Derived from the note's own lead sentence, because a
+# block placed inside the old flow sits behind the step 0 gate above and is unreachable
+# for the only adopter it is written for. Scoped to the paragraph that introduces the
+# block, so a "before you invoke" elsewhere in the note cannot satisfy it.
+handoff_runs_before_invocation() { # helper-basename
+  awk -v want="scripts/upgrade/$1" '
+    /^### Upgrade note/ { note = 1; next }
+    note && /^## / { exit }
+    !note { next }
+    /^\*\*[0-9]+\./ { lead = $0; next }
+    index($0, "git show") && index($0, want) { print lead; exit }
+  ' "$ROOT/CHANGELOG.md" | grep -qi 'before you invoke'
+}
+
 # A framework whose fw-v1 ships NO upgrade helpers at all and whose fw-v2 ships both
 # new ones — the shape of a release that introduces a step.
 build_handoff_framework() { # dir
@@ -3469,6 +3493,12 @@ build_handoff_framework() { # dir
   write_gitattributes "$fw"
   printf 'marker\n' > "$fw/.sekai-template"
   printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  # A tracked file in the directory that holds the retired path. Without it git has no
+  # tracked entry under `workers/`, collapses the whole untracked directory into a
+  # single `?? workers/` line, and the step 0 gate assertions below would be reading a
+  # fixture artifact instead of the shape a real instance presents.
+  mkdir -p "$fw/workers/chat"
+  printf 'export default { fetch: () => new Response("chat") };\n' > "$fw/workers/chat/index.js"
   printf 'v1.0.0\n' > "$fw/FRAMEWORK-VERSION"
   write_npm_manifests "$fw" "example-framework" versioned "1.0.0"
   git -C "$fw" add -A
@@ -3543,8 +3573,32 @@ case_first_upgrade_handoff() { # workdir
     || fail "case 18: fixture guard — the instance's own tree already carries upgrade helpers, so the first-upgrade shape is gone"
   ok "case 18: the instance's tree carries no upgrade helper, so only the tag can supply one"
 
-  # --- the pre-merge half: the note's sweep, run from the tag -------------------
+  # --- the entry path: the receiving skill's step 0 gate ------------------------
+  # The note's commands are only worth anything if an adopter REACHES them. The skill
+  # driving this upgrade is the one that shipped with the release being left, and its
+  # step 0 is a bare clean-tree preflight — `git status --porcelain` must be empty, with
+  # no exception for a retired artifact, because that exception is part of what this
+  # release adds. The artifact the note exists to clear is exactly what makes that gate
+  # non-empty, and the gate runs BEFORE the step that fetches and displays the note.
+  #
+  # So the two assertions below are the load-bearing pair: the gate must really block
+  # while the artifact is there (otherwise the note's placement proves nothing and this
+  # case is vacuous), and running the note's block BEFORE the invocation must clear it.
   write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
+  [ -n "$(previous_release_step0_gate "$inst")" ] \
+    || fail "case 18: the previous release's step 0 clean-tree gate does not trip on the retired artifact, so this case cannot prove the note is positioned to be reachable"
+  previous_release_step0_gate "$inst" | grep -Fq "$STALE_ARTIFACT_PATH" \
+    || fail "case 18: the step 0 gate trips on something other than the retired artifact: $(previous_release_step0_gate "$inst" | tr '\n' ' ')"
+  ok "case 18: the previous release's step 0 gate blocks on the retired artifact, before any step that could read the Upgrade note"
+
+  # The note must therefore place the sweep before the invocation, not partway through
+  # it. Derive that from the note rather than restating it: a block positioned inside
+  # the old flow is unreachable for precisely the adopter who needs it.
+  handoff_runs_before_invocation stale-artifacts.mjs \
+    || fail "case 18: the Upgrade note does not position the stale-artifacts handoff before the upgrade invocation, so the step 0 gate stops the adopter who needs it before the note is ever displayed"
+  ok "case 18: the Upgrade note positions the sweep before the invocation, ahead of that gate"
+
+  # --- the pre-merge half: the note's sweep, run from the tag -------------------
   run_handoff "$inst" fw-v2 stale-artifacts.mjs "$sweep_cmd"
   [ "$HELPER_STATUS" -eq 0 ] \
     || fail "case 18: the note's pre-merge handoff exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
@@ -3552,7 +3606,9 @@ case_first_upgrade_handoff() { # workdir
     || fail "case 18: the stale corpus artifact survives the handoff the Upgrade note prescribes, so the release does not clear it on its own adoption"
   [ -z "$(git -C "$inst" status --porcelain)" ] \
     || fail "case 18: the tree is not clean after the note's sweep, so the merge that follows still starts dirty: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
-  ok "case 18: the Upgrade note's pre-merge sweep clears the retired path on a tree that predates the helper"
+  [ -z "$(previous_release_step0_gate "$inst")" ] \
+    || fail "case 18: the previous release's step 0 gate still blocks after the note's sweep, so the adopter cannot start the upgrade the note belongs to"
+  ok "case 18: the Upgrade note's pre-merge sweep clears the retired path on a tree that predates the helper, and the step 0 gate that blocked now passes"
 
   # --- the merge, then the note's bump half -------------------------------------
   state="$(run_package_capture "$inst" "case 18")"

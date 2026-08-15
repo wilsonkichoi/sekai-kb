@@ -20,6 +20,11 @@
 //   - a declared stage does not appear in the skill's own body below the declaration
 //     (the declaration would be describing an upgrade the skill does not perform);
 //   - the stages appear in the skill body in a different order than declared;
+//   - the skill's step 0 preflight stops on a dirty tree with no exception for an
+//     untracked artifact at a retired path, or carries the exception without naming the
+//     step that removes it -- the preflight would then stop on the very file a later
+//     stage exists to sweep, and it stops before the step that displays the target's
+//     Upgrade note, which is the only channel an older skill can be handed a fix on;
 //   - dev_docs/SPEC.md does not carry the declared sequence verbatim;
 //   - docs/runbook/UPGRADE.md does not name every declared stage;
 //   - either adopter-facing document writes FRAMEWORK-VERSION with a raw shell
@@ -126,6 +131,49 @@ function checkSkillBody(skill, { stages, endsAt }) {
     }
     previous = at;
     previousStage = stage;
+  }
+}
+
+/**
+ * The stage that removes a retired artifact and the preflight that stops on a dirty
+ * tree have to agree, or the skill blocks on exactly the file it later sweeps.
+ *
+ * This is the ordering that produced the release-boundary blocker: a retired artifact
+ * is untracked, so `git status --porcelain` reports it, so a preflight that stops on
+ * any output stops before the step that would remove it -- and before the step that
+ * fetches and displays the target's Upgrade note, which is the only place an older
+ * skill can be handed the fix. Nothing can repair that in a shipped tag, so the one
+ * thing this gate can do is keep every FUTURE release's preflight carrying the
+ * exception, and keep it pointing at the step that actually owns the removal.
+ */
+function checkPreflightExemptsSweptArtifact(skill, { stages }) {
+  const sweep = stages.find((stage) => /sweep .*artifact/i.test(stage));
+  if (!sweep) return;
+  const heading = new RegExp(String.raw`^## (\S+)\. ${sweep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'im')
+    .exec(skill);
+  if (!heading) {
+    failure(`${SKILL}: declares the "${sweep}" stage but carries no numbered step for it, so the preflight has nothing to defer to`);
+    return;
+  }
+  const preflight = /^## 0\.[\s\S]*?(?=^## )/m.exec(skill);
+  if (!preflight) {
+    failure(`${SKILL}: carries no \`## 0.\` preflight section to check the clean-tree stop in`);
+    return;
+  }
+  const text = preflight[0];
+  if (!/untracked[\s\S]{0,200}retired|retired[\s\S]{0,200}untracked/i.test(text)) {
+    failure(
+      `${SKILL}: the step 0 preflight stops on a dirty tree with no exception for an `
+      + `untracked artifact at a retired path. That artifact is what step ${heading[1]} `
+      + 'removes, so the preflight would stop on the very file the upgrade exists to sweep',
+    );
+  }
+  if (!text.includes(`step ${heading[1]}`)) {
+    failure(
+      `${SKILL}: the step 0 preflight does not defer the retired artifact to step `
+      + `${heading[1]}, the step that identifies and removes it. Without the pointer the `
+      + 'exception reads as permission to delete by hand',
+    );
   }
 }
 
@@ -287,6 +335,7 @@ export function check({ skill, spec, runbook, changelog }) {
     return { failures: [...failures], stages: [] };
   }
   checkSkillBody(skill, declaration);
+  checkPreflightExemptsSweptArtifact(skill, declaration);
   if (spec === null) {
     if (TEMPLATE_MODE) {
       failure(`${SPEC}: missing in a template checkout, where the framework authors it`);
@@ -319,6 +368,23 @@ const SELFTEST_DEFECTS = [
         /## 3d\. Sweep retired artifact paths[\s\S]*?(?=\n## 4\.)/,
         '## 3d. Removed step\n\n',
       ),
+    }),
+  },
+  {
+    label: 'the preflight stops on a dirty tree with no exception for the artifact it later sweeps',
+    mutate: (docs) => ({
+      ...docs,
+      skill: docs.skill.replace(
+        /One exception, and it is not a[\s\S]*?do not delete anything by hand here\./,
+        '',
+      ),
+    }),
+  },
+  {
+    label: 'the preflight carries the exception but no longer names the step that owns the removal',
+    mutate: (docs) => ({
+      ...docs,
+      skill: docs.skill.replace(/^## 0\.[\s\S]*?(?=^## )/m, (section) => section.replaceAll('step 3d', 'a later step')),
     }),
   },
   {

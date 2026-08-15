@@ -106,6 +106,18 @@ tags, never framework `main`** (ADR 004, SPEC
   handoff the way an adopter would — on a fixture whose own tree carries no upgrade
   helper at all — and proves both steps take effect from the tag alone.
 
+  A handoff also has to be positioned somewhere the receiving skill actually reaches,
+  which is the sharper half of the same rule. The retired corpus artifact is untracked,
+  so it makes `git status --porcelain` non-empty, so a v1.1.5-or-older step 0 stops on
+  it — before the step that fetches and displays this note. A sweep handed over as a
+  mid-flow step is therefore unreachable for precisely the adopter who needs it, which
+  is why the note above places it before the invocation. Case 18 asserts both directions
+  against the receiving skill's gate: it must block while the artifact is there, and
+  pass once the note's block has run. For every release after this one the gate is in
+  the skill instead of the note — `upgrade-sequence:check` now fails a preflight that
+  stops on a dirty tree without exempting an untracked artifact at a retired path, or
+  that exempts it without naming the step that owns the removal.
+
 ### Upgrade note
 
 Nothing here touches `place.config.ts`. Two things change in how an upgrade runs, and
@@ -115,15 +127,18 @@ shipped with v1.1.5, and they do not know these steps exist. The rewritten skill
 reaches your tree with the merge, and a running invocation does not reload itself. So
 this release hands the two steps over here, where your upgrade already reads them — a
 v1.1.5-or-older `/sekai-upgrade` shows this note before merging, and the manual flow in
-`docs/runbook/UPGRADE.md` sends you here too.
+`docs/runbook/UPGRADE.md` sends you here too. Step 1 below is positioned **before** the
+invocation rather than inside it, because the one stop that predates reading this note
+is the step 0 clean-tree preflight, and the artifact step 1 clears is what trips it.
 
 **If your installed `/sekai-upgrade` is already v1.1.6 or newer it performs both itself**
 (its steps 3d and 9). Run the blocks below only when upgrading *to* v1.1.6 from an
 earlier release; running them twice is not harmful (the sweep finds nothing, the bump
 refuses a marker that already moved) but it is not needed.
 
-**1. Before the merge — sweep the stale corpus artifact.** Run this from the instance
-repo root after the pre-merge classify and divergence steps, and before `git merge`:
+**1. Before you invoke the upgrade at all — sweep the stale corpus artifact.** Run this
+from the instance repo root *before* `/sekai-upgrade` or the runbook's merge sequence,
+not partway through one:
 
 ```bash
 STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"
@@ -131,13 +146,33 @@ git show sekai-kb-v1.1.6:scripts/upgrade/stale-artifacts.mjs > "$STALE_HELPER"
 node "$STALE_HELPER" sweep
 ```
 
+*If your upgrade already stopped, saying the working tree is not clean and naming
+`workers/chat/vectors.json`, that is this — run the block above and invoke it again.*
+
 When v1.1.5 moved the corpus artifact to `workers/lib/vectors.json` the `.gitignore`
 line moved with it, so an instance that had built a corpus before that upgrade kept an
-untracked ~88KB `workers/chat/vectors.json` at the retired path. The sweep removes it
-only when the file is untracked **and** its bytes really are that artifact; a tracked
-file, or one whose bytes are something else, is reported by path and left for you to
-decide. If you already deleted it by hand, this says there was nothing to remove. Your
-current corpus at `workers/lib/vectors.json` is never touched.
+untracked ~88KB `workers/chat/vectors.json` at the retired path. Nothing writes it,
+reads it, or ignores it any more — but `git status --porcelain` now reports it, and a
+v1.1.5-or-older `/sekai-upgrade` stops on that in its **step 0 preflight**, which runs
+*before* the step that fetches and displays this note. That ordering is why this block
+belongs before the invocation rather than inside it, and why the two remedies your
+installed skill offers at that stop are both wrong here:
+
+- **Do not commit it.** At the retired path it is no longer ignored, so a commit writes
+  ~88KB of unreviewed article text — every title, URL, and body — into your repository.
+- **Do not `git stash` it.** Plain `git stash` does not touch untracked files, so the
+  tree stays dirty and the next invocation stops in exactly the same place.
+
+The sweep removes the file only when it is untracked **and** its bytes really are that
+artifact; a tracked file, or one whose bytes are something else, is reported by path and
+left for you to decide. Run `node "$STALE_HELPER" report` first if you want the
+disposition without the removal — it writes nothing. If you already deleted it by hand,
+the sweep says there was nothing to remove. Your current corpus at
+`workers/lib/vectors.json` is never touched.
+
+From v1.1.6 onward no adopter meets this stop again: the rewritten step 0 recognizes an
+untracked artifact at a retired path as the one thing that is not work to commit or
+stash, names it, and lets step 3d remove it.
 
 **2. Instead of the old bump step — push first, then bump through the helper.** Your
 installed step 9 (runbook step 8) writes `FRAMEWORK-VERSION` directly, before anything
