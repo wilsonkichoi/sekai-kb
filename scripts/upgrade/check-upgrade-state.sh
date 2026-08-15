@@ -3233,6 +3233,26 @@ case_ci_verified_bump() { # workdir
     || fail "case 16d: the override reason is not recorded on the commit that carries the unverified bump"
   ok "case 16d: an override needs an explicit reason and that reason survives in the output and the commit"
 
+  # The override must reach the UNREADABLE shapes too, not just a red conclusion —
+  # that is the case DoD 3 and the Upgrade note describe (Actions disabled, offline,
+  # no remote). "No remote" is the one where the repository cannot even be resolved,
+  # so an implementation that resolves it before entering the override path exits 3
+  # here and records nothing, on exactly the instance with no other way through.
+  inst="$work/override-unreadable"
+  build_bump_instance "$fw" "$inst" "case 16d"
+  git -C "$inst" remote remove origin
+  run_bump "$inst" green "case 16d" bump --target v1.0.1 --timeout-seconds 0 \
+    --override "no remote on this clone; example-owner verified the merged tree by hand"
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 16d: an override with no remote configured exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.1" "case 16d" "after an override with no remote"
+  assert_framework_version_committed "$inst" "v1.0.1" "case 16d"
+  printf '%s' "$HELPER_OUT" | grep -Fq 'no remote on this clone' \
+    || fail "case 16d: the no-remote override reason is not in the run output: $HELPER_OUT"
+  git -C "$inst" log -1 --format=%B | grep -Fq 'no remote on this clone' \
+    || fail "case 16d: the no-remote override reason is not recorded on the commit"
+  ok "case 16d: an override records the adoption even when the repository itself cannot be resolved"
+
   # --- 16e: usage contract ------------------------------------------------------
   inst="$work/usage"
   build_bump_instance "$fw" "$inst" "case 16e"
@@ -3292,21 +3312,31 @@ run_stale() { # dir subcommand [args...]
   HELPER_ERR="$(cat "$TMP/stderr.txt")"
 }
 
-# The shape scripts/core/build-embeddings.mjs really writes.
+# The shape scripts/core/build-embeddings.mjs really writes — DERIVED from that
+# builder's own `buildArtifact`, never hand-written here.
+#
+# Hand-writing it is what let the first version of this case pass while the sweep was
+# broken: the fixture guessed `vectors` as an array of arrays, the recognizer checked
+# for an array, the two agreed, and neither matched the file a real instance carries —
+# where `packVectors` base64-encodes every int8 vector into ONE string. A fixture that
+# fabricates the artifact can only ever test the recognizer against itself.
 write_corpus_artifact() { # file
   mkdir -p "$(dirname "$1")"
-  cat > "$1" <<'EOF'
-{
-  "schema": 1,
-  "model": "@cf/example/embed",
-  "dim": 4,
-  "quant": "int8",
-  "builtAt": "2026-01-01T00:00:00.000Z",
-  "count": 1,
-  "chunks": [{ "slug": "example", "title": "Example article", "text": "Example body text." }],
-  "vectors": [[1, 2, 3, 4]]
-}
-EOF
+  ROOT="$ROOT" OUT="$1" node --input-type=module -e '
+    import { writeFileSync } from "node:fs";
+    import { pathToFileURL } from "node:url";
+    const builder = `${process.env.ROOT}/scripts/core/build-embeddings.mjs`;
+    const { buildArtifact } = await import(pathToFileURL(builder).href);
+    const artifact = buildArtifact({
+      chunks: [{ id: "example#0", slug: "example", title: "Example article", text: "Example body text." }],
+      vectors: [[1, 2, 3, 4]],
+      builtAt: "2026-01-01T00:00:00Z",
+    });
+    if (typeof artifact.vectors !== "string") {
+      throw new Error("the corpus builder no longer packs vectors into one base64 string; stale-artifacts.mjs recognize() must follow");
+    }
+    writeFileSync(process.env.OUT, `${JSON.stringify(artifact)}\n`);
+  ' || fail "case 17: could not derive the corpus artifact from scripts/core/build-embeddings.mjs"
 }
 
 case_stale_corpus_artifact() { # workdir
@@ -3325,6 +3355,11 @@ case_stale_corpus_artifact() { # workdir
   write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
   [ -n "$(git -C "$inst" status --porcelain)" ] \
     || fail "case 17: fixture guard — the stale artifact does not even show up as untracked, so there is nothing to sweep"
+  # Fixture guard: the bytes under test really are the packed shape, on one line, and
+  # not the array-of-arrays a hand-written fixture guesses. Without this the case can
+  # go back to testing the recognizer against a fabrication that agrees with it.
+  grep -q '"vectors":"' "$inst/$STALE_ARTIFACT_PATH" \
+    || fail "case 17: fixture guard — the derived artifact does not carry \`vectors\` as a packed string, so this case no longer exercises the shape a real instance holds"
 
   run_stale "$inst" report
   [ "$HELPER_STATUS" -eq 0 ] \
@@ -3365,6 +3400,19 @@ case_stale_corpus_artifact() { # workdir
   ok "case 17: a file at that path that is not the corpus artifact is reported, never deleted"
   rm -f "$inst/$STALE_ARTIFACT_PATH"
 
+  # --- the plausible-but-wrong shape: manifest fields with `vectors` as an array.
+  # No release ever wrote this, and recognizing it would widen a DELETION criterion to
+  # a file the framework never produced. Pinned here because the inverse mistake —
+  # recognizing ONLY this shape — is what made the first version of this helper leave
+  # every real stale artifact in place.
+  printf '%s\n' '{"schema":"rag-v1","model":"@cf/example/embed","dim":4,"quant":"i8-unit","count":1,"chunks":[],"vectors":[[1,2,3,4]]}' \
+    > "$inst/$STALE_ARTIFACT_PATH"
+  run_stale "$inst" sweep
+  [ -f "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 17: the sweep deleted a file whose \`vectors\` is an array — a shape no release ever wrote"
+  ok "case 17: a shape the builder never wrote is not recognized, so it is never deleted"
+  rm -f "$inst/$STALE_ARTIFACT_PATH"
+
   # --- TRACKED at that path: a different defect (worker-config:check owns it), and
   # deleting a tracked file behind the user's back is never this helper's call.
   write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
@@ -3380,6 +3428,153 @@ case_stale_corpus_artifact() { # workdir
   printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -qi 'track' \
     || fail "case 17: a tracked artifact was not reported as tracked: $HELPER_OUT $HELPER_ERR"
   ok "case 17: a tracked file at that path is reported and left alone"
+}
+
+# ---------------------------------------------------------------------------
+# Case 18 — the release-boundary handoff: the upgrade INTO the release that adds a
+# step is driven by the skill that shipped with the release being LEFT.
+#
+# That skill has no step 3d and no CI-verified bump; the rewritten one arrives with
+# the merge, and a running invocation does not reload itself. The only text of the new
+# release the old one reads is the target's CHANGELOG entry, which every version of the
+# skill and of the runbook shows before merging — so that entry's `### Upgrade note`
+# carries the two steps as commands, and this case is the proof that those commands
+# WORK on a tree that predates both helpers.
+#
+# The division of labour with `npm run upgrade-sequence:check` is deliberate: that gate
+# proves the note SAYS it (a bootstrap and an invocation of the same variable, a
+# subcommand the option table declares, the bump after the push). This case reads the
+# subcommand back out of the note and runs it, so a note that says `report` where it
+# means `sweep` fails here on the artifact that survived rather than on a spelling.
+# ---------------------------------------------------------------------------
+
+# The subcommand the release's own Upgrade note tells an older skill to run one helper
+# with, read out of that note. Deriving it rather than restating it is what binds this
+# fixture to the document an adopter actually follows.
+handoff_invocation() { # helper-basename — prints the subcommand
+  awk -v want="scripts/upgrade/$1" '
+    /^### Upgrade note/ { note = 1; next }
+    note && /^## |^### / { exit }
+    note && index($0, "git show") && index($0, want) { armed = 1; next }
+    armed && $1 == "node" { print $3; exit }
+  ' "$ROOT/CHANGELOG.md"
+}
+
+# A framework whose fw-v1 ships NO upgrade helpers at all and whose fw-v2 ships both
+# new ones — the shape of a release that introduces a step.
+build_handoff_framework() { # dir
+  local fw="$1"
+  init_repo "$fw"
+  mkdir -p "$fw/src"
+  write_gitattributes "$fw"
+  printf 'marker\n' > "$fw/.sekai-template"
+  printf 'export const FRAMEWORK_APP = "fw-v1";\n' > "$fw/src/app.js"
+  printf 'v1.0.0\n' > "$fw/FRAMEWORK-VERSION"
+  write_npm_manifests "$fw" "example-framework" versioned "1.0.0"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v1"
+  git -C "$fw" tag fw-v1
+
+  mkdir -p "$fw/scripts/upgrade"
+  cp "$BUMP_HELPER_SRC" "$STALE_HELPER_SRC" "$fw/scripts/upgrade/"
+  printf 'export const FRAMEWORK_APP = "fw-v2";\n' > "$fw/src/app.js"
+  printf 'v1.0.1\n' > "$fw/FRAMEWORK-VERSION"
+  write_npm_manifests "$fw" "example-framework" versioned "1.0.1"
+  git -C "$fw" add -A
+  git -C "$fw" commit -q -m "Example framework fw-v2"
+  git -C "$fw" tag fw-v2
+}
+
+# The Upgrade note's own bootstrap form, run from the instance root: extract the TAG's
+# copy into the git directory and run it from there. Honors the --selftest skip toggle,
+# because this is the load-bearing step of the whole case.
+run_handoff() { # instance tag helper-basename subcommand [args...]
+  local inst="$1" tag="$2" file="$3" helper
+  shift 3
+  if [ "${SKIP_RECONCILE:-0}" = "1" ]; then
+    echo "   (selftest: the Upgrade note handoff for $file DELIBERATELY SKIPPED)"
+    HELPER_STATUS=0
+    HELPER_OUT=""
+    HELPER_ERR=""
+    return 0
+  fi
+  helper="$(git -C "$inst" rev-parse --git-dir)/sekai-handoff-$file"
+  case "$helper" in
+    /*) ;;
+    *) helper="$inst/$helper" ;;
+  esac
+  git -C "$inst" show "$tag:scripts/upgrade/$file" > "$helper" \
+    || fail "case 18: the documented \`git show $tag:scripts/upgrade/$file\` produced nothing"
+  HELPER_STATUS=0
+  ( cd "$inst" \
+    && PATH="$GH_STUB_BIN:$PATH" GH_STUB_SCENARIO="${GH_STUB_SCENARIO:-green}" \
+       GH_STUB_LOG="$inst.gh-stub.log" node "$helper" "$@" ) \
+    > "$TMP/stdout.txt" 2> "$TMP/stderr.txt" || HELPER_STATUS=$?
+  HELPER_OUT="$(cat "$TMP/stdout.txt")"
+  HELPER_ERR="$(cat "$TMP/stderr.txt")"
+}
+
+case_first_upgrade_handoff() { # workdir
+  local work="$1" fw inst state sweep_cmd bump_cmd
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_handoff_framework "$fw"
+
+  sweep_cmd="$(handoff_invocation stale-artifacts.mjs)"
+  bump_cmd="$(handoff_invocation ci-verified-bump.mjs)"
+  [ -n "$sweep_cmd" ] \
+    || fail "case 18: the newest CHANGELOG Upgrade note hands off no invocation for stale-artifacts.mjs, so an instance on the previous release never runs it"
+  [ -n "$bump_cmd" ] \
+    || fail "case 18: the newest CHANGELOG Upgrade note hands off no invocation for ci-verified-bump.mjs, so an instance on the previous release still bumps unverified"
+  ok "case 18: the Upgrade note hands off both helpers ($sweep_cmd, $bump_cmd)"
+
+  # An instance sitting on fw-v1: the release it is LEAVING shipped no upgrade helper,
+  # so nothing in its own tree can perform either new step.
+  git clone -q "$fw" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  printf 'v7.0.0\n' > "$inst/VERSION"
+  write_npm_manifests "$inst" "example-instance" versioned "7.0.0"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt Example framework at fw-v1"
+  [ ! -d "$inst/scripts/upgrade" ] \
+    || fail "case 18: fixture guard — the instance's own tree already carries upgrade helpers, so the first-upgrade shape is gone"
+  ok "case 18: the instance's tree carries no upgrade helper, so only the tag can supply one"
+
+  # --- the pre-merge half: the note's sweep, run from the tag -------------------
+  write_corpus_artifact "$inst/$STALE_ARTIFACT_PATH"
+  run_handoff "$inst" fw-v2 stale-artifacts.mjs "$sweep_cmd"
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 18: the note's pre-merge handoff exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  [ ! -e "$inst/$STALE_ARTIFACT_PATH" ] \
+    || fail "case 18: the stale corpus artifact survives the handoff the Upgrade note prescribes, so the release does not clear it on its own adoption"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 18: the tree is not clean after the note's sweep, so the merge that follows still starts dirty: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  ok "case 18: the Upgrade note's pre-merge sweep clears the retired path on a tree that predates the helper"
+
+  # --- the merge, then the note's bump half -------------------------------------
+  state="$(run_package_capture "$inst" "case 18")"
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  ( cd "$inst" && node "$PACKAGE_HELPER" reconcile "$state" ) >/dev/null 2>&1 \
+    || fail "case 18: package-state reconcile failed while staging the fixture"
+  finalize_merge "$inst" "case 18"
+  assert_framework_version "$inst" "v1.0.0" "case 18" "after the merge, before the note's bump"
+  git -C "$inst" remote remove origin 2>/dev/null || true
+  git -C "$inst" remote add origin https://github.com/example-owner/example-instance.git
+
+  local verified
+  verified="$(git -C "$inst" rev-parse HEAD)"
+  run_handoff "$inst" fw-v2 ci-verified-bump.mjs "$bump_cmd" --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 18: the note's bump handoff exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.1" "case 18" "after the note's CI-verified bump"
+  assert_framework_version_committed "$inst" "v1.0.1" "case 18"
+  [ "$(git -C "$inst" rev-parse HEAD^)" = "$verified" ] \
+    || fail "case 18: the bump commit does not sit directly on the head the conclusion was read for"
+  assert_bump_queried_head_sha "$inst" "$verified" "case 18"
+  ok "case 18: the release applies both of its own new steps on the upgrade that ships them"
 }
 
 # ---------------------------------------------------------------------------
@@ -3662,6 +3857,9 @@ run_all_cases() {
   echo "── case 17: the stale corpus artifact at the retired path ──"
   case_stale_corpus_artifact "$TMP/case17"
   echo ""
+  echo "── case 18: the release-boundary handoff — both new steps run on the upgrade that ships them ──"
+  case_first_upgrade_handoff "$TMP/case18"
+  echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
   echo ""
@@ -3674,7 +3872,7 @@ run_all_cases() {
   echo "── documented roots: the docs name every framework-owned root the report walks ──"
   case_divergence_roots_documented
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes), the CI-verified bump (green / red / every unreadable shape / recorded override), and the stale corpus-artifact sweep hold on every fixture above."
+  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes), the CI-verified bump (green / red / every unreadable shape / recorded override), the stale corpus-artifact sweep, and the release-boundary handoff that makes a release apply its own new upgrade steps on the upgrade that ships them, hold on every fixture above."
 }
 
 # Run one case with its load-bearing step skipped, in a subshell whose EXIT trap is
@@ -3721,7 +3919,8 @@ run_selftest() {
   # sub-cases fail on their exit-code assertions rather than on the marker alone.
   expect_case_to_fail case_ci_verified_bump "$TMP/selftest-case16" "case 16 (CI-verified bump)"
   expect_case_to_fail case_stale_corpus_artifact "$TMP/selftest-case17" "case 17 (stale corpus artifact)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16 and 17 all fail when their load-bearing step is skipped."
+  expect_case_to_fail case_first_upgrade_handoff "$TMP/selftest-case18" "case 18 (release-boundary handoff)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16, 17 and 18 all fail when their load-bearing step is skipped."
 }
 
 main() {

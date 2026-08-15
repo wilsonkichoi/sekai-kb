@@ -85,23 +85,80 @@ tags, never framework `main`** (ADR 004, SPEC
   New helper `scripts/upgrade/stale-artifacts.mjs`, run before the merge. It removes a
   retired path only when the file is untracked **and** its bytes really are that
   artifact; a tracked file or one whose bytes are something else is reported by path and
-  left alone. `npm run upgrade:check` case 17 covers all four shapes.
+  left alone. `npm run upgrade:check` case 17 covers all four shapes, building its
+  fixture through the corpus builder's own `buildArtifact` so the recognizer is tested
+  against the bytes an instance really holds rather than against a guess at them.
+
+- **A release now applies its own new upgrade steps on the upgrade that ships them.**
+  Both changes above are new *steps*, and the upgrade that adopts them is driven by the
+  skill and runbook of the release being left — which know nothing about them, and are
+  not reloaded when the merge brings in their replacements. Left alone, v1.1.6 would
+  have been the first release whose own fixes arrived one release late.
+
+  The release-boundary rule is now explicit and machine-checked: an entry that
+  introduces an upgrade helper must hand it to the *previous* release's skill as a
+  runnable bootstrap-from-tag block in that entry's **Upgrade note**, which every
+  version of the skill and of the runbook reads before merging.
+  `npm run upgrade-sequence:check` derives "introduces" from the changelog itself and
+  fails a release that ships a helper with no handoff, one that extracts into one
+  variable and runs another, one whose subcommand the helper's option table does not
+  declare, or one that bumps before pushing. `npm run upgrade:check` case 18 runs the
+  handoff the way an adopter would — on a fixture whose own tree carries no upgrade
+  helper at all — and proves both steps take effect from the tag alone.
 
 ### Upgrade note
 
-Two things change in how you run an upgrade, and neither touches `place.config.ts`:
+Nothing here touches `place.config.ts`. Two things change in how an upgrade runs, and
+both are new **steps**, which is why this note carries them as commands rather than as
+description: the skill and runbook driving your upgrade to v1.1.6 are the ones that
+shipped with v1.1.5, and they do not know these steps exist. The rewritten skill only
+reaches your tree with the merge, and a running invocation does not reload itself. So
+this release hands the two steps over here, where your upgrade already reads them — a
+v1.1.5-or-older `/sekai-upgrade` shows this note before merging, and the manual flow in
+`docs/runbook/UPGRADE.md` sends you here too.
 
-1. **The version bump now needs a push first.** `/sekai-upgrade` pushes the merged
-   branch, waits for your CI, and bumps `FRAMEWORK-VERSION` only if that run is green.
-   If your instance's CI is unreachable (Actions disabled, no remote, offline) the
-   upgrade stops with the marker unchanged rather than recording an unverified
-   adoption; pass `--override "<reason>"` to the bump helper to adopt anyway, and the
-   reason is kept in the commit. On an instance, that push deploys.
-2. **A stale `workers/chat/vectors.json` is removed for you.** If you upgraded to
-   v1.1.5 and followed its Upgrade note you already deleted it and nothing happens. If
-   you did not, this upgrade removes it, reports the path it removed, and leaves
-   anything else at that path alone. Your corpus at `workers/lib/vectors.json` is
-   untouched.
+**If your installed `/sekai-upgrade` is already v1.1.6 or newer it performs both itself**
+(its steps 3d and 9). Run the blocks below only when upgrading *to* v1.1.6 from an
+earlier release; running them twice is not harmful (the sweep finds nothing, the bump
+refuses a marker that already moved) but it is not needed.
+
+**1. Before the merge — sweep the stale corpus artifact.** Run this from the instance
+repo root after the pre-merge classify and divergence steps, and before `git merge`:
+
+```bash
+STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"
+git show sekai-kb-v1.1.6:scripts/upgrade/stale-artifacts.mjs > "$STALE_HELPER"
+node "$STALE_HELPER" sweep
+```
+
+When v1.1.5 moved the corpus artifact to `workers/lib/vectors.json` the `.gitignore`
+line moved with it, so an instance that had built a corpus before that upgrade kept an
+untracked ~88KB `workers/chat/vectors.json` at the retired path. The sweep removes it
+only when the file is untracked **and** its bytes really are that artifact; a tracked
+file, or one whose bytes are something else, is reported by path and left for you to
+decide. If you already deleted it by hand, this says there was nothing to remove. Your
+current corpus at `workers/lib/vectors.json` is never touched.
+
+**2. Instead of the old bump step — push first, then bump through the helper.** Your
+installed step 9 (runbook step 8) writes `FRAMEWORK-VERSION` directly, before anything
+is pushed, so no CI run exists at the moment it records the adoption. **Do not run it.**
+Run this instead, once the local build is green and every change from the merge is
+committed:
+
+```bash
+git push origin HEAD
+BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
+git show sekai-kb-v1.1.6:scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
+node "$BUMP_HELPER" bump --target sekai-kb-v1.1.6
+```
+
+The helper reads the conclusion GitHub recorded for that exact head SHA and writes the
+marker only on a green one. A failing conclusion names the failing check and leaves the
+marker at its pre-merge value. An unreadable one — Actions disabled, no remote, offline,
+a SHA GitHub has never seen, a run still in flight — stops and says which case it hit;
+**"no run found" is never read as success.** To adopt anyway, add
+`--override "<reason>"`, and the reason is kept in the run output and on the commit. On
+an instance that push **deploys**, which is the accepted cost of having no staging tier.
 
 ## [1.1.5] — 2026-08-13
 

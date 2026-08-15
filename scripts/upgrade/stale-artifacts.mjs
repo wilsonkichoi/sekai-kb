@@ -45,8 +45,17 @@ const EXIT_USAGE = 2;
  * The corpus artifact is the shape `scripts/core/build-embeddings.mjs` writes:
  * `{schema, model, dim, quant, builtAt, count, chunks, vectors}`. This helper runs as a
  * lone file extracted from a release tag, so it cannot import that module; it checks
- * the three fields that make the file unmistakably that artifact and would be absurd in
+ * the four fields that make the file unmistakably that artifact and would be absurd in
  * anything else parked at the same name.
+ *
+ * `vectors` is the load-bearing one, and it is a STRING: the builder packs every
+ * int8 vector into one flat buffer and base64-encodes it (`packVectors`), which is
+ * why an 88KB corpus is one line. Reading it as an array is the natural guess and the
+ * wrong one -- it makes `recognize` reject every real artifact, so the sweep reports
+ * the file as unrecognized and leaves behind exactly what it exists to remove. The
+ * regression gate builds its fixture through `buildArtifact` itself rather than
+ * hand-writing this shape, so a future change to the packing fails case 17 here
+ * instead of on an adopter's tree.
  */
 export const STALE_ARTIFACTS = [
   {
@@ -63,9 +72,10 @@ export const STALE_ARTIFACTS = [
       }
       return Boolean(value)
         && typeof value === 'object'
-        && Object.hasOwn(value, 'schema')
+        && typeof value.schema === 'string'
+        && typeof value.quant === 'string'
         && Array.isArray(value.chunks)
-        && Array.isArray(value.vectors);
+        && typeof value.vectors === 'string';
     },
   },
 ];

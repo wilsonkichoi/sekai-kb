@@ -101,6 +101,16 @@ section from the framework CHANGELOG and show it to the user, in particular the
 git show sekai-kb-vX.Y.Z:CHANGELOG.md | awk '/^## \[X\.Y\.Z\]/{p=1;print;next} p&&/^## \[/{exit} p'
 ```
 
+**If the Upgrade note hands over commands, run them at the point it names.** A release
+that adds a step to the upgrade cannot perform that step on its own adoption: this
+skill file is the one that shipped with the release being *left*, the target's rewritten
+copy arrives with the merge in step 4, and a running invocation does not reload itself.
+The target's Upgrade note is the only text of the new release read before that, so a new
+step is handed over there as a bootstrap-from-tag block. Two caveats, both of which the
+note itself states: skip a block whose step this skill already performs (a note written
+for an older skill than the one running), and never invent a command the note does not
+carry.
+
 If the Upgrade note names a new `place.config` key, remember: new keys default to
 feature-off when absent (the framework SPEC's §Negative requirements, "New
 `place.config` keys must be absent-safe", upstream in the

@@ -81,6 +81,16 @@ The marker moves only on a green conclusion for that exact head SHA: an adoption
 what the marker records, and `npm run build` is a strict subset of the instance's CI,
 so a locally-green merge can and did ship a red adopted tree. `npm run
 upgrade-sequence:check` derives this sentence from the skill.
+
+**A release cannot perform its own new upgrade steps unless it hands them over.** The
+upgrade that adopts release *N* is driven by the skill and runbook of release *N-1*;
+*N*'s copies arrive with the merge and the running invocation does not reload itself. The
+one piece of *N* that *N-1* reads first is the target's `CHANGELOG.md` entry, which every
+version of both documents shows before merging. So a release that adds a step to the
+sequence carries that step in its own **Upgrade note** as a runnable
+bootstrap-from-tag block, and `npm run upgrade-sequence:check` fails a release that
+introduces a `scripts/upgrade/` helper without one. Otherwise every upgrade fix first
+applies one release after the one that ships it.
 Framework and instances use the same directory shape except for adopter-only `VERSION`
 and the maintainer docs, which adoption removes:
 

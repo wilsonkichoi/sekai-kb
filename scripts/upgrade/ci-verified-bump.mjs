@@ -287,11 +287,16 @@ function bump(root, options) {
   }
 
   const sha = git(root, ['rev-parse', 'HEAD']);
-  const repository = resolveRepository(root, options.remote);
 
+  // Resolving the repository is INSIDE the try, not before it. "No remote configured"
+  // and "the remote is not GitHub" are unreadable-CI shapes like any other, so the
+  // override has to reach them too. Resolving first would make `--override` unreachable
+  // on exactly the instance that most needs it: one with nowhere to push, where no
+  // conclusion can ever exist.
   let outcome;
   try {
-    outcome = resolveConclusion(repository, sha, options);
+    const repository = resolveRepository(root, options.remote);
+    outcome = { repository, ...resolveConclusion(repository, sha, options) };
   } catch (err) {
     if (options.override && err instanceof BumpError && err.code === EXIT_UNREADABLE) {
       const summary = `${PREFIX}: no conclusion was readable for ${sha}; adopted on an explicit`
@@ -302,7 +307,7 @@ function bump(root, options) {
     throw err;
   }
 
-  const { runs, failing } = outcome;
+  const { repository, runs, failing } = outcome;
   const checks = `${runs.length} check${runs.length === 1 ? '' : 's'}: `
     + runs.map((run) => run.name).join(', ');
 

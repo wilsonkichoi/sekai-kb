@@ -50,6 +50,17 @@ Read every **Upgrade note** in that entry. It names required runtime changes,
 one-time cleanup, and optional feature keys. A new `place.config.ts` key is
 absent-safe: skipping it leaves the new capability off and does not stop the build.
 
+An Upgrade note may also hand you **commands to run**, and those are not optional
+colour. A release that adds a step to the upgrade cannot perform that step on its own
+adoption: the copy of this runbook and of the skill you are following right now shipped
+with the release you are *leaving*, and the new ones only reach your tree with the
+merge. The target's Upgrade note is the one piece of the new release you read before
+that, so it is where such a step is handed over — bootstrapped from the tag with
+`git show "$TARGET":scripts/upgrade/<helper>.mjs`, exactly like the helpers this runbook
+already runs. Run those blocks at the point the note names. `npm run
+upgrade-sequence:check` in the framework repository fails a release that introduces an
+upgrade helper without one.
+
 ### 3. Apply the tag, with or without an AI CLI
 
 With an agent CLI, invoke the repository skill with the selected tag:

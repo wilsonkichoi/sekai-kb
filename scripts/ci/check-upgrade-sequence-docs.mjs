@@ -25,7 +25,21 @@
 //   - either adopter-facing document writes FRAMEWORK-VERSION with a raw shell
 //     redirect, which is how the bump used to escape verification;
 //   - either adopter-facing document fails to invoke the CI-verified bump helper, or
-//     invokes it before pushing the merged branch.
+//     invokes it before pushing the merged branch;
+//   - the newest CHANGELOG entry introduces an upgrade helper that its own
+//     `### Upgrade note` never hands off as a runnable command (see below).
+//
+// The last one is the release-boundary rule, and it is the subtlest. A release that
+// adds a step to the upgrade cannot perform that step on its own adoption: the
+// invocation is driven by the skill and runbook that shipped with the release being
+// LEFT, the new ones arrive with the merge, and a running invocation does not reload
+// itself. The only text of the new release that the old one reads is the target's
+// CHANGELOG entry, which every version of the skill and the runbook shows before
+// merging. So a release that introduces an upgrade helper must put an executable
+// bootstrap-and-invoke block for it in that entry's Upgrade note, or the fix it ships
+// first applies one release too late. This gate derives "introduces" from the changelog
+// itself -- a helper path the newest entry names and no earlier text does -- so it needs
+// no tags and no history.
 //
 // Success prints one summary line and exits 0.
 //
@@ -45,6 +59,7 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SKILL = '.agents/skills/sekai-upgrade/SKILL.md';
 const SPEC = 'dev_docs/SPEC.md';
 const RUNBOOK = 'docs/runbook/UPGRADE.md';
+const CHANGELOG = 'CHANGELOG.md';
 
 /** The helper the bump must go through, and the push that must precede it. */
 const BUMP_HELPER = 'scripts/upgrade/ci-verified-bump.mjs';
@@ -141,7 +156,129 @@ function checkAdopterDocument(rel, source, stages) {
   }
 }
 
-export function check({ skill, spec, runbook }) {
+/* -- The release-boundary handoff ------------------------------------------- */
+
+/** Every `scripts/upgrade/<name>.mjs` path a piece of text names. */
+const HELPER_PATHS = /scripts\/upgrade\/[a-z0-9-]+\.mjs/g;
+
+/**
+ * The newest changelog entry (the first `## [` heading to the next one) and everything
+ * else in the file. "Everything else" deliberately includes the preamble, so a helper
+ * the release discipline already discusses is not mistaken for a new one.
+ */
+export function splitNewestEntry(changelog) {
+  const headings = [...changelog.matchAll(/^## \[/gm)].map((match) => match.index);
+  if (headings.length === 0) return null;
+  const start = headings[0];
+  const end = headings.length > 1 ? headings[1] : changelog.length;
+  return {
+    entry: changelog.slice(start, end),
+    earlier: changelog.slice(0, start) + changelog.slice(end),
+  };
+}
+
+/** The `### Upgrade note` section of one entry, or null when it carries none. */
+function upgradeNote(entry) {
+  const at = entry.search(/^### Upgrade note\s*$/m);
+  if (at === -1) return null;
+  // From the line AFTER the heading, so the heading's own `### ` is not read as the
+  // start of the next section.
+  const afterHeading = entry.indexOf('\n', at);
+  if (afterHeading === -1) return '';
+  const rest = entry.slice(afterHeading);
+  const next = rest.search(/^#{2,3} /m);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+/**
+ * The runnable handoffs a note carries, as `{var, path, subcommand}`. The three-line
+ * form is the one every upgrade document uses, and matching it as one unit is what
+ * makes this a check on an EXECUTABLE block rather than on a mention: a note that
+ * extracts into one variable and runs another is caught here, not by the reader.
+ */
+export function parseHandoffs(note) {
+  const form = new RegExp(
+    String.raw`(?<var>[A-Z_]+)="\$\(git rev-parse --git-dir\)/[^"]+"\s*\n`
+    + String.raw`\s*git show \S+:(?<path>scripts/upgrade/[a-z0-9-]+\.mjs) > "\$\k<var>"\s*\n`
+    + String.raw`\s*node "\$\k<var>" (?<subcommand>[a-z][a-z-]*)`,
+    'g',
+  );
+  return [...note.matchAll(form)].map((match) => ({ ...match.groups, at: match.index }));
+}
+
+/** The subcommands one helper's own `COMMAND_OPTIONS` table declares. */
+function acceptedSubcommands(helperPath) {
+  const source = readOptional(helperPath);
+  if (source === null) return null;
+  const block = /const COMMAND_OPTIONS = \{([\s\S]*?)\n\};/.exec(source);
+  if (!block) return null;
+  return [...block[1].matchAll(/^ {2}([a-z][a-z-]*):/gm)].map((match) => match[1]);
+}
+
+/**
+ * A helper the newest entry introduces must be handed to the PREVIOUS release's skill
+ * as a command, because that is the skill running the upgrade that adopts this one.
+ */
+function checkFirstUpgradeHandoff(changelog) {
+  // Framework-release scope. `CHANGELOG.md` is this repository's release log only in
+  // template mode; adoption replaces it with an instance-owned work history that
+  // carries no framework release entries and no upgrade helpers to hand off. Same
+  // scope rule the spec assertion above uses.
+  if (!TEMPLATE_MODE || changelog === null) {
+    skippedNotes.push(`${CHANGELOG} handoff (adopted instance: the changelog is instance work history)`);
+    return;
+  }
+  const split = splitNewestEntry(changelog);
+  if (split === null) {
+    failure(`${CHANGELOG}: carries no \`## [\` release entry to read the newest release from`);
+    return;
+  }
+  const earlier = new Set(split.earlier.match(HELPER_PATHS) ?? []);
+  const introduced = [...new Set(split.entry.match(HELPER_PATHS) ?? [])]
+    .filter((path) => !earlier.has(path))
+    .sort();
+  if (introduced.length === 0) return;
+
+  const note = upgradeNote(split.entry);
+  if (note === null) {
+    failure(
+      `${CHANGELOG}: the newest entry introduces ${introduced.join(', ')} but carries no `
+      + '`### Upgrade note`. The skill running the upgrade INTO this release predates that '
+      + 'helper, so the note is the only place it can be handed over',
+    );
+    return;
+  }
+  const handoffs = parseHandoffs(note);
+  for (const path of introduced) {
+    const handoff = handoffs.find((candidate) => candidate.path === path);
+    if (!handoff) {
+      failure(
+        `${CHANGELOG}: the newest entry introduces ${path}, but its \`### Upgrade note\` `
+        + 'carries no runnable handoff for it (bootstrap the tag\'s copy into a variable, '
+        + 'then invoke that same variable). Without one the release cannot apply its own '
+        + 'fix on the upgrade that ships it',
+      );
+      continue;
+    }
+    const accepted = acceptedSubcommands(path);
+    if (accepted !== null && !accepted.includes(handoff.subcommand)) {
+      failure(
+        `${CHANGELOG}: the \`### Upgrade note\` runs ${path} as \`${handoff.subcommand}\`, `
+        + `which its option table does not declare (it accepts: ${accepted.join(', ')})`,
+      );
+    }
+    if (path === BUMP_HELPER) {
+      const pushAt = note.search(PUSH);
+      if (pushAt === -1) {
+        failure(`${CHANGELOG}: the \`### Upgrade note\` hands off ${BUMP_HELPER} without pushing the merged branch first, so the CI run it reads cannot exist`);
+      } else if (pushAt > handoff.at) {
+        failure(`${CHANGELOG}: the \`### Upgrade note\` invokes ${BUMP_HELPER} before pushing the merged branch`);
+      }
+    }
+  }
+}
+
+export function check({ skill, spec, runbook, changelog }) {
   failures.length = 0;
   skippedNotes.length = 0;
   const declaration = parseDeclaration(skill);
@@ -163,6 +300,7 @@ export function check({ skill, spec, runbook }) {
   }
   checkAdopterDocument(RUNBOOK, runbook, declaration.stages);
   checkAdopterDocument(SKILL, skill, declaration.stages);
+  checkFirstUpgradeHandoff(changelog);
   return { failures: [...failures], stages: declaration.stages, skipped: [...skippedNotes] };
 }
 
@@ -209,6 +347,41 @@ const SELFTEST_DEFECTS = [
     label: 'the runbook stops invoking the CI-verified bump helper',
     mutate: (docs) => ({ ...docs, runbook: docs.runbook.replaceAll(BUMP_HELPER, 'scripts/upgrade/gone.mjs') }),
   },
+  {
+    label: 'the newest changelog entry introduces a helper its Upgrade note never hands off',
+    // Same scope as the spec defect: the release log this rule governs exists only in
+    // a template checkout, so an adopted instance skips these rather than reporting
+    // them undetected.
+    requiresTemplate: true,
+    mutate: (docs) => ({
+      ...docs,
+      changelog: docs.changelog.replace(
+        /STALE_HELPER="\$\(git rev-parse --git-dir\)[\s\S]*?node "\$STALE_HELPER" sweep/,
+        'the upgrade removes it for you',
+      ),
+    }),
+  },
+  {
+    label: 'the Upgrade note bootstraps one variable and invokes another',
+    requiresTemplate: true,
+    mutate: (docs) => ({
+      ...docs,
+      changelog: docs.changelog.replace('node "$STALE_HELPER" sweep', 'node "$SWEEP_HELPER" sweep'),
+    }),
+  },
+  {
+    label: 'the Upgrade note runs a helper with a subcommand its option table rejects',
+    requiresTemplate: true,
+    mutate: (docs) => ({
+      ...docs,
+      changelog: docs.changelog.replace('node "$STALE_HELPER" sweep', 'node "$STALE_HELPER" clean'),
+    }),
+  },
+  {
+    label: 'the Upgrade note hands off the bump without pushing first',
+    requiresTemplate: true,
+    mutate: (docs) => ({ ...docs, changelog: docs.changelog.replace('git push origin HEAD\n', '') }),
+  },
 ];
 
 function selftest(docs) {
@@ -225,6 +398,10 @@ function selftest(docs) {
   for (const defect of SELFTEST_DEFECTS) {
     if (defect.requiresSpec && docs.spec === null) {
       process.stdout.write(`  skipped (no ${SPEC} in this checkout): ${defect.label}\n`);
+      continue;
+    }
+    if (defect.requiresTemplate && !TEMPLATE_MODE) {
+      process.stdout.write(`  skipped (adopted instance: ${CHANGELOG} is instance work history): ${defect.label}\n`);
       continue;
     }
     planted += 1;
@@ -246,7 +423,12 @@ function selftest(docs) {
 
 /* -- CLI -------------------------------------------------------------------- */
 
-const docs = { skill: read(SKILL), spec: readOptional(SPEC), runbook: read(RUNBOOK) };
+const docs = {
+  skill: read(SKILL),
+  spec: readOptional(SPEC),
+  runbook: read(RUNBOOK),
+  changelog: readOptional(CHANGELOG),
+};
 
 if (process.argv[2] === '--selftest') {
   process.exit(selftest(docs));
@@ -259,11 +441,19 @@ if (process.argv[2] === '--selftest') {
     process.stderr.write(`upgrade-sequence docs FAILED:\n  ${found.join('\n  ')}\n`);
     process.exit(1);
   }
+  // The summary names only what this checkout actually asserted. A skipped assertion is
+  // reported as skipped and never folded into the claim, so a passing line in an
+  // adopted instance cannot read as a guarantee the instance never checked.
+  const describing = [RUNBOOK, ...(docs.spec === null ? [] : [SPEC])];
+  const handoff = skipped.some((note) => note.startsWith(CHANGELOG))
+    ? ''
+    : `, and every upgrade helper the newest ${CHANGELOG} entry introduces is handed to`
+      + ' the previous release\'s skill as a runnable command';
   process.stdout.write(
     `upgrade-sequence docs OK [${TEMPLATE_MODE ? 'template' : 'instance'} mode]: `
-    + `${stages.length} stages derived from ${SKILL}; ${RUNBOOK}`
-    + `${skipped.length > 0 ? '' : ` and ${SPEC}`} describe${skipped.length > 0 ? 's' : ''}`
-    + ` the same upgrade, and the bump goes through ${BUMP_HELPER} after the push.`
+    + `${stages.length} stages derived from ${SKILL}; ${describing.join(' and ')} `
+    + `describe${describing.length === 1 ? 's' : ''} the same upgrade, the bump goes `
+    + `through ${BUMP_HELPER} after the push${handoff}.`
     + `${skipped.length > 0 ? ` Skipped: ${skipped.join('; ')}.` : ''}\n`,
   );
 }
