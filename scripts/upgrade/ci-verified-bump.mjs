@@ -28,8 +28,9 @@
 // What it will NOT do: infer a conclusion. "No run found" is not success, an in-flight
 // run is not success, a green PARTIAL set is not success (GitHub creates a job's check
 // run only when that job becomes eligible, so an all-completed check list is a snapshot
-// until the workflow run itself is completed -- see `fetchWorkflowRuns`), and an
-// unreachable API is not success. Each stops with its own diagnostic and leaves the
+// until the workflow run itself is completed -- see `fetchWorkflowRuns`), a set of runs
+// that all concluded without running anything is not success, and an unreachable API is
+// not success. Each stops with its own diagnostic and leaves the
 // marker exactly where the package-state restore put it. A maintainer who knows better
 // can pass --override <reason>, which is recorded in the run output and on the commit,
 // because an unverified adoption that leaves no trace is the failure this helper exists
@@ -38,7 +39,9 @@
 // --override answers ONLY the unreadable case. A conclusion that was read and is red is
 // never overridable: "a red or failing run never bumps" is unconditional, and the two
 // situations differ in what the operator asserts -- "I verified this another way" versus
-// "I know it failed and am recording it as adopted".
+// "I know it failed and am recording it as adopted". That asymmetry only holds while
+// every red answer actually REACHES the verdict, so any shape that stops short of it is
+// a way to bump through a failing run, not merely a missing diagnostic.
 //
 // Exit codes: 0 = a green conclusion (or a recorded override of an UNREADABLE one) and
 // the marker was written and committed; 1 = a conclusion was read and it is not green,
@@ -251,14 +254,24 @@ function fetchCheckRuns(repository, sha) {
 /**
  * The conclusion for one exact commit, polled until it exists or the deadline passes.
  *
- * Two conditions, and the first one is what makes the second meaningful:
+ * Two conditions establish that there is an answer to read at all, and the first one is
+ * what makes the second meaningful:
  *
  *   1. At least one workflow run for this SHA, and EVERY workflow run completed. This
  *      establishes that the check-run list is finished being built (see
  *      `fetchWorkflowRuns`). Without it an all-completed check-run list is only a
  *      snapshot, and a green snapshot taken between two jobs is not a green run.
- *   2. Every check run completed. This catches a check that is not backed by an Actions
- *      workflow run at all, which condition 1 cannot see.
+ *   2. No check run still in flight. A check run that exists but has not completed is a
+ *      job still running, whatever the workflow list says -- which catches a check that
+ *      is not backed by an Actions workflow run at all, something condition 1 cannot see.
+ *
+ * Note what condition 2 deliberately does NOT require: that any check run EXISTS. A
+ * workflow run that fails at STARTUP never creates a job, so it has no check run to
+ * represent it, and on the template's own workflows that is the ordinary single-workflow
+ * shape -- `corpus-refresh.yml` is filtered on `knowledge/**`, which an upgrade merge is
+ * `merge=ours` on, so the push triggers `deploy.yml` and nothing else. Requiring a check
+ * run here would leave that red run unreadable rather than red, and unreadable is the one
+ * answer `--override` can bump through. A red run must reach the verdict to be refused.
  *
  * The verdict is then read from BOTH lists, because neither is a superset of the other:
  * a check run can exist with no workflow run behind it, and a workflow run can fail
@@ -268,7 +281,8 @@ function fetchCheckRuns(repository, sha) {
  * disabled looks like, what a push that triggered no workflow looks like, and what a
  * run GitHub has not created yet looks like. The first two are terminal and the third
  * resolves within seconds, so polling first and stopping second distinguishes them
- * without ever reading absence as approval.
+ * without ever reading absence as approval. Neither is a set of runs that all concluded
+ * without doing anything, which is the same absence wearing a conclusion.
  */
 function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
   const deadline = Date.now() + timeoutSeconds * 1000;
@@ -278,7 +292,7 @@ function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
     const runs = fetchCheckRuns(repository, sha);
     const pending = runs.filter((run) => run.status !== 'completed');
     const settled = workflows.length > 0 && workflowsPending.length === 0
-      && runs.length > 0 && pending.length === 0;
+      && pending.length === 0;
     if (settled) {
       // Both lists carry conclusions, and both are authoritative. A workflow run that
       // failed at STARTUP -- invalid workflow YAML, which is what a badly resolved
@@ -286,10 +300,35 @@ function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
       // completed with a failing conclusion and never created a job, so no check run
       // represents it. It is visible here and nowhere else. A run that failed because
       // one of its jobs failed is named twice; that is noise, not a wrong answer.
+      //
+      // A superseded run counts as failing too: GitHub records a cancelled attempt for
+      // the same head SHA when a re-run replaces it, or when `cancel-in-progress` fires
+      // on the branch being pushed. That reads red beside the green run that replaced
+      // it. It fails safe -- a false red refuses to bump, it never bumps wrongly -- and
+      // the way forward is the one the refusal already names: push again and re-run this
+      // step against the new head.
       const failing = [
         ...workflows.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion)),
         ...runs.filter((run) => !PASSING_CONCLUSIONS.has(run.conclusion)),
       ];
+      if (failing.length > 0) return { runs, workflows, failing };
+
+      // Nothing failed, but that is not the same as something having passed. `skipped`
+      // and `neutral` mean a run did not apply, so a set with no `success` anywhere in
+      // it is a workflow that was triggered and did nothing -- the same absence as "no
+      // run at all", which the doc comment above refuses to read as approval. Requiring
+      // a check run to exist used to stop this shape by accident; the verdict no longer
+      // does, so this test is its own. It is terminal, not a poll: every workflow run is
+      // completed and no check run is in flight, so waiting cannot change the answer.
+      if (![...workflows, ...runs].some((run) => run.conclusion === 'success')) {
+        throw unreadable(
+          `every run GitHub has for ${sha} in ${repository} concluded without running anything:\n`
+          + `    ${[...workflows, ...runs].map((run) => `${run.name} (${run.conclusion ?? 'no conclusion'})`).join(', ')}\n`
+          + '  nothing here failed, and nothing here verified this tree either. That is a\n'
+          + '  workflow that was triggered and did nothing, which is no more a verification\n'
+          + '  than no run at all would be.',
+        );
+      }
       return { runs, workflows, failing };
     }
     if (Date.now() >= deadline) {
@@ -318,10 +357,23 @@ function resolveConclusion(repository, sha, { pollSeconds, timeoutSeconds }) {
           + '  raise --timeout-seconds, or wait for the run and re-run this step.',
         );
       }
+      if (pending.length > 0) {
+        throw unreadable(
+          `CI has not completed for ${sha} in ${repository}: `
+          + `${pending.map((run) => `${run.name} (${run.status})`).join(', ')} still running.\n`
+          + '  raise --timeout-seconds, or wait for the run and re-run this step.',
+        );
+      }
+      // Guarded rather than left as the fallthrough, because it was the fallthrough that
+      // made this branch lie: while `settled` also demanded a check run exist, a lone
+      // completed-and-failed workflow run landed here and was reported as "still
+      // running" with an empty list -- naming the one shape `--override` may bump
+      // through, for a run that had in fact concluded red. No condition reaches here
+      // today. If a later clause is added to `settled`, this says what it actually saw.
       throw unreadable(
-        `CI has not completed for ${sha} in ${repository}: `
-        + `${pending.map((run) => `${run.name} (${run.status})`).join(', ')} still running.\n`
-        + '  raise --timeout-seconds, or wait for the run and re-run this step.',
+        `the CI state for ${sha} in ${repository} could not be classified: `
+        + `${workflows.length} workflow run(s), ${workflowsPending.length} not completed; `
+        + `${runs.length} check run(s), ${pending.length} not completed.`,
       );
     }
     sleepSeconds(pollSeconds);
@@ -419,9 +471,14 @@ function bump(root, options) {
     throw err;
   }
 
-  const { repository, runs, failing } = outcome;
-  const checks = `${runs.length} check${runs.length === 1 ? '' : 's'}: `
-    + runs.map((run) => run.name).join(', ');
+  const { repository, runs, workflows, failing } = outcome;
+  // What actually reported. Normally the check runs, which name the jobs; a SHA can now
+  // reach a verdict with none of them, so fall back to the workflow runs rather than
+  // announce a green "0 checks: " that names nothing.
+  const verifiedBy = runs.length > 0 ? runs : workflows;
+  const noun = runs.length > 0 ? 'check' : 'workflow run';
+  const checks = `${verifiedBy.length} ${noun}${verifiedBy.length === 1 ? '' : 's'}: `
+    + verifiedBy.map((run) => run.name).join(', ');
 
   // A conclusion that WAS read and is red is not overridable, and that asymmetry is the
   // contract rather than an oversight: "a red or failing run never bumps" is

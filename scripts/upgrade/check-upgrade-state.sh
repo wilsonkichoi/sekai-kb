@@ -3018,7 +3018,10 @@ fi
 #
 # Each scenario is a real GitHub answer: a completed green run, a completed run with one
 # failing check, a run that failed at startup and therefore created no check run at all
-# while a second workflow's check is green, a commit with nothing at all (Actions disabled
+# while a second workflow's check is green, that same startup failure as the ONLY run for
+# the SHA (the shape a real upgrade push produces, since corpus-refresh.yml is filtered on
+# knowledge/** and an upgrade merge does not touch it), a run that was triggered and
+# concluded without running anything, a commit with nothing at all (Actions disabled
 # on the repository, or no workflow triggered by the push), a run still in flight, a run
 # whose check list is green so far while the workflow itself is still going (the
 # partial-set trap), checks with no workflow run behind them, a SHA GitHub has never seen
@@ -3047,6 +3050,11 @@ wf() { # status [conclusion]
 }
 wf_none() { printf '%s\n' '{"total_count":0,"workflow_runs":[]}'; }
 
+# A SHA with no check run at all. Real whenever a workflow run concludes without ever
+# creating a job: a startup failure, a cancellation before the first job, a run every one
+# of whose jobs was skipped.
+checks_none() { printf '%s\n' '{"total_count":0,"check_runs":[]}'; }
+
 checks_green() {
   printf '%s\n' '{"total_count":2,"check_runs":[{"name":"Test","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"},{"name":"Build","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/2"}]}'
 }
@@ -3071,8 +3079,23 @@ case "${GH_STUB_SCENARIO:-green}" in
       printf '%s\n' '{"total_count":1,"check_runs":[{"name":"refresh","status":"completed","conclusion":"success","html_url":"https://github.com/example-owner/example-instance/runs/1"}]}'
     fi
     ;;
+  workflow-red-only)
+    # The same startup failure with NOTHING beside it, and the shape a real adopter
+    # upgrade produces. The template ships two workflows and corpus-refresh.yml is
+    # filtered on knowledge/**, which an upgrade merge is merge=ours on -- so the push
+    # triggers deploy.yml alone and there is no second workflow to contribute a check
+    # run. A verdict that is only computed once some check run exists never reads this
+    # run at all, and reports a completed, failed run as unreadable.
+    if [ "$endpoint" = workflows ]; then wf completed startup_failure; else checks_none; fi
+    ;;
+  nothing-ran)
+    # Triggered, completed, and did nothing: the conclusion is `skipped` and no job was
+    # ever created. Nothing failed here, so a verdict built only out of "is anything
+    # failing?" reads it as green -- on a tree that no run has verified.
+    if [ "$endpoint" = workflows ]; then wf completed skipped; else checks_none; fi
+    ;;
   empty)
-    if [ "$endpoint" = workflows ]; then wf_none; else printf '%s\n' '{"total_count":0,"check_runs":[]}'; fi
+    if [ "$endpoint" = workflows ]; then wf_none; else checks_none; fi
     ;;
   pending)
     if [ "$endpoint" = workflows ]; then wf in_progress
@@ -3239,6 +3262,31 @@ case_ci_verified_bump() { # workdir
     || fail "case 16b: the refusal does not name the workflow run that failed: $HELPER_ERR"
   ok "case 16b: a workflow run that failed with no check run behind it never bumps"
 
+  # The same startup failure as the ONLY run for the SHA, which is what a real upgrade
+  # push produces: corpus-refresh.yml is filtered on knowledge/**, an upgrade merge is
+  # merge=ours there, so deploy.yml is the only workflow triggered and there is no second
+  # workflow to contribute the green check the fixture above leans on. A verdict computed
+  # only once some check run exists is therefore never reached here at all -- the poll
+  # runs to the timeout and reports a completed, failed run as UNREADABLE, which is the
+  # one answer --override is allowed to bump through. Both halves are asserted: the
+  # refusal, and that the override does not rescue it.
+  inst="$work/workflow-red-only"
+  build_bump_instance "$fw" "$inst" "case 16b"
+  run_bump "$inst" workflow-red-only "case 16b" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16b: bump on a LONE workflow run that failed at startup exited $HELPER_STATUS (expected 1); it created no check run and it is the only run for the SHA, so a verdict gated on a check run existing never reads it and calls it unreadable instead; stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16b" "after a lone workflow run that failed at startup"
+  printf '%s%s' "$HELPER_OUT" "$HELPER_ERR" | grep -Fq 'startup_failure' \
+    || fail "case 16b: the refusal does not name the lone workflow run that failed: $HELPER_ERR"
+  run_bump "$inst" workflow-red-only "case 16b" bump --target v1.0.1 --timeout-seconds 0 \
+    --override "example-owner vouches for this tree by hand"
+  [ "$HELPER_STATUS" -eq 1 ] \
+    || fail "case 16b: --override rescued a lone failed workflow run (exit $HELPER_STATUS, expected 1); DoD 2 is unconditional, and misreading a red run as unreadable is exactly how the override reaches one; stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16b" "after an override attempt on a lone failed workflow run"
+  [ -z "$(git -C "$inst" status --porcelain)" ] \
+    || fail "case 16b: a refused bump still wrote to the tree: $(git -C "$inst" status --porcelain | tr '\n' ' ')"
+  ok "case 16b: a lone failed workflow run with no check run behind it never bumps, with or without --override"
+
   # --- 16c: unreadable CI stops rather than guessing ---------------------------
   # Four distinct unreadable shapes, each of which a naive implementation would be
   # tempted to read as "nothing failed, therefore green".
@@ -3293,6 +3341,18 @@ case_ci_verified_bump() { # workdir
   assert_framework_version "$inst" "v1.0.0" "case 16c" "after checks with no workflow run behind them"
   printf '%s' "$HELPER_ERR" | grep -Fq 'no workflow run' \
     || fail "case 16c: the diagnostic does not name the missing workflow run: $HELPER_ERR"
+
+  # Triggered, completed, and did nothing: the conclusion is `skipped` and no job was ever
+  # created. Nothing failed, and nothing verified the tree either -- the same absence as
+  # "no run at all", wearing a conclusion. Requiring a check run to exist used to stop
+  # this shape by accident; the verdict deliberately no longer requires one (a lone failed
+  # workflow run has none either), so "did anything actually run?" has to be its own test.
+  run_bump "$inst" nothing-ran "case 16c" bump --target v1.0.1 --timeout-seconds 0
+  [ "$HELPER_STATUS" -eq 3 ] \
+    || fail "case 16c: bump on a SHA whose every run concluded without running anything exited $HELPER_STATUS (expected 3); nothing failed, but nothing passed either; stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.0" "case 16c" "after a run that concluded without running anything"
+  printf '%s' "$HELPER_ERR" | grep -Fq 'without running anything' \
+    || fail "case 16c: the diagnostic does not say that nothing actually ran: $HELPER_ERR"
 
   # No remote at all: there is nowhere for a CI run to exist, and the helper must say
   # that rather than treat the absence as success.

@@ -502,10 +502,16 @@ fi
 # 10. Bump only on a green conclusion for that exact head SHA — never by branch
 #     name, because a branch can advance between the push and the poll. The helper
 #     writes the marker, asserts the read-back, and commits it on the verified head.
-#     Exit 1 = CI is not green (it names the failing check). Exit 3 = no conclusion
-#     could be read at all: no remote, gh unavailable, the API unreachable, a SHA
-#     GitHub has never seen (you did not push), no check run at all (Actions
-#     disabled, or no workflow triggered), or a run still in flight. Both leave the
+#     Exit 1 = CI is not green (it names the failing check). A WORKFLOW that failed
+#     counts even with no check run behind it: a run that fails at startup (invalid
+#     workflow YAML, which is what a badly resolved conflict under .github/workflows/
+#     produces on this merge) never creates a job, and it is usually the only run for
+#     the SHA, since corpus-refresh.yml is filtered on knowledge/** and the merge does
+#     not touch it. Exit 3 = no conclusion could be read at all: no remote, gh
+#     unavailable, the API unreachable, a SHA GitHub has never seen (you did not
+#     push), no workflow run and no check run at all (Actions disabled, or no workflow
+#     triggered), every run concluded without running anything, or a run still in
+#     flight. Both leave the
 #     marker alone. "No run found" is never success — do not write the file by hand.
 #     Adopting anyway is possible and must be recorded:
 #       node "$BUMP_HELPER" bump --target "$TARGET" --override "<why you accepted it>"

@@ -58,9 +58,11 @@ tags, never framework `main`** (ADR 004, SPEC
   the poll), and writes the marker only on a green one. A failing conclusion names the
   failing check and leaves the marker at the pre-merge value `package-state.mjs`
   restored. An unreadable one — no remote, `gh` unavailable, the API unreachable, a SHA
-  GitHub has never seen, no check run at all (Actions disabled, or no workflow
-  triggered), a run still in flight — stops and says which case it hit. **"No run
-  found" is never treated as success.** Adopting anyway requires
+  GitHub has never seen, no workflow run and no check run at all (Actions disabled, or
+  no workflow triggered), every run concluded without running anything, a run still in
+  flight — stops and says which case it hit. **"No run
+  found" is never treated as success**, and neither is a run that was triggered and did
+  nothing. Adopting anyway requires
   `--override "<reason>"`, which is recorded in the run output and on the commit.
 
   **A green partial answer is not a green run.** GitHub creates a job's check run only
@@ -74,6 +76,20 @@ tags, never framework `main`** (ADR 004, SPEC
   and completes only when all of its jobs have. Checks with no workflow run behind them
   stop too, because nothing there says the list is finished.
 
+  **A failed workflow is red even when it produced no check at all.** The verdict is read
+  from the workflow runs and the check runs together, because neither list contains the
+  other. A run that fails at *startup* — invalid workflow YAML, which is what a badly
+  resolved conflict under `.github/workflows/` produces on exactly this merge, and which
+  `npm run build` cannot see — is completed with a failing conclusion and never creates a
+  job, so nothing in the check list represents it. On an instance that is usually the
+  **only** run for the SHA, because `corpus-refresh.yml` is filtered on `knowledge/**`
+  and an upgrade merge is `merge=ours` there: the push triggers `deploy.yml` and nothing
+  else. So the verdict never requires a check run to exist — it requires the workflow
+  runs to be finished. What it does require separately is that something actually *ran*:
+  a set of conclusions with no `success` anywhere in it is a workflow that was triggered
+  and did nothing, which verifies a tree no more than no run at all does, and it stops as
+  unreadable rather than passing as green.
+
   **`--override` answers only the unreadable case.** A conclusion that was read and is
   red is never overridable: "a red or failing run never bumps" is unconditional, and the
   two situations assert different things — "I verified this another way" versus "I know
@@ -82,8 +98,11 @@ tags, never framework `main`** (ADR 004, SPEC
 
   New helper `scripts/upgrade/ci-verified-bump.mjs`, bootstrapped from the target tag
   like every other upgrade helper. `npm run upgrade:check` gains case 16 (green, red,
-  every unreadable shape — including a green partial set whose workflow is still running,
-  and checks with no workflow run behind them — the recorded override, the refusal to
+  a workflow that failed at startup with no check run behind it — both beside a second
+  workflow's green check and as the lone run for the SHA, where it must still refuse the
+  override — every unreadable shape, including a green partial set whose workflow is
+  still running, checks with no workflow run behind them, and a run that concluded
+  without running anything; the recorded override, the refusal to
   override a red conclusion, and the usage contract) and
   `npm run upgrade:selftest` proves it non-vacuous. `npm run upgrade-sequence:check` is
   a new gate deriving the documented sequence from the skill, so the spec and the

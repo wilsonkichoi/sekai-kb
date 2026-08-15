@@ -532,12 +532,20 @@ bug. What the helper does with each answer:
   which is also why the conclusion is resolved by head SHA and never by branch name.
 - **Not green (exit 1)** → names the failing check and leaves the marker at the
   pre-merge value step 5 restored. Fix the failure, push again, re-run this step
-  against the new head.
+  against the new head. A **workflow** that failed counts here even when it produced
+  no check run at all: a run that fails at startup — invalid workflow YAML, which is
+  what a badly resolved conflict under `.github/workflows/` produces on exactly this
+  merge — never creates a job, and on an instance it is usually the *only* run for
+  the SHA, because `corpus-refresh.yml` is filtered on `knowledge/**` and the merge
+  does not touch it. That answer is red, not unreadable, so `--override` does not
+  reach it.
 - **No conclusion readable (exit 3)** → says which case it hit (no remote
   configured, `gh` unavailable, the API unreachable, GitHub has never seen this SHA
-  so the merge was never pushed, no check run at all — Actions disabled or no
-  workflow triggered — or a run still in flight past `--timeout-seconds`) and leaves
-  the marker unchanged. **"No run found" is never success.** Do not work around this
+  so the merge was never pushed, no workflow run and no check run at all — Actions
+  disabled or no workflow triggered — every run concluded without running anything,
+  or a run still in flight past `--timeout-seconds`) and leaves
+  the marker unchanged. **"No run found" is never success**, and neither is a run
+  that was triggered and did nothing. Do not work around this
   by writing the file by hand: if the user decides to adopt anyway, pass
   `--override "<reason>"`, which records that reason in the run output and on the
   commit. Never invent the reason — it is the user's, and it is the whole audit
