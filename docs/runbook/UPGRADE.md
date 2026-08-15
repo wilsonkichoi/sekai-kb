@@ -317,7 +317,12 @@ the same reason:
 ```bash
 npm run build
 git commit --no-edit
-git push origin HEAD
+# No `origin` at all? There is nothing to push and no run to read, but the sequence
+# must still REACH the helper: it is the only thing that records an adoption, and its
+# override is the only way to record one nothing verified. So do not stop here.
+git remote get-url origin >/dev/null 2>&1 \
+  && git push origin HEAD \
+  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
 # Until the helper runs, FRAMEWORK-VERSION still holds the OLD value that step 6
 # restored. It writes the marker only on a green conclusion for this exact head SHA,
 # asserts the read-back, and commits it there; exit 1 = not green, exit 3 = no
@@ -460,7 +465,12 @@ npm run build
 #    cost of having no staging tier: the run this push triggers is the only place
 #    the merged tree is really verified.
 git diff --cached --quiet || git commit -m "chore: reconcile starter files for $TARGET"
-git push origin HEAD
+# No `origin` at all? There is nothing to push and no run to read, but the sequence
+# must still REACH the helper: it is the only thing that records an adoption, and its
+# override is the only way to record one nothing verified. So do not stop here.
+git remote get-url origin >/dev/null 2>&1 \
+  && git push origin HEAD \
+  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
 
 # 10. Bump only on a green conclusion for that exact head SHA — never by branch
 #     name, because a branch can advance between the push and the poll. The helper
@@ -472,6 +482,11 @@ git push origin HEAD
 #     marker alone. "No run found" is never success — do not write the file by hand.
 #     Adopting anyway is possible and must be recorded:
 #       node "$BUMP_HELPER" bump --target "$TARGET" --override "<why you accepted it>"
+#     An instance with no `origin` lands here every time — nothing to push, no
+#     conclusion to read. The guarded push above is what keeps the sequence running
+#     to this point instead of dying at `git push`, and the override is the only way
+#     past exit 3. The reason is the whole audit trail for an adoption no CI run
+#     stands behind, so write what you actually verified, never a placeholder.
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
 git show "$TARGET":scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
 node "$BUMP_HELPER" bump --target "$TARGET"

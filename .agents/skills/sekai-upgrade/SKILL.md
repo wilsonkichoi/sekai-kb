@@ -481,7 +481,12 @@ it, and let the helper read the conclusion GitHub recorded for that exact commit
 # Anything step 8 staged is committed here, BEFORE the push — it is part of the
 # tree being verified. Skip this line when nothing is staged.
 git diff --cached --quiet || git commit -m "chore: reconcile starter files for sekai-kb-vX.Y.Z"
-git push origin HEAD
+# No `origin` at all? There is nothing to push and no run to read, but the sequence
+# must still REACH the helper: it is the only thing that records an adoption, and its
+# override is the only way to record one nothing verified. So do not stop here.
+git remote get-url origin >/dev/null 2>&1 \
+  && git push origin HEAD \
+  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
 
 # Same tag-first rule as every helper above.
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
@@ -509,6 +514,20 @@ bug. What the helper does with each answer:
   `--override "<reason>"`, which records that reason in the run output and on the
   commit. Never invent the reason — it is the user's, and it is the whole audit
   trail for an adoption nothing verified.
+
+**An instance with no `origin`.** Some instances never gain a remote — a private
+clone that deploys by hand, a fork used offline. There is nothing to push and no
+conclusion to read, and that is exit 3, not a failure to route around. The push line
+above is guarded so the sequence still reaches the helper rather than dying at the
+push, and the only way past exit 3 is the reason-bearing override:
+
+```bash
+node "$BUMP_HELPER" bump --target sekai-kb-vX.Y.Z --override "no remote: verified by <what you ran>"
+```
+
+Ask the user what they actually verified and use their words. The reason is the whole
+audit trail for an adoption no CI run stands behind, so a placeholder is worse than
+stopping — it launders an unverified adoption into a recorded one.
 
 Pushing is what triggers that CI run, so this step reaches the network mid-upgrade
 and, on an instance, **deploys** (`DEPLOY.md` §CI). Say so before running it. That

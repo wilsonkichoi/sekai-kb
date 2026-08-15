@@ -75,6 +75,16 @@ tags, never framework `main`** (ADR 004, SPEC
   build and no staging tier, so verifying against the tier that exists beats recording
   an adoption nothing checked.
 
+  An instance with no `origin` still reaches the helper. That is the one unreadable
+  shape the documented sequence could withhold its own answer for: the push comes
+  first, so an unguarded `git push origin HEAD` ends the block before anything runs,
+  and the override built for exactly this case is unreachable without editing the
+  commands. Every document now guards the push on the remote existing and shows the
+  reason-bearing override as the way past exit 3. `upgrade-sequence:check` fails an
+  unguarded push and a document that stops showing the override; `upgrade:check`
+  case 19 runs the note's own push block under `set -e` on a tree with no remote, then
+  runs its documented override and asserts the reason lands on the commit.
+
 - **The upgrade sweeps derived artifacts stranded at a retired path.** When v1.1.5 moved
   the corpus artifact to `workers/lib/vectors.json` the `.gitignore` line moved with it,
   so every instance that had run `npm run embeddings:build` before upgrading kept an
@@ -181,7 +191,12 @@ Run this instead, once the local build is green and every change from the merge 
 committed:
 
 ```bash
-git push origin HEAD
+# No `origin` at all? There is nothing to push and no run to read, but the sequence
+# must still REACH the helper: it is the only thing that records an adoption, and its
+# override is the only way to record one nothing verified. So do not stop here.
+git remote get-url origin >/dev/null 2>&1 \
+  && git push origin HEAD \
+  || echo "no origin remote: nothing pushed; the bump below will exit 3 -- see --override"
 BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
 git show sekai-kb-v1.1.6:scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
 node "$BUMP_HELPER" bump --target sekai-kb-v1.1.6
@@ -194,6 +209,14 @@ a SHA GitHub has never seen, a run still in flight — stops and says which case
 **"no run found" is never read as success.** To adopt anyway, add
 `--override "<reason>"`, and the reason is kept in the run output and on the commit. On
 an instance that push **deploys**, which is the accepted cost of having no staging tier.
+
+If your instance has no `origin` at all, the push is guarded above precisely so the
+sequence still reaches the helper: there is nothing to push and no conclusion to read,
+so the helper exits 3, and the reason-bearing override is the only way past it —
+
+```bash
+node "$BUMP_HELPER" bump --target sekai-kb-v1.1.6 --override "no remote: verified by <what you ran>"
+```
 
 ## [1.1.5] — 2026-08-13
 

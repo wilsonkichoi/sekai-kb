@@ -70,6 +70,12 @@ const CHANGELOG = 'CHANGELOG.md';
 const BUMP_HELPER = 'scripts/upgrade/ci-verified-bump.mjs';
 const PUSH = /git push /;
 
+/** The push is conditional on a remote existing, so a no-remote tree still reaches the helper. */
+const REMOTE_GUARD = /git remote get-url origin[\s\S]{0,120}git push /;
+
+/** The bump shown with an explicit reason — the only documented way past an unreadable conclusion. */
+const OVERRIDE_INVOCATION = /node "\$BUMP_HELPER" bump[^\n]*--override "[^"]+"/;
+
 /**
  * A raw shell redirect into the marker. This is the retired form: it writes the
  * adoption without reading any conclusion, which is the whole defect. `test "$(cat
@@ -201,6 +207,35 @@ function checkAdopterDocument(rel, source, stages) {
   }
   if (pushMatch.index > bumpAt) {
     failure(`${rel}: invokes ${BUMP_HELPER} before pushing the merged branch`);
+  }
+  checkNoRemotePathReachesTheHelper(rel, source);
+}
+
+/**
+ * An instance with no `origin` is one of the unreadable shapes the helper is built to
+ * answer, and the only shape whose answer the DOCUMENTED sequence can withhold: the
+ * push comes first, so an unguarded `git push origin HEAD` aborts the block before
+ * anything reaches the helper, and the override that exists for exactly this case is
+ * never offered. A capability reachable only by editing the documented commands is not
+ * a capability.
+ *
+ * Both halves are required. The guard keeps the sequence running to the helper; the
+ * override invocation is what the operator does when it gets there.
+ */
+function checkNoRemotePathReachesTheHelper(rel, source) {
+  if (!REMOTE_GUARD.test(source)) {
+    failure(
+      `${rel}: pushes the merged branch without first testing that a remote exists. On an `
+      + `instance with no \`origin\` the push aborts the documented sequence before `
+      + `${BUMP_HELPER} runs, so the override built for that case cannot be reached`,
+    );
+  }
+  if (!OVERRIDE_INVOCATION.test(source)) {
+    failure(
+      `${rel}: never shows the bump invoked with \`--override "<reason>"\`, so a reader `
+      + 'whose CI conclusion is unreadable has no documented way to record the adoption '
+      + 'and is left to write the marker by hand — the exact defect the helper exists to end',
+    );
   }
 }
 
@@ -410,6 +445,20 @@ const SELFTEST_DEFECTS = [
     }),
   },
   {
+    label: 'the runbook pushes unguarded, so a no-remote tree never reaches the helper',
+    mutate: (docs) => ({
+      ...docs,
+      runbook: docs.runbook.replaceAll(/git remote get-url origin[\s\S]*?\|\| echo "no origin[^"]*"/g, 'git push origin HEAD'),
+    }),
+  },
+  {
+    label: 'the runbook never shows the bump with an explicit override reason',
+    mutate: (docs) => ({
+      ...docs,
+      runbook: docs.runbook.replaceAll(/--override "[^"]+"/g, ''),
+    }),
+  },
+  {
     label: 'the runbook stops invoking the CI-verified bump helper',
     mutate: (docs) => ({ ...docs, runbook: docs.runbook.replaceAll(BUMP_HELPER, 'scripts/upgrade/gone.mjs') }),
   },
@@ -446,7 +495,12 @@ const SELFTEST_DEFECTS = [
   {
     label: 'the Upgrade note hands off the bump without pushing first',
     requiresTemplate: true,
-    mutate: (docs) => ({ ...docs, changelog: docs.changelog.replace('git push origin HEAD\n', '') }),
+    // The note's push is the guarded form, so strip the whole conditional rather than
+    // a bare line -- a mutation that silently matches nothing proves nothing.
+    mutate: (docs) => ({
+      ...docs,
+      changelog: docs.changelog.replace(/git remote get-url origin[\s\S]*?\|\| echo "no origin[^"]*"\n/, ''),
+    }),
   },
 ];
 

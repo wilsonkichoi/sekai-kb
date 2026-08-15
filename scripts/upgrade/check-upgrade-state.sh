@@ -3544,6 +3544,81 @@ run_handoff() { # instance tag helper-basename subcommand [args...]
   HELPER_ERR="$(cat "$TMP/stderr.txt")"
 }
 
+# The note's guarded push, lifted out of the document verbatim. Running THIS rather
+# than a restatement is the point: what it replaced was a bare `git push origin HEAD`,
+# and the difference only shows on a tree with no remote.
+documented_push_block() {
+  awk '
+    /^### Upgrade note/ { note = 1; next }
+    note && /^## / { exit }
+    note && /^git remote get-url origin/ { emit = 1 }
+    emit { print }
+    emit && /echo "no origin/ { exit }
+  ' "$ROOT/CHANGELOG.md"
+}
+
+# The reason-bearing override invocation the note documents for an unreadable
+# conclusion, read back out of the note so a document that stops offering it fails here.
+documented_override_invocation() {
+  awk '
+    /^### Upgrade note/ { note = 1; next }
+    note && /^## / { exit }
+    note && /^node "\$BUMP_HELPER" bump/ && index($0, "--override") { print; exit }
+  ' "$ROOT/CHANGELOG.md"
+}
+
+case_documented_no_remote_override() { # workdir
+  local work="$1" fw inst state block
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_handoff_framework "$fw"
+  git clone -q "$fw" "$inst"
+  configure_repo "$inst"
+  git -C "$inst" checkout -q -B main fw-v1
+  git -C "$inst" rm -q -f .sekai-template
+  printf 'v7.0.0\n' > "$inst/VERSION"
+  write_npm_manifests "$inst" "example-instance" versioned "7.0.0"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Adopt Example framework at fw-v1"
+  state="$(run_package_capture "$inst" "case 19")"
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  ( cd "$inst" && node "$PACKAGE_HELPER" reconcile "$state" ) >/dev/null 2>&1 \
+    || fail "case 19: package-state reconcile failed while staging the fixture"
+  finalize_merge "$inst" "case 19"
+
+  # The shape this case exists for: an instance that never gained a remote. A private
+  # clone that deploys by hand is a real adopter, and it is the ONE unreadable shape
+  # whose answer the documented sequence itself can withhold.
+  git -C "$inst" remote remove origin 2>/dev/null || true
+  [ -z "$(git -C "$inst" remote)" ] \
+    || fail "case 19: fixture guard — the instance still has a remote, so the no-remote path is not what is being tested"
+
+  block="$(documented_push_block)"
+  [ -n "$block" ] \
+    || fail "case 19: the Upgrade note carries no guarded push block to run, so an unguarded push cannot be ruled out"
+  # `set -e` is the whole assertion. A bare `git push origin HEAD` exits non-zero with
+  # no remote and ends the block right there, before anything reaches the bump helper.
+  if ! ( set -e; cd "$inst" && eval "$block" ) >/dev/null 2>&1; then
+    fail "case 19: the Upgrade note's push aborts the sequence on an instance with no remote, so the bump helper is never reached and its override cannot be used"
+  fi
+  ok "case 19: the documented push survives a tree with no remote, so the sequence reaches the bump helper"
+
+  # Having reached it, the documented way past exit 3 must actually record the adoption.
+  assert_framework_version "$inst" "v1.0.0" "case 19" "before the documented override"
+  [ -n "$(documented_override_invocation)" ] \
+    || fail "case 19: the Upgrade note documents no reason-bearing override invocation, so a no-remote adopter has no recorded way to adopt"
+  run_handoff "$inst" fw-v2 ci-verified-bump.mjs bump \
+    --target v1.0.1 --override "no remote: verified by npm run build"
+  [ "$HELPER_STATUS" -eq 0 ] \
+    || fail "case 19: the documented no-remote override exited $HELPER_STATUS (expected 0); stdout: '$HELPER_OUT'; stderr: '$HELPER_ERR'"
+  assert_framework_version "$inst" "v1.0.1" "case 19" "after the documented override"
+  assert_framework_version_committed "$inst" "v1.0.1" "case 19"
+  git -C "$inst" log -1 --format=%B | grep -Fq "no remote: verified by npm run build" \
+    || fail "case 19: the override reason is not on the commit, so the adoption records nothing about why it was accepted"
+  ok "case 19: the documented no-remote override records the adoption with its reason on the commit"
+}
+
 case_first_upgrade_handoff() { # workdir
   local work="$1" fw inst state sweep_cmd bump_cmd
   fw="$work/fw"
@@ -3916,6 +3991,9 @@ run_all_cases() {
   echo "── case 18: the release-boundary handoff — both new steps run on the upgrade that ships them ──"
   case_first_upgrade_handoff "$TMP/case18"
   echo ""
+  echo "── case 19: the documented sequence reaches the bump helper on an instance with no remote ──"
+  case_documented_no_remote_override "$TMP/case19"
+  echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
   echo ""
@@ -3976,7 +4054,8 @@ run_selftest() {
   expect_case_to_fail case_ci_verified_bump "$TMP/selftest-case16" "case 16 (CI-verified bump)"
   expect_case_to_fail case_stale_corpus_artifact "$TMP/selftest-case17" "case 17 (stale corpus artifact)"
   expect_case_to_fail case_first_upgrade_handoff "$TMP/selftest-case18" "case 18 (release-boundary handoff)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16, 17 and 18 all fail when their load-bearing step is skipped."
+  expect_case_to_fail case_documented_no_remote_override "$TMP/selftest-case19" "case 19 (documented no-remote override)"
+  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16, 17, 18 and 19 all fail when their load-bearing step is skipped."
 }
 
 main() {
