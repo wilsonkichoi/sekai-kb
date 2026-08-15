@@ -539,15 +539,20 @@ bug. What the helper does with each answer:
   the SHA, because `corpus-refresh.yml` is filtered on `knowledge/**` and the merge
   does not touch it. That answer is red, not unreadable, so `--override` does not
   reach it.
-- **Green, but the bump commit was refused (also exit 1)** → the second shape of
-  exit 1, and the one that names no failing check. The commit runs your instance's
-  own `pre-commit` hook (the template ships one), so it can fail on a tree this step
-  has already written and staged. The helper restores `FRAMEWORK-VERSION` to its
-  pre-merge bytes *and* its prior index entry before exiting, and the message says it
-  put them back — so read the message rather than the exit code alone. If the restore
+- **The tree is not in a verifiable state (also exit 1)** → exit 1 is not only "CI
+  said no". It is also every shape where there is nothing CI could have verified, and
+  none of these names a failing check: a merge still in progress, unmerged paths left
+  from the conflict walk, `HEAD` moving while the conclusion was read, and — after a
+  **green** conclusion — a bump commit your own `pre-commit` hook refused, since the
+  template ships one and it runs on a tree this step has already written and staged.
+  Each prints its own directive, so read the message rather than the exit code alone.
+  In the refused-commit case the helper restores `FRAMEWORK-VERSION` to its pre-merge
+  bytes *and* its prior index entry first, and says it put them back; if the restore
   itself failed the message says that instead, and only then does the tree need you.
-  Fix what the hook objected to and re-run this step; CI stays green on the same head,
-  so nothing has to be pushed again.
+  Fix what the hook objected to and re-run this step **without creating a commit** —
+  the conclusion is resolved from whatever `HEAD` is then, so a fix commit makes it a
+  SHA GitHub has never seen and the step polls to `--timeout-seconds` (default 1800)
+  before exit 3. If you do need a commit, push it first and let CI go green on it.
 - **No conclusion readable (exit 3)** → says which case it hit (no remote
   configured, `gh` unavailable, the API unreachable, GitHub has never seen this SHA
   so the merge was never pushed, no workflow run and no check run at all — Actions

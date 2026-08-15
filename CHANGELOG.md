@@ -250,10 +250,13 @@ node "$BUMP_HELPER" bump --target sekai-kb-v1.1.6
 
 The helper reads the conclusion GitHub recorded for that exact head SHA and writes the
 marker only on a green one. A failing conclusion names the failing check and leaves the
-marker at its pre-merge value. So does a green conclusion whose bump commit your own
-`pre-commit` hook refuses — the same exit 1, naming no check, with the marker and its
-index entry put back and the message saying so; fix what the hook objected to and re-run
-the block, because CI is still green on that head. An unreadable one — Actions disabled, no remote, offline,
+marker at its pre-merge value. So does every shape where there was nothing for CI to
+verify — a merge still in progress, unmerged paths, `HEAD` moving mid-read, and, after a
+**green** conclusion, a bump commit your own `pre-commit` hook refuses, with the marker
+and its index entry put back and the message saying so. None of those names a check, so
+read the message; and re-run without making a commit, because the conclusion is resolved
+from `HEAD` and a fix commit becomes a SHA GitHub never saw.
+An unreadable one — Actions disabled, no remote, offline,
 a SHA GitHub has never seen, a run still in flight — stops and says which case it hit;
 **"no run found" is never read as success.** To adopt anyway, add
 `--override "<reason>"`, and the reason is kept in the run output and on the commit. On
