@@ -45,6 +45,30 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Fixed
 
+- **The upgrade-sequence gate no longer goes vacuous the moment a release is cut.**
+  `check-upgrade-sequence-docs.mjs` resolved "the newest changelog entry" as the first
+  `## [` heading in the file. That is always `## [Unreleased]`, which holds the pending
+  entries on a task branch but is left behind **empty** by `prepare-release.mjs` once a
+  release moves them under a dated heading. From that commit onward the gate read a
+  17-character stub, found no helper paths in it, concluded the release introduced
+  nothing, and skipped every release-boundary assertion — silently, and for the whole
+  life of the repository between releases. The release-boundary rule is the subtlest
+  thing this gate enforces and it was the part that stopped running.
+
+  The split now skips any entry whose body is only whitespace, so it returns the pending
+  entries before a release and the dated entry after one. Pinned by a sixteenth planted
+  defect class, `an empty Unreleased placeholder shadows the newest released entry`,
+  which plants a real handoff defect *underneath* a released-shape placeholder: a gate
+  reading the first heading unconditionally reports it undetected. Verified against the
+  real released shape, not only the fixture — with the previous split restored, the
+  released `CHANGELOG.md` reproduces exactly the four undetected defects that failed CI.
+
+  `$sekai-framework-release` step 3 now also runs `upgrade-sequence:check`,
+  `upgrade-sequence:selftest`, `upgrade:check`, and `test:upgrade-docs`. The release
+  commit is the one that changes the shape of `CHANGELOG.md`, so it is the one commit
+  where these gates can newly fail; omitting them is why this surfaced as a red release
+  PR instead of a local stop.
+
 - **`/sekai-upgrade` records an adoption only after the instance's own CI is green on
   the merged tree.** The bump used to run inside the pre-push commit sequence, right
   after `npm run build` — so by construction no CI run existed at the moment

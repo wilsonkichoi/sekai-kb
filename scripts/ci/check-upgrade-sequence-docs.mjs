@@ -260,19 +260,36 @@ function checkNoRemotePathReachesTheHelper(rel, source) {
 const HELPER_PATHS = /scripts\/upgrade\/[a-z0-9-]+\.mjs/g;
 
 /**
- * The newest changelog entry (the first `## [` heading to the next one) and everything
- * else in the file. "Everything else" deliberately includes the preamble, so a helper
- * the release discipline already discusses is not mistaken for a new one.
+ * The newest changelog entry that actually has content, and everything else in the
+ * file. "Everything else" deliberately includes the preamble, so a helper the release
+ * discipline already discusses is not mistaken for a new one.
+ *
+ * An entry whose body is only whitespace is skipped rather than returned. That is the
+ * `## [Unreleased]` placeholder `prepare-release.mjs` leaves behind when it moves the
+ * pending entries under a dated heading: before a release the pending work lives in
+ * `[Unreleased]` and this returns it, and after one it lives in `[X.Y.Z]` directly
+ * below an empty `[Unreleased]` and this returns THAT. Taking the first heading
+ * unconditionally would make every check below vacuous for the entire life of the
+ * repository between releases -- `introduced` comes back empty from a stub with no
+ * helper paths in it, and the handoff assertions never run. That is the exact drift
+ * class this gate exists to catch, so it must not be reachable in the gate itself.
  */
 export function splitNewestEntry(changelog) {
   const headings = [...changelog.matchAll(/^## \[/gm)].map((match) => match.index);
   if (headings.length === 0) return null;
-  const start = headings[0];
-  const end = headings.length > 1 ? headings[1] : changelog.length;
-  return {
-    entry: changelog.slice(start, end),
-    earlier: changelog.slice(0, start) + changelog.slice(end),
-  };
+  for (let i = 0; i < headings.length; i += 1) {
+    const start = headings[i];
+    const end = i + 1 < headings.length ? headings[i + 1] : changelog.length;
+    const entry = changelog.slice(start, end);
+    // Body = everything after the heading line. Whitespace-only means placeholder.
+    const body = entry.slice(entry.indexOf('\n') + 1);
+    if (body.trim() === '') continue;
+    return {
+      entry,
+      earlier: changelog.slice(0, start) + changelog.slice(end),
+    };
+  }
+  return null;
 }
 
 /** The `### Upgrade note` section of one entry, or null when it carries none. */
@@ -521,6 +538,29 @@ const SELFTEST_DEFECTS = [
     mutate: (docs) => ({
       ...docs,
       changelog: docs.changelog.replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
+    }),
+  },
+  {
+    // The RELEASED shape of the file, which is the shape it holds for the entire life
+    // of the repository between releases. `prepare-release.mjs` moves the pending
+    // entries under a dated heading and leaves `## [Unreleased]` behind as an empty
+    // placeholder, so the newest heading in the file carries no content at all.
+    //
+    // This case plants a real defect (the sweep handoff removed) UNDERNEATH that
+    // placeholder. A gate that reads the first `## [` heading unconditionally sees the
+    // empty stub, finds no helper paths, concludes nothing was introduced, and returns
+    // green -- reporting this defect undetected. Every other changelog case above is
+    // written against the pre-release shape and so cannot catch that regression.
+    label: 'an empty Unreleased placeholder shadows the newest released entry',
+    requiresTemplate: true,
+    mutate: (docs) => ({
+      ...docs,
+      changelog: docs.changelog
+        .replace(/^## \[Unreleased\]\n/m, '## [Unreleased]\n\n## [9.9.9] — 2026-01-01\n')
+        .replace(
+          /STALE_HELPER="\$\(git rev-parse --git-dir\)[\s\S]*?node "\$STALE_HELPER" sweep/,
+          'the upgrade removes it for you',
+        ),
     }),
   },
 ];
