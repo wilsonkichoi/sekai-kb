@@ -46,10 +46,12 @@ All prompts live in `prompt-table.mjs` as data rows — see "Extending" below.
 | 6 | `map.center` | Leaflet center as `lat,lng` | *(required)* |
 | 7 | `map.zoom` | Initial zoom (1-19) | `13` |
 | 8 | `map.maxBounds` | Pan bounds as `south,west,north,east` | center ± 0.05/0.07° |
-| 9-16 | `features.*` | One y/n per toggle: `graph`, `map`, `dashboard`, `soundscape`, `feedback`, `chat`, `social`, `analytics` | graph/map/dashboard on, rest off |
-| 17 | `links.repo` | Instance GitHub repository URL | placeholder URL |
-| 18 | `links.email` | Contact email | `hello@<domain>` |
-| 19-21 | `links.social.*` | `twitter`, `threads`, `instagram` handles (blank = none; `@` added if missing) | none |
+| 9-18 | `features.*` | One y/n per toggle: `graph`, `map`, `dashboard`, `soundscape`, `feedback`, `chat`, `social`, `analytics`, `og`, `mcp` | graph/map/dashboard on, rest off |
+| 19 | `analytics.ga4MeasurementId` | GA4 measurement ID (`G-XXXXXXXXXX`, blank for none) | blank |
+| 20 | `analytics.cloudflareWebAnalyticsToken` | Cloudflare Web Analytics token (32-char hex, blank for none) | blank |
+| 21 | `links.repo` | Instance GitHub repository URL | placeholder URL |
+| 22 | `links.email` | Contact email | `hello@<domain>` |
+| 23-25 | `links.social.*` | `twitter`, `threads`, `instagram` handles (blank = none; `@` added if missing) | none |
 
 **Derived, never prompted:** `place.languages` = `[locale]`;
 `seo.defaultOgImage` = `/og-default.png`; `seo.twitterHandle` mirrors the

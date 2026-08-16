@@ -292,9 +292,11 @@ sees no change.
    Admin > Create Property. Name it after your instance.
 2. **Create a web data stream** for your domain. Copy the **Measurement ID**
    (format: `G-XXXXXXXXXX`).
-3. **(Recommended) Verify the domain in Google Search Console** so GA4 links to
-   organic-search data: Search Console > Add Property > Domain > verify via DNS
-   TXT record.
+3. **(Recommended) Verify the domain in Google Search Console** and link it to
+   the GA4 property so organic-search data flows into GA4 reports:
+   - Search Console > Add Property > Domain > verify via DNS TXT record.
+   - GA4 Admin > Product Links > Search Console Links > Link > select the
+     verified property and the web data stream created in step 2.
 4. **Configure `place.config.ts`:**
 
    ```ts

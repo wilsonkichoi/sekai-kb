@@ -110,14 +110,44 @@ describe('HeadInlineScripts source assertions', () => {
     assert.match(source, /resolveAnalytics\(placeConfig\)/);
   });
 
-  it('conditionally renders the GA4 gtag script', () => {
-    assert.match(source, /ga4\.enabled/);
-    assert.match(source, /googletagmanager\.com\/gtag\/js/);
+  it('GA4 gtag script is syntactically inside a ga4.enabled conditional', () => {
+    assert.match(
+      source,
+      /\{ga4\.enabled && \([\s\S]*?googletagmanager\.com\/gtag\/js[\s\S]*?\)\}/,
+      'the gtag script URL must be enclosed in {ga4.enabled && (...)}',
+    );
   });
 
-  it('conditionally renders the Cloudflare beacon script', () => {
-    assert.match(source, /cloudflare\.enabled/);
-    assert.match(source, /cloudflareinsights\.com\/beacon\.min\.js/);
+  it('Cloudflare beacon is syntactically inside a cloudflare.enabled conditional', () => {
+    assert.match(
+      source,
+      /\{cloudflare\.enabled && \([\s\S]*?cloudflareinsights\.com\/beacon\.min\.js[\s\S]*?\)\}/,
+      'the beacon script URL must be enclosed in {cloudflare.enabled && (...)}',
+    );
+  });
+
+  it('GA4 conditional does not contain the Cloudflare beacon', () => {
+    const ga4Block = source.match(
+      /\{ga4\.enabled && \(([\s\S]*?)\)\}/,
+    );
+    assert.ok(ga4Block, 'ga4.enabled block must exist');
+    assert.doesNotMatch(
+      ga4Block[1],
+      /cloudflareinsights/,
+      'the GA4 conditional must not contain the Cloudflare beacon',
+    );
+  });
+
+  it('Cloudflare conditional does not contain the GA4 script', () => {
+    const cfBlock = source.match(
+      /\{cloudflare\.enabled && \(([\s\S]*?)\)\}/,
+    );
+    assert.ok(cfBlock, 'cloudflare.enabled block must exist');
+    assert.doesNotMatch(
+      cfBlock[1],
+      /googletagmanager/,
+      'the Cloudflare conditional must not contain the GA4 script',
+    );
   });
 
   it('does not contain a concrete analytics identifier', () => {
