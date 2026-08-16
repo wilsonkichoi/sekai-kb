@@ -341,6 +341,65 @@ Both providers are independently gated: set both IDs in the `analytics` block an
 both collect in parallel. Remove one ID (or set it to empty string) to disable
 that provider without touching the other.
 
+### Analytics signal fetchers (`npm run fetch:analytics`)
+
+The analytics dashboard consumes normalized JSON produced by three Python fetchers
+that query GA4, Search Console, and Cloudflare. The command runs all three
+providers; one failure does not block the others, but the orchestrator exits
+nonzero when any provider fails.
+
+**Output files** (gitignored, under `src/data/analytics/`):
+
+| File | Provider | Period |
+|------|----------|--------|
+| `ga4.json` | Google Analytics 4 Data API | 7 days |
+| `search-console.json` | Search Console Search Analytics API | 28 days |
+| `cloudflare.json` | Cloudflare GraphQL Analytics API | 7 days |
+
+**Local environment variables** (set in your shell or `.env` that is NOT committed):
+
+| Variable | Description |
+|----------|-------------|
+| `GA4_PROPERTY_ID` | Numeric GA4 property ID (Admin > Property Settings) |
+| `SC_SITE_URL` | Search Console site URL (`sc-domain:example.com` or `https://example.com/`) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to a service-account JSON key file |
+| `CF_ZONE_ID` | Cloudflare zone ID (Overview page sidebar) |
+| `CF_API_TOKEN` | Cloudflare API token with Analytics:Read on the zone |
+
+**GitHub Actions secrets** (for production builds on push to `main`):
+
+| Secret | Description |
+|--------|-------------|
+| `GA4_PROPERTY_ID` | Same as the local variable |
+| `SC_SITE_URL` | Same as the local variable |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Full JSON content of the service account key (replaces the file path) |
+| `CF_ZONE_ID` | Same as the local variable |
+| `CF_API_TOKEN` | Same as the local variable |
+
+When any required secret is absent, the fetch step skips with a green exit and
+the site builds without analytics data. The corresponding dashboard panel shows
+an explicit unavailable state.
+
+**Service account setup:**
+
+1. In Google Cloud Console, create a service account (no special roles needed
+   beyond the GA4 and Search Console grants below).
+2. Create a JSON key for the service account and download it.
+3. In GA4: Admin > Property Access Management > add the service account email
+   with Viewer role.
+4. In Search Console: Settings > Users and permissions > add the service account
+   email with Restricted access.
+5. Locally: set `GOOGLE_APPLICATION_CREDENTIALS` to the key file path.
+   In Actions: paste the key file content into the `GOOGLE_SERVICE_ACCOUNT_JSON`
+   secret.
+
+**Cloudflare API token setup:**
+
+1. In the Cloudflare dashboard: My Profile > API Tokens > Create Token.
+2. Permissions: Zone > Analytics > Read.
+3. Zone Resources: Include > Specific zone > select your zone.
+4. Copy the token value into `CF_API_TOKEN`.
+
 ---
 
 ## Cloudflare Workers
