@@ -376,9 +376,43 @@ nonzero when any provider fails.
 | `CF_ZONE_ID` | Same as the local variable |
 | `CF_API_TOKEN` | Same as the local variable |
 
-When any required secret is absent, the fetch step skips with a green exit and
-the site builds without analytics data. The corresponding dashboard panel shows
-an explicit unavailable state.
+**How the production fetch runs.** `src/data/` is gitignored and the Pages workflow
+builds from a clean checkout, so a local fetch can never reach the deployed site.
+The fetch therefore happens inside the Pages build job itself, immediately before
+`npm run build`, and its output is consumed only by that build. Nothing is
+committed and nothing is uploaded as a separate artifact.
+
+That step **never runs on a pull request**. The build job executes
+pull-request-authored code, so a step able to receive these secrets would hand a
+service-account key and a Cloudflare API token to anyone who opens one. Every
+analytics step is gated on `push` to `main`.
+`npm run analytics-delivery:check` asserts that gating, plus the ordering, the
+non-blocking failure behavior, and the unchanged `permissions: contents: read`
+block, from the workflow file on every pull request.
+
+`GOOGLE_SERVICE_ACCOUNT_JSON` is written to **runner-temporary storage** for the
+duration of the fetch (outside the build workspace, mode `600`) and removed
+afterwards whether the run succeeds, fails, or is cancelled. The fetch step
+receives the path in `GOOGLE_APPLICATION_CREDENTIALS`, never the raw key, so the
+key is never in the environment of the build that produces `dist/`.
+
+**What each credential state does:**
+
+- With **no** analytics secret set — the default for a fresh clone — the fetch
+  step reports an explicit skip, exits green, and the site builds. Every dashboard
+  analytics panel shows its own unavailable state. Nothing is red.
+- With an **incomplete** set, no credentialed request is sent at all: a partial
+  credential set cannot produce a valid result for any provider. The run reports a
+  visible failed step naming the missing variables, and the site build continues.
+  This is deliberate: a silent green build with an empty dashboard is the failure
+  mode that state exists to prevent.
+- When a **provider fails** (an API outage, a revoked grant, a malformed
+  response), the fetch step is marked failed and stays visible in the run, while
+  the build proceeds with whatever valid source files the run did produce. That
+  source's panel shows its unavailable state and the other two render normally.
+
+An explicit local `npm run fetch:analytics` stays strict: it exits nonzero for
+missing credentials, invalid responses, or any provider failure.
 
 **Service account setup:**
 

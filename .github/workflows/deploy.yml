@@ -99,6 +99,19 @@ jobs:
       - name: Self-test — the CI-deploy exception guard fails on every planted defect class
         run: npm run corpus-refresh:selftest
 
+      # The analytics credential boundary (ADR 012). The build job below runs
+      # pull-request-authored code, so an analytics secret reaching a step that a
+      # pull request can execute hands that credential to anyone who opens one.
+      # Asserts, from deploy.yml itself: every analytics step is gated on push-to-
+      # main, no secret appears outside that gating, the fetch precedes the build
+      # and cannot fail it, the service-account key is materialized only under
+      # runner.temp and always removed, the outputs stay gitignored, and the
+      # permissions block is unchanged.
+      - name: Analytics delivery contract (event gating, credential boundary, ordering, permissions)
+        run: npm run analytics-delivery:check
+      - name: Self-test — the analytics delivery guard fails on every planted defect class
+        run: npm run analytics-delivery:selftest
+
       # ADR 004/005: every phase closes with a tagged release that instance #1 adopts.
       # Template mode only — an adopted instance has no framework ROADMAP to check.
       - name: ROADMAP exit-gate contract (tag, instance adoption, confirm, packet defined)
@@ -201,7 +214,13 @@ jobs:
       # native `node --test <glob>` form does not (a zero-match glob exits 0).
       - name: Worker unit suites
         run: npm run test:workers
-      - name: Analytics injection gate
+      # The browser-injection gate, the production-fetch credential gate's three
+      # states, per-source degradation, and a fixture-backed production build that
+      # renders all three panels and proves no planted credential value reaches the
+      # built site. The build cases run `astro build` into a scratch outDir, so this
+      # step is the only place the rendered analytics markup is checked before the
+      # postbuild dashboard contract sees a real deploy.
+      - name: Analytics gates, source degradation, and production-build rendering
         run: npm run test:analytics
       - name: OG image resolve matrix
         run: npm run test:og
@@ -346,6 +365,84 @@ jobs:
       # for all non-optional deps. Remove when npm ships the fix for nodejs/npm#7758.
       - run: npm ci --force
       - run: npx playwright install --with-deps chromium
+
+      # ── Ephemeral analytics fetch (ADR 012) ────────────────────────────────
+      #
+      # src/data/ is gitignored and this job builds from a clean checkout, so a
+      # local fetch can never reach production. The three normalized source files
+      # are therefore fetched HERE, immediately before Astro, in the same job, and
+      # consumed only by that build. Nothing is committed and nothing is uploaded
+      # separately -- the Pages artifact below is ./dist and nothing else.
+      #
+      # Every step in this block carries the same push-to-main condition. That is
+      # the credential boundary: this job runs pull-request-authored code, so a
+      # step that could receive an analytics secret must be unreachable on
+      # `pull_request` (SPEC section Negative requirements; ADR 012). The condition
+      # is repeated per step rather than factored into a job-level `if`, because
+      # this job must still run on pull requests -- it is the build gate.
+      #
+      # scripts/ci/check-analytics-delivery.mjs asserts every one of those
+      # properties from this file on every pull request.
+      - name: Analytics credential gate
+        id: analytics
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
+          SC_SITE_URL: ${{ secrets.SC_SITE_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: node scripts/deploy/analytics-gate.mjs
+
+      # A partial credential set is a misconfiguration, and the gate above already
+      # refused to send any credentialed request for it. This step exists to make
+      # that refusal visible: `continue-on-error` marks it failed in the run summary
+      # without failing the job, so the build proceeds to publish the site while the
+      # operator can see that analytics did not run and why.
+      - name: Analytics credentials incomplete
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.analytics.outputs.state == 'incomplete'
+        continue-on-error: true
+        run: |
+          echo "The analytics credential set is incomplete; see the gate step above" \
+               "for the missing variable names. No credentialed request was sent." >&2
+          exit 1
+
+      # The service-account key reaches the fetcher as a FILE PATH under
+      # ${{ runner.temp }}, never as the raw JSON in the fetch step's environment.
+      # runner.temp is outside the workspace, so the key cannot be picked up by the
+      # Astro build, land in dist/, or be uploaded with the Pages artifact; the
+      # cleanup step below removes it whatever happens afterwards. `umask 077` is
+      # what keeps the file unreadable to anything else on the runner.
+      - name: Materialize the service-account key in runner-temporary storage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.analytics.outputs.state == 'complete'
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > "${{ runner.temp }}/analytics-service-account.json"
+
+      # Runs all three providers. `continue-on-error` is the "provider failure stays
+      # visible while the build continues" half of ADR 012: the orchestrator exits
+      # nonzero when any provider fails, which marks this step red in the run summary,
+      # and the build below then renders whatever valid source files the run produced
+      # plus a named unavailable state for the rest.
+      - name: Fetch analytics
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.analytics.outputs.state == 'complete'
+        continue-on-error: true
+        env:
+          GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
+          SC_SITE_URL: ${{ secrets.SC_SITE_URL }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/analytics-service-account.json
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: npm run fetch:analytics
+
+      # `always()` so a cancelled or failed fetch still removes the key.
+      - name: Remove the service-account key
+        if: always()
+        run: rm -f "${{ runner.temp }}/analytics-service-account.json"
+
       - run: npm run build
       - name: Theme surfaces regression guard
         run: npm run test:theme

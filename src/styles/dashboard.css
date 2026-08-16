@@ -1140,6 +1140,36 @@
 }
 
 /* ── GA4 Analytics ── */
+/* One panel per source (GA4, Search Console, Cloudflare). Each renders either its
+   own data or its own unavailable card, independently of the other two: the three
+   files are fetched separately and any of them can be absent or stale on a given
+   build (ADR 012). */
+.analytics-panel {
+  margin-top: 1.75rem;
+}
+.analytics-panel:first-of-type {
+  margin-top: 1rem;
+}
+.analytics-panel .subsection-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.analytics-unavailable {
+  background: var(--color-surface-raised);
+  border: 1px dashed var(--color-border-visible);
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+  font-size: 0.85rem;
+  color: var(--color-ink-soft);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.analytics-unavailable strong {
+  color: var(--color-ink);
+}
 .analytics-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1152,12 +1182,16 @@
   gap: 0.8rem;
 }
 .ga-stat-card {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--color-surface-raised);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1rem;
   text-align: center;
+  /* A grid track defaults to minmax(auto, 1fr), so a long value like a
+     six-figure request count would widen its own column past the container
+     rather than wrap. min-width: 0 lets the track shrink and the value wrap. */
+  min-width: 0;
 }
 .ga-stat-icon {
   font-size: 1.3rem;
@@ -1166,12 +1200,13 @@
 .ga-stat-value {
   font-size: 1.6rem;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--color-ink);
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .ga-stat-label {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--color-ink-soft);
   margin-top: 0.2rem;
 }
 .analytics-detail-grid {
@@ -1202,9 +1237,9 @@
 .analytics-pages,
 .analytics-countries,
 .analytics-sources {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--color-surface-raised);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 1.2rem;
   overflow: hidden;
@@ -1231,7 +1266,7 @@
 .ga-country-bar-track {
   flex: 1;
   height: 8px;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-bg-soft);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -1253,7 +1288,7 @@
   text-align: right;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-ink-soft);
   flex-shrink: 0;
 }
 .ga-country-flag {
@@ -1265,7 +1300,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.35rem 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--color-border);
 }
 a.ga-page-row-link {
   text-decoration: none;
@@ -1297,7 +1332,7 @@ a.ga-page-row-link:hover .ga-page-name {
 .ga-page-name {
   flex: 1;
   font-size: 0.85rem;
-  color: #1e293b;
+  color: var(--color-ink);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1310,7 +1345,7 @@ a.ga-page-row-link:hover .ga-page-name {
 .ga-page-pv {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-ink-soft);
   flex-shrink: 0;
 }
 .ga-callouts {
@@ -1321,25 +1356,25 @@ a.ga-page-row-link:hover .ga-page-name {
 .ga-callout {
   padding: 0.95rem;
   border-radius: 10px;
-  background: rgba(248, 250, 252, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
 }
 .ga-callout-title {
   font-size: 0.85rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-ink);
   margin-bottom: 0.35rem;
 }
 .ga-callout-body {
   font-size: 0.82rem;
   line-height: 1.55;
-  color: #334155;
+  color: var(--color-ink-soft);
 }
 .ga-callout-meta,
 .ga-subtle {
   margin-top: 0.45rem;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-ink-soft);
 }
 .ga-mini-list {
   margin-top: 0.7rem;
@@ -1349,12 +1384,12 @@ a.ga-page-row-link:hover .ga-page-name {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.4rem 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--color-border);
 }
 .ga-mini-label {
   flex: 1;
   font-size: 0.82rem;
-  color: #0f172a;
+  color: var(--color-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1362,7 +1397,7 @@ a.ga-page-row-link:hover .ga-page-name {
 .ga-mini-meta,
 .ga-kpi-strip {
   font-size: 0.76rem;
-  color: #64748b;
+  color: var(--color-ink-soft);
   flex-shrink: 0;
 }
 .ga-kpi-strip {
@@ -1375,7 +1410,7 @@ a.ga-page-row-link:hover .ga-page-name {
 .ga-block-title {
   margin: 1rem 0 0.3rem;
   font-size: 0.82rem;
-  color: #334155;
+  color: var(--color-ink-soft);
 }
 .ga-stale-hint {
   display: inline-block;
@@ -1407,7 +1442,7 @@ a.ga-page-row-link:hover .ga-page-name {
 .sc-wordcloud-loading,
 .sc-wordcloud-fallback {
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: var(--color-ink-soft);
   font-style: italic;
 }
 .sc-wordcloud-svg {
@@ -1504,7 +1539,7 @@ a.ga-page-row-link:hover .ga-page-name {
   align-items: center;
   gap: 0.55rem;
   padding: 0.4rem 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.78rem;
 }
 .sc-query-rank {
@@ -1520,7 +1555,7 @@ a.ga-page-row-link:hover .ga-page-name {
   font-weight: 700;
 }
 .sc-query-label {
-  color: #0f172a;
+  color: var(--color-ink);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1528,22 +1563,28 @@ a.ga-page-row-link:hover .ga-page-name {
   min-width: 0;
 }
 .sc-query-clicks {
-  color: #0f172a;
+  color: var(--color-ink);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 .sc-query-impr,
 .sc-query-ctr,
 .sc-query-pos {
-  color: #64748b;
+  color: var(--color-ink-soft);
   font-variant-numeric: tabular-nums;
 }
 .sc-query-pos {
-  color: #94a3b8;
+  color: var(--color-ink-soft);
 }
 @media (max-width: 768px) {
+  /* Two columns, not three: at 390px a three-up grid gives each card ~105px,
+     which a six-figure request count overflows even wrapped. minmax(0, 1fr)
+     is what stops a long value widening its own track past the container. */
   .analytics-totals {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ga-stat-value {
+    font-size: 1.35rem;
   }
   .ga-mini-row {
     flex-direction: column;

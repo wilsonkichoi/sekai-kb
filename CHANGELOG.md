@@ -65,6 +65,34 @@ tags, never framework `main`** (ADR 004, SPEC
   secrets. Python dependencies (`google-analytics-data`, `google-api-python-client`,
   `google-auth`) added to `pyproject.toml`.
 
+- **Analytics reach the deployed dashboard (ADR 012).** The Pages build job now fetches
+  the three normalized analytics sources immediately before `npm run build`, in the same
+  job, and `/dashboard` renders a GA4 traffic panel, a Search Console search-performance
+  panel, and a Cloudflare edge-traffic panel, each showing its own period and fetch time.
+  `src/data/analytics/` stays gitignored: nothing is committed and nothing ships as a
+  separate artifact.
+
+  The fetch is **opt-in through five GitHub Actions secrets** — `GA4_PROPERTY_ID`,
+  `SC_SITE_URL`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `CF_ZONE_ID`, and `CF_API_TOKEN` — and
+  runs only on a push to `main`, never on a pull request. `GOOGLE_SERVICE_ACCOUNT_JSON`
+  is materialized only in runner-temporary storage, outside the build workspace, and is
+  removed after the fetch whether it succeeded, failed, or was cancelled.
+
+  **With none of those secrets set, nothing changes for you:** the step reports an
+  explicit skip, exits green, and each dashboard panel names itself as unavailable. An
+  incomplete secret set sends no credentialed request at all and reports a visible failed
+  step naming the missing variables; a provider outage stays visible the same way. In both
+  cases the site build continues, so analytics never blocks a content deploy. Every source
+  degrades on its own: a missing or invalid GA4 file leaves the Search Console and
+  Cloudflare panels and the article-health dashboard untouched.
+
+  `npm run analytics-delivery:check` asserts that whole boundary from the workflow file on
+  every pull request — event gating, secret placement, key storage and removal,
+  fetch-before-build ordering, non-blocking failure, and the unchanged
+  `permissions: contents: read` block — and `analytics-delivery:selftest` proves the guard
+  still fails on each of those defects. `docs/runbook/DEPLOY.md` §Analytics signal fetchers
+  documents the secrets and all three credential states.
+
 ### Changed
 
 - **Phase 10 analytics now has a complete production-delivery contract.** ADR 012 selects

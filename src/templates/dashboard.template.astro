@@ -5,6 +5,14 @@ import { useTranslations, getLangFromUrl } from '../i18n/utils';
 import placeConfig from '../../place.config';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  formatBytes,
+  formatCount,
+  formatDuration,
+  formatPercent,
+  formatPosition,
+  resolveAnalyticsPanels,
+} from '../lib/analytics-sources';
 
 const lang = getLangFromUrl(Astro.url);
 const t = useTranslations(lang);
@@ -28,6 +36,37 @@ const categorySlugMap = new Map(placeConfig.categories.map((c) => [c.title, c.sl
 function categoryToSlug(cat: string): string | undefined {
   return categorySlugMap.get(cat);
 }
+
+/* Analytics (ADR 012). The three source files are fetched into ignored
+   src/data/analytics/ during the production build and are absent everywhere else,
+   so each panel resolves to its own available/unavailable state and the article
+   health sections above are unaffected by all of them. */
+const analytics = resolveAnalyticsPanels(placeConfig, process.cwd());
+
+/** `2026-08-01T04:05:06Z` -> `2026-08-01`. */
+function fetchedOn(fetchedAt: string): string {
+  return String(fetchedAt).slice(0, 10);
+}
+
+/** The largest value in a row set, used to scale the inline bars. Never zero. */
+function peak(rows: any[], key: string): number {
+  const max = rows.reduce((acc, row) => {
+    const value = Number(row?.[key]);
+    return Number.isFinite(value) && value > acc ? value : acc;
+  }, 0);
+  return max > 0 ? max : 1;
+}
+
+/** A row value's share of the peak, as a CSS width percentage. */
+function barWidth(value: unknown, max: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '0%';
+  return `${Math.max(2, Math.round((n / max) * 100))}%`;
+}
+
+const ga4 = analytics.sources.find((s) => s.id === 'ga4')!;
+const searchConsole = analytics.sources.find((s) => s.id === 'search-console')!;
+const cloudflare = analytics.sources.find((s) => s.id === 'cloudflare')!;
 ---
 
 <Layout
@@ -173,6 +212,265 @@ function categoryToSlug(cat: string): string | undefined {
         <p class="section-subtitle">
           Dashboard data is not available. Run <code>npm run prebuild:dashboard</code> to generate it.
         </p>
+      </section>
+    )}
+
+    {analytics.enabled && (
+      <section class="section" id="analytics" data-analytics>
+        <h2 class="section-title">📈 Audience signals</h2>
+        <p class="section-subtitle">
+          Fetched during the production build. Each source reports its own period and
+          degrades on its own.
+        </p>
+
+        <!-- GA4 -->
+        <div
+          class="analytics-panel"
+          data-analytics-source="ga4"
+          data-analytics-state={ga4.available ? 'available' : 'unavailable'}
+          data-analytics-reason={ga4.available ? undefined : ga4.reason}
+        >
+          {ga4.available ? (
+            <div>
+              <h3 class="subsection-title">
+                {ga4.label}
+                <span class="section-timestamp" data-source="analytics">
+                  {ga4.data.period.start} to {ga4.data.period.end} · fetched {fetchedOn(ga4.data.fetchedAt)}
+                </span>
+              </h3>
+              <div class="analytics-grid">
+                <div class="analytics-totals">
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">👥</div>
+                    <div class="ga-stat-value">{formatCount(ga4.data.summary.activeUsers)}</div>
+                    <div class="ga-stat-label">Active readers</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">✨</div>
+                    <div class="ga-stat-value">{formatCount(ga4.data.summary.newUsers)}</div>
+                    <div class="ga-stat-label">New readers</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">📄</div>
+                    <div class="ga-stat-value">{formatCount(ga4.data.summary.pageViews)}</div>
+                    <div class="ga-stat-label">Page views</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🧭</div>
+                    <div class="ga-stat-value">{formatCount(ga4.data.summary.sessions)}</div>
+                    <div class="ga-stat-label">Sessions</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">⏱️</div>
+                    <div class="ga-stat-value">
+                      {formatDuration(ga4.data.summary.averageSessionDurationSeconds)}
+                    </div>
+                    <div class="ga-stat-label">Avg. session</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🔥</div>
+                    <div class="ga-stat-value">{formatPercent(ga4.data.summary.engagementRate)}</div>
+                    <div class="ga-stat-label">Engagement</div>
+                  </div>
+                </div>
+              </div>
+              <div class="analytics-detail-grid">
+                <div class="analytics-pages">
+                  <div class="ga-block-title">Most-read pages</div>
+                  {(ga4.data.topPages as any[]).slice(0, 10).map((row, i) => (
+                    <div class="ga-page-row">
+                      <span class="ga-page-rank">{i + 1}</span>
+                      <span class="ga-page-name">{row.title || row.path}</span>
+                      <span class="ga-page-pv">{formatCount(row.views)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div class="analytics-sources">
+                  <div class="ga-block-title">Where readers came from</div>
+                  {(() => {
+                    const rows = (ga4.data.trafficSources as any[]).slice(0, 8);
+                    const max = peak(rows, 'sessions');
+                    return rows.map((row) => (
+                      <div class="ga-source-row">
+                        <span class="ga-source-name">{row.sourceMedium}</span>
+                        <div class="ga-source-bar-track">
+                          <div class="ga-source-bar-fill" style={`width:${barWidth(row.sessions, max)}`}></div>
+                        </div>
+                        <span class="ga-source-count">{formatCount(row.sessions)}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div class="analytics-unavailable">
+              <strong>{ga4.label}</strong> is unavailable: {ga4.detail}
+            </div>
+          )}
+        </div>
+
+        <!-- Search Console -->
+        <div
+          class="analytics-panel"
+          data-analytics-source="search-console"
+          data-analytics-state={searchConsole.available ? 'available' : 'unavailable'}
+          data-analytics-reason={searchConsole.available ? undefined : searchConsole.reason}
+        >
+          {searchConsole.available ? (
+            <div>
+              <h3 class="subsection-title">
+                {searchConsole.label}
+                <span class="section-timestamp" data-source="analytics">
+                  {searchConsole.data.period.start} to {searchConsole.data.period.end} · fetched {fetchedOn(searchConsole.data.fetchedAt)}
+                </span>
+              </h3>
+              <div class="analytics-grid">
+                <div class="analytics-totals">
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🖱️</div>
+                    <div class="ga-stat-value">{formatCount(searchConsole.data.summary.clicks)}</div>
+                    <div class="ga-stat-label">Clicks</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">👁️</div>
+                    <div class="ga-stat-value">{formatCount(searchConsole.data.summary.impressions)}</div>
+                    <div class="ga-stat-label">Impressions</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🎯</div>
+                    <div class="ga-stat-value">{formatPercent(searchConsole.data.summary.ctr)}</div>
+                    <div class="ga-stat-label">Click-through</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">📍</div>
+                    <div class="ga-stat-value">
+                      {formatPosition(searchConsole.data.summary.averagePosition)}
+                    </div>
+                    <div class="ga-stat-label">Avg. position</div>
+                  </div>
+                </div>
+              </div>
+              <div class="analytics-detail-grid">
+                <div class="analytics-pages">
+                  <div class="ga-block-title">Top queries</div>
+                  {(searchConsole.data.topQueries as any[]).slice(0, 10).map((row, i) => (
+                    <div class="sc-query-row">
+                      <span class="sc-query-rank">{i + 1}</span>
+                      <span class="sc-query-label">{row.query}</span>
+                      <span class="sc-query-clicks">{formatCount(row.clicks)}</span>
+                      <span class="sc-query-impr">{formatCount(row.impressions)}</span>
+                      <span class="sc-query-ctr">{formatPercent(row.ctr)}</span>
+                      <span class="sc-query-pos">{formatPosition(row.position)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div class="analytics-pages">
+                  <div class="ga-block-title">Top landing pages</div>
+                  {(searchConsole.data.topPages as any[]).slice(0, 10).map((row, i) => (
+                    <div class="ga-page-row">
+                      <span class="ga-page-rank">{i + 1}</span>
+                      <span class="ga-page-name">{row.url}</span>
+                      <span class="ga-page-pv">{formatCount(row.clicks)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div class="analytics-unavailable">
+              <strong>{searchConsole.label}</strong> is unavailable: {searchConsole.detail}
+            </div>
+          )}
+        </div>
+
+        <!-- Cloudflare -->
+        <div
+          class="analytics-panel"
+          data-analytics-source="cloudflare"
+          data-analytics-state={cloudflare.available ? 'available' : 'unavailable'}
+          data-analytics-reason={cloudflare.available ? undefined : cloudflare.reason}
+        >
+          {cloudflare.available ? (
+            <div>
+              <h3 class="subsection-title">
+                {cloudflare.label}
+                <span class="section-timestamp" data-source="analytics">
+                  {cloudflare.data.period.start} to {cloudflare.data.period.end} · fetched {fetchedOn(cloudflare.data.fetchedAt)}
+                </span>
+              </h3>
+              <div class="analytics-grid">
+                <div class="analytics-totals">
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🌐</div>
+                    <div class="ga-stat-value">{formatCount(cloudflare.data.summary.requests)}</div>
+                    <div class="ga-stat-label">Requests</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">📄</div>
+                    <div class="ga-stat-value">{formatCount(cloudflare.data.summary.pageViews)}</div>
+                    <div class="ga-stat-label">Page views</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🚶</div>
+                    <div class="ga-stat-value">{formatCount(cloudflare.data.summary.visits)}</div>
+                    <div class="ga-stat-label">Visits</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">📦</div>
+                    <div class="ga-stat-value" data-bytes={cloudflare.data.summary.bytes}>
+                      {formatBytes(cloudflare.data.summary.bytes)}
+                    </div>
+                    <div class="ga-stat-label">Served</div>
+                  </div>
+                  <div class="ga-stat-card">
+                    <div class="ga-stat-icon">🛡️</div>
+                    <div class="ga-stat-value">{formatCount(cloudflare.data.summary.threats)}</div>
+                    <div class="ga-stat-label">Threats blocked</div>
+                  </div>
+                </div>
+              </div>
+              <div class="analytics-detail-grid">
+                <div class="analytics-countries">
+                  <div class="ga-block-title">Top countries</div>
+                  {(() => {
+                    const rows = (cloudflare.data.topCountries as any[]).slice(0, 10);
+                    const max = peak(rows, 'requests');
+                    return rows.map((row) => (
+                      <div class="ga-country-row">
+                        <span class="ga-country-name">{row.country}</span>
+                        <div class="ga-country-bar-track">
+                          <div class="ga-country-bar-fill" style={`width:${barWidth(row.requests, max)}`}></div>
+                        </div>
+                        <span class="ga-country-count">{formatCount(row.requests)}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <div class="analytics-sources">
+                  <div class="ga-block-title">Response status</div>
+                  {(() => {
+                    const rows = (cloudflare.data.statusCodes as any[]).slice(0, 10);
+                    const max = peak(rows, 'requests');
+                    return rows.map((row) => (
+                      <div class="ga-source-row">
+                        <span class="ga-source-name">{row.status}</span>
+                        <div class="ga-source-bar-track">
+                          <div class="ga-source-bar-fill" style={`width:${barWidth(row.requests, max)}`}></div>
+                        </div>
+                        <span class="ga-source-count">{formatCount(row.requests)}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div class="analytics-unavailable">
+              <strong>{cloudflare.label}</strong> is unavailable: {cloudflare.detail}
+            </div>
+          )}
+        </div>
       </section>
     )}
 
