@@ -80,6 +80,18 @@ tags, never framework `main`** (ADR 004, SPEC
   configuration surface; an instance blocked from adopting v1.1.6 can now adopt v1.1.7
   directly.
 
+- **The release-boundary selftest classes no longer depend on what the changelog
+  happens to say.** All four planted their defect into the real `CHANGELOG.md`, which
+  only worked while this repository's newest entry was one that introduced a helper.
+  Twice a routine edit broke that: adding a pending `## [Unreleased]` entry, and then
+  cutting a release whose entry introduces no helper. In both cases `introduced` came
+  back empty, the handoff check correctly returned early, and every one of the four
+  classes silently went vacuous — the selftest reporting them undetected rather than
+  proving anything. They now plant into a synthetic released-shape fixture that names
+  real helper paths, so `acceptedSubcommands()` still reads those helpers' own option
+  tables and the subcommand assertion stays honest. All four are now provably
+  non-vacuous, where previously only the placeholder class was.
+
 ## [1.1.6] — 2026-08-15
 
 /sekai-upgrade bumps FRAMEWORK-VERSION only after the instance's CI is green, sweeps the corpus artifact stranded at its pre-v1.1.5 path, and the upgrade-sequence gate stays non-vacuous once a release is cut.

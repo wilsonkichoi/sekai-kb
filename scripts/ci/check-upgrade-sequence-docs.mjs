@@ -434,19 +434,56 @@ export function check({ skill, spec, runbook, changelog }) {
 /* -- Non-vacuity: every failure mode above must be reachable ---------------- */
 
 /**
- * The changelog as it looks AFTER a release: whatever is pending under
- * `## [Unreleased]` is dropped and the bare placeholder is left behind, so the newest
- * CONTENTFUL entry is the release entry that carries the Upgrade note handoffs.
+ * A synthetic released-shape changelog for the release-boundary defect classes below.
  *
- * Every changelog defect class below plants into that entry, so each must be planted
- * against this shape rather than against the raw file. Otherwise adding any pending
- * Unreleased entry -- which introduces no new helper, so the handoff check correctly
- * returns early -- silently makes all of them vacuous, and the selftest reports the
- * planted defects undetected instead of proving anything.
+ * These classes must plant into "the newest entry, which introduces a helper and hands
+ * it off". Mutating the REAL file to produce that shape only worked while this
+ * repository's newest entry happened to be one that introduced a helper -- twice now a
+ * routine edit (adding a pending entry, then cutting a release whose entry introduces
+ * none) made `introduced` come back empty, the handoff check correctly return early,
+ * and every one of these classes silently go vacuous. A selftest whose coverage
+ * depends on what the changelog happens to say this week is not a guard.
+ *
+ * So they plant into this fixture instead. It is the shape `prepare-release.mjs`
+ * produces -- an empty `## [Unreleased]` placeholder above a dated entry -- and it
+ * names real helper paths, because `acceptedSubcommands()` reads those helpers' own
+ * option tables and the subcommand assertion has to stay honest.
  */
-function releasedShape(changelog) {
-  return changelog.replace(/^## \[Unreleased\][\s\S]*?(?=^## \[)/m, '## [Unreleased]\n\n');
-}
+const FIXTURE_CHANGELOG = `# Changelog
+
+Preamble. Deliberately names no helper path, so the entry below introduces them.
+
+## [Unreleased]
+
+## [9.9.9] — 2026-01-01
+
+### Fixed
+
+- Introduces scripts/upgrade/stale-artifacts.mjs and scripts/upgrade/ci-verified-bump.mjs.
+
+### Upgrade note
+
+\`\`\`bash
+STALE_HELPER="$(git rev-parse --git-dir)/sekai-stale-artifacts.mjs"
+git show sekai-kb-v9.9.9:scripts/upgrade/stale-artifacts.mjs > "$STALE_HELPER"
+node "$STALE_HELPER" sweep
+\`\`\`
+
+\`\`\`bash
+if git remote get-url origin >/dev/null 2>&1; then
+  git push origin HEAD
+else
+  echo "no origin remote"
+fi
+BUMP_HELPER="$(git rev-parse --git-dir)/sekai-ci-verified-bump.mjs"
+git show sekai-kb-v9.9.9:scripts/upgrade/ci-verified-bump.mjs > "$BUMP_HELPER"
+node "$BUMP_HELPER" bump --target sekai-kb-v9.9.9
+\`\`\`
+
+## [0.9.0] — 2025-01-01
+
+An older entry that names no helper.
+`;
 
 const SELFTEST_DEFECTS = [
   {
@@ -534,7 +571,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: releasedShape(docs.changelog).replace(
+      changelog: FIXTURE_CHANGELOG.replace(
         /STALE_HELPER="\$\(git rev-parse --git-dir\)[\s\S]*?node "\$STALE_HELPER" sweep/,
         'the upgrade removes it for you',
       ),
@@ -545,7 +582,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: releasedShape(docs.changelog).replace('node "$STALE_HELPER" sweep', 'node "$SWEEP_HELPER" sweep'),
+      changelog: FIXTURE_CHANGELOG.replace('node "$STALE_HELPER" sweep', 'node "$SWEEP_HELPER" sweep'),
     }),
   },
   {
@@ -553,7 +590,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: releasedShape(docs.changelog).replace('node "$STALE_HELPER" sweep', 'node "$STALE_HELPER" clean'),
+      changelog: FIXTURE_CHANGELOG.replace('node "$STALE_HELPER" sweep', 'node "$STALE_HELPER" clean'),
     }),
   },
   {
@@ -563,7 +600,7 @@ const SELFTEST_DEFECTS = [
     // a bare line -- a mutation that silently matches nothing proves nothing.
     mutate: (docs) => ({
       ...docs,
-      changelog: releasedShape(docs.changelog).replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
+      changelog: FIXTURE_CHANGELOG.replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
     }),
   },
   {
@@ -588,7 +625,7 @@ const SELFTEST_DEFECTS = [
       // happens to have pending entries right now. (An earlier version assumed the
       // newest entry was the one with the handoffs; adding any new Unreleased entry
       // silently made this class vacuous.)
-      const released = releasedShape(docs.changelog);
+      const released = FIXTURE_CHANGELOG;
       return {
         ...docs,
         changelog: released.replace(
