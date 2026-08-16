@@ -189,6 +189,7 @@ sekai-kb/
 ## `place.config.ts`
 
 Schema: `place {name, brandSuffix?, tagline, domain, locale, languages}`,
+`analytics? {ga4MeasurementId?, cloudflareWebAnalyticsToken?}`,
 `categories[] {slug, title, icon, description, color?, colorLight?}` (5-14), `map {center, zoom, maxBounds}`,
 `features {graph, map, dashboard, soundscape, feedback, chat, social, analytics, og, mcp}`,
 `links {repo, email, social {twitter?, threads?, instagram?}}`,
