@@ -165,3 +165,39 @@ class TestCloudflareErrors:
         bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["requests"] = "5000"
         with pytest.raises(ValueError, match="numeric string"):
             fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_incomplete_day_missing_required_field_rejected(self, monkeypatch):
+        """A day group with only 'requests' in sum (missing pageViews/bytes/threats) must fail."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        incomplete = {
+            "viewer": {
+                "zones": [{
+                    "httpRequests1dGroups": [{
+                        "dimensions": {"date": "2026-08-15"},
+                        "sum": {"requests": 5000},
+                        "uniq": {"uniques": 1500},
+                    }]
+                }]
+            }
+        }
+        with pytest.raises(ValueError, match="missing required field"):
+            fetch(days=7, _query_fn=lambda q, v: incomplete)
+
+    def test_missing_sum_object_rejected(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        no_sum = {
+            "viewer": {
+                "zones": [{
+                    "httpRequests1dGroups": [{
+                        "dimensions": {"date": "2026-08-15"},
+                        "uniq": {"uniques": 1500},
+                    }]
+                }]
+            }
+        }
+        with pytest.raises(ValueError, match="missing required.*sum"):
+            fetch(days=7, _query_fn=lambda q, v: no_sum)

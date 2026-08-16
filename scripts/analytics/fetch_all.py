@@ -11,11 +11,32 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
 
 from . import schemas
+
+
+def _redact_error(msg: str) -> str:
+    """Strip known credential patterns from error messages before output."""
+    redacted = msg
+    for var in ("GA4_PROPERTY_ID", "CF_API_TOKEN", "CF_ZONE_ID"):
+        val = os.environ.get(var, "").strip()
+        if val:
+            redacted = redacted.replace(val, f"[REDACTED:{var}]")
+    sc_url = os.environ.get("SC_SITE_URL", "").strip()
+    if sc_url:
+        redacted = redacted.replace(sc_url, "[REDACTED:SC_SITE_URL]")
+    cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if cred_path:
+        redacted = redacted.replace(cred_path, "[REDACTED:CREDENTIALS_PATH]")
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if sa_json:
+        redacted = redacted.replace(sa_json, "[REDACTED:SERVICE_ACCOUNT]")
+    redacted = re.sub(r"Bearer [A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", redacted)
+    return redacted
 
 
 def _write_atomic(path: Path, data: dict) -> None:
@@ -54,7 +75,10 @@ def run(*, days: int = 7) -> int:
             print(f"[analytics] {name}: OK", file=sys.stderr)
         except Exception as e:
             failed.append(name)
-            print(f"[analytics] {name}: FAILED — {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"[analytics] {name}: FAILED — {type(e).__name__}: {_redact_error(str(e))}",
+                file=sys.stderr,
+            )
 
     if failed:
         print(

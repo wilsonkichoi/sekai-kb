@@ -52,6 +52,13 @@ def _validate_numeric(value: Any, field: str) -> int | float:
     return value
 
 
+def _require_field(row: dict, key: str, context: str) -> Any:
+    """Require a field to be present in a provider response row."""
+    if key not in row:
+        raise ValueError(f"Provider response missing required field '{key}' in {context}")
+    return row[key]
+
+
 def fetch(*, days: int = 28, _service=None) -> dict:
     """Fetch Search Console data and return normalized dict.
 
@@ -88,10 +95,10 @@ def fetch(*, days: int = 28, _service=None) -> dict:
     if not totals_row:
         raise ValueError("Search Console returned no data for the requested period")
 
-    clicks = _validate_numeric(totals_row.get("clicks", 0), "summary.clicks")
-    impressions = _validate_numeric(totals_row.get("impressions", 0), "summary.impressions")
-    ctr = _validate_numeric(totals_row.get("ctr", 0), "summary.ctr")
-    position = _validate_numeric(totals_row.get("position", 0), "summary.averagePosition")
+    clicks = _validate_numeric(_require_field(totals_row, "clicks", "totals"), "summary.clicks")
+    impressions = _validate_numeric(_require_field(totals_row, "impressions", "totals"), "summary.impressions")
+    ctr = _validate_numeric(_require_field(totals_row, "ctr", "totals"), "summary.ctr")
+    position = _validate_numeric(_require_field(totals_row, "position", "totals"), "summary.averagePosition")
 
     summary = {
         "clicks": clicks,
@@ -104,20 +111,20 @@ def fetch(*, days: int = 28, _service=None) -> dict:
     for r in queries_raw.get("rows", [])[:CAPS["sc_top_queries"]]:
         top_queries.append({
             "query": r["keys"][0],
-            "clicks": _validate_numeric(r.get("clicks", 0), "topQueries.clicks"),
-            "impressions": _validate_numeric(r.get("impressions", 0), "topQueries.impressions"),
-            "ctr": round(_validate_numeric(r.get("ctr", 0), "topQueries.ctr"), 4),
-            "position": round(_validate_numeric(r.get("position", 0), "topQueries.position"), 2),
+            "clicks": _validate_numeric(_require_field(r, "clicks", "query row"), "topQueries.clicks"),
+            "impressions": _validate_numeric(_require_field(r, "impressions", "query row"), "topQueries.impressions"),
+            "ctr": round(_validate_numeric(_require_field(r, "ctr", "query row"), "topQueries.ctr"), 4),
+            "position": round(_validate_numeric(_require_field(r, "position", "query row"), "topQueries.position"), 2),
         })
 
     top_pages = []
     for r in pages_raw.get("rows", [])[:CAPS["sc_top_pages"]]:
         top_pages.append({
             "url": r["keys"][0],
-            "clicks": _validate_numeric(r.get("clicks", 0), "topPages.clicks"),
-            "impressions": _validate_numeric(r.get("impressions", 0), "topPages.impressions"),
-            "ctr": round(_validate_numeric(r.get("ctr", 0), "topPages.ctr"), 4),
-            "position": round(_validate_numeric(r.get("position", 0), "topPages.position"), 2),
+            "clicks": _validate_numeric(_require_field(r, "clicks", "page row"), "topPages.clicks"),
+            "impressions": _validate_numeric(_require_field(r, "impressions", "page row"), "topPages.impressions"),
+            "ctr": round(_validate_numeric(_require_field(r, "ctr", "page row"), "topPages.ctr"), 4),
+            "position": round(_validate_numeric(_require_field(r, "position", "page row"), "topPages.position"), 2),
         })
 
     return {

@@ -56,6 +56,15 @@ tags, never framework `main`** (ADR 004, SPEC
   absent-safe. An existing instance that upgrades without adding the block sees no
   change; analytics remains off until explicitly configured.
 
+- **Analytics signal fetchers (`npm run fetch:analytics`).** Three Python fetchers
+  (GA4, Search Console, Cloudflare) produce versioned normalized JSON under
+  `src/data/analytics/`. The orchestrator runs all three providers independently,
+  writes atomically, exits nonzero on any failure, and never substitutes zeros for
+  missing data. Credentials are environment-only; output and stderr are redacted.
+  `docs/runbook/DEPLOY.md` §Analytics signal fetchers documents all variables and
+  secrets. Python dependencies (`google-analytics-data`, `google-api-python-client`,
+  `google-auth`) added to `pyproject.toml`.
+
 ### Changed
 
 - **Phase 10 analytics now has a complete production-delivery contract.** ADR 012 selects

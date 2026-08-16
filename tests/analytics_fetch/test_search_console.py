@@ -141,3 +141,10 @@ class TestSearchConsoleErrors:
         monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")
         with pytest.raises(ValueError, match="no data"):
             fetch(days=28, _service=_fixture_service(totals={}))
+
+    def test_incomplete_totals_missing_field_rejected(self, monkeypatch):
+        """A totals row with only clicks (missing impressions/ctr/position) must fail."""
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")
+        incomplete = {"rows": [{"clicks": 100}]}
+        with pytest.raises(ValueError, match="missing required field"):
+            fetch(days=28, _service=_fixture_service(totals=incomplete))

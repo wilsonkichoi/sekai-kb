@@ -130,14 +130,29 @@ def fetch(*, days: int = 7, _query_fn=None) -> dict:
     statuses: dict[int, int] = {}
 
     for day in days_data:
-        s = day.get("sum") or {}
-        uniq = day.get("uniq") or {}
+        s = day.get("sum")
+        if s is None:
+            raise ValueError("Cloudflare day group missing required 'sum' object")
+        uniq = day.get("uniq")
+        if uniq is None:
+            raise ValueError("Cloudflare day group missing required 'uniq' object")
 
-        total_requests += _validate_numeric(s.get("requests", 0), "requests")
-        total_page_views += _validate_numeric(s.get("pageViews", 0), "pageViews")
-        total_visits += _validate_numeric(uniq.get("uniques", 0), "visits")
-        total_bytes += _validate_numeric(s.get("bytes", 0), "bytes")
-        total_threats += _validate_numeric(s.get("threats", 0), "threats")
+        if "requests" not in s:
+            raise ValueError("Cloudflare response missing required field 'requests' in sum")
+        if "pageViews" not in s:
+            raise ValueError("Cloudflare response missing required field 'pageViews' in sum")
+        if "bytes" not in s:
+            raise ValueError("Cloudflare response missing required field 'bytes' in sum")
+        if "threats" not in s:
+            raise ValueError("Cloudflare response missing required field 'threats' in sum")
+        if "uniques" not in uniq:
+            raise ValueError("Cloudflare response missing required field 'uniques' in uniq")
+
+        total_requests += _validate_numeric(s["requests"], "requests")
+        total_page_views += _validate_numeric(s["pageViews"], "pageViews")
+        total_visits += _validate_numeric(uniq["uniques"], "visits")
+        total_bytes += _validate_numeric(s["bytes"], "bytes")
+        total_threats += _validate_numeric(s["threats"], "threats")
 
         for c in s.get("countryMap", []) or []:
             name = c.get("clientCountryName", "Unknown")

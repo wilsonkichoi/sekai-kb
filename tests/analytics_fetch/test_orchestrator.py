@@ -184,3 +184,106 @@ class TestNoCredentialsInOutput:
                 assert secret_val not in content, (
                     f"{secret_name} value found in {name}"
                 )
+
+    def test_stderr_redacts_credentials_on_failure(self, monkeypatch, output_dir, capsys):
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+
+        monkeypatch.setenv("GA4_PROPERTY_ID", "PROP-SECRET-999")
+        monkeypatch.setenv("CF_API_TOKEN", "cf-token-secret-xyz")
+        monkeypatch.setenv("CF_ZONE_ID", "zone-secret-abc")
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:secret-site.test")
+
+        with patch("scripts.analytics.providers.ga4.fetch",
+                   side_effect=RuntimeError("Auth failed for property PROP-SECRET-999")), \
+             patch("scripts.analytics.providers.search_console.fetch",
+                   side_effect=RuntimeError("Cannot access sc-domain:secret-site.test")), \
+             patch("scripts.analytics.providers.cloudflare.fetch",
+                   side_effect=RuntimeError("Token cf-token-secret-xyz rejected for zone zone-secret-abc")):
+            run(days=7)
+
+        captured = capsys.readouterr()
+        assert "PROP-SECRET-999" not in captured.err
+        assert "cf-token-secret-xyz" not in captured.err
+        assert "zone-secret-abc" not in captured.err
+        assert "sc-domain:secret-site.test" not in captured.err
+        assert "[REDACTED:" in captured.err
+
+
+class TestSchemaValidation:
+    """Validates required fields, ISO timestamps, and period structure."""
+
+    def _run_and_read(self, monkeypatch, output_dir, ga4=None, sc=None, cf=None):
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+        with patch("scripts.analytics.providers.ga4.fetch", return_value=ga4 or _ga4_fixture()), \
+             patch("scripts.analytics.providers.search_console.fetch", return_value=sc or _sc_fixture()), \
+             patch("scripts.analytics.providers.cloudflare.fetch", return_value=cf or _cf_fixture()):
+            run(days=7)
+        results = {}
+        for name in ("ga4.json", "search-console.json", "cloudflare.json"):
+            path = output_dir / name
+            if path.exists():
+                results[name] = json.loads(path.read_text())
+        return results
+
+    def test_all_files_have_required_envelope(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        for name, data in results.items():
+            assert data["schemaVersion"] == 1, f"{name} schemaVersion"
+            assert "source" in data, f"{name} missing source"
+            assert "fetchedAt" in data, f"{name} missing fetchedAt"
+            assert "period" in data, f"{name} missing period"
+
+    def test_fetched_at_is_iso_format(self, monkeypatch, output_dir):
+        import re
+        results = self._run_and_read(monkeypatch, output_dir)
+        iso_re = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        for name, data in results.items():
+            assert iso_re.match(data["fetchedAt"]), (
+                f"{name} fetchedAt '{data['fetchedAt']}' is not ISO-8601"
+            )
+
+    def test_period_has_required_fields(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        for name, data in results.items():
+            period = data["period"]
+            assert "start" in period, f"{name} period missing start"
+            assert "end" in period, f"{name} period missing end"
+            assert "days" in period, f"{name} period missing days"
+            assert isinstance(period["days"], int), f"{name} period.days not int"
+
+    def test_ga4_summary_has_all_required_fields(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        ga4 = results["ga4.json"]
+        required = {"activeUsers", "newUsers", "pageViews", "sessions",
+                    "averageSessionDurationSeconds", "engagementRate"}
+        assert set(ga4["summary"].keys()) == required
+
+    def test_sc_summary_has_all_required_fields(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        sc = results["search-console.json"]
+        required = {"clicks", "impressions", "ctr", "averagePosition"}
+        assert set(sc["summary"].keys()) == required
+
+    def test_cf_summary_has_all_required_fields(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        cf = results["cloudflare.json"]
+        required = {"requests", "pageViews", "visits", "bytes", "threats"}
+        assert set(cf["summary"].keys()) == required
+
+    def test_all_numeric_values_are_numbers(self, monkeypatch, output_dir):
+        results = self._run_and_read(monkeypatch, output_dir)
+        for name, data in results.items():
+            for key, val in data.get("summary", {}).items():
+                assert isinstance(val, (int, float)), (
+                    f"{name} summary.{key} is {type(val).__name__}, not a number"
+                )
