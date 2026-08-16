@@ -84,11 +84,14 @@ git diff --check
 ```
 
 The four upgrade gates are here because **this commit is the one that changes the
-shape of `CHANGELOG.md`**, and they are the gates that read it. `prepare-release.mjs`
-moves the pending entries under a dated heading and leaves `## [Unreleased]` behind
-empty, so a gate that resolves "the newest entry" wrongly goes vacuous on exactly
-this commit and on no other. Running them before the branch is pushed is what turns
-that into a local failure rather than a red release PR.
+shape of `CHANGELOG.md`**. `prepare-release.mjs` moves the pending entries under a
+dated heading and leaves `## [Unreleased]` behind empty, so a gate that resolves "the
+newest entry" wrongly goes vacuous on exactly this commit and on no other.
+`upgrade-sequence:check` and `upgrade-sequence:selftest` are the two that read
+`CHANGELOG.md` and so the two that can newly fail here; `upgrade:check` and
+`test:upgrade-docs` cover the rest of the upgrade path this release ships and are
+cheap enough to run beside them. Running all four before the branch is pushed is what
+turns a release-shape defect into a local failure rather than a red release PR.
 
 Hard-stop unless exactly the four expected files changed and every command
 passes. Stage only those files and commit:
