@@ -311,6 +311,8 @@ INPUT="$TMP/interactive-input.txt"
   printf '\n\n'                                                    # feedback/chat -> defaults
   printf 'y\n'                                                     # social (explicit, as in JSON)
   printf '\n'                                                      # analytics -> default
+  printf '\n'                                                      # analytics.ga4MeasurementId -> blank
+  printf '\n'                                                      # analytics.cloudflareWebAnalyticsToken -> blank
   printf '\n'                                                      # og -> default
   printf '\n'                                                      # mcp -> default
   printf 'https://github.com/example/kb\n'                         # links.repo
