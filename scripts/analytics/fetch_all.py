@@ -35,6 +35,15 @@ def _redact_error(msg: str) -> str:
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     if sa_json:
         redacted = redacted.replace(sa_json, "[REDACTED:SERVICE_ACCOUNT]")
+        try:
+            sa_data = json.loads(sa_json)
+            for key in ("client_email", "private_key_id", "private_key",
+                        "client_id", "token_uri", "project_id"):
+                val = sa_data.get(key, "")
+                if val and val in redacted:
+                    redacted = redacted.replace(val, f"[REDACTED:SA_{key}]")
+        except (json.JSONDecodeError, TypeError):
+            pass
     redacted = re.sub(r"Bearer [A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", redacted)
     return redacted
 

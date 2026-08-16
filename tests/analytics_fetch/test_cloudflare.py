@@ -201,3 +201,49 @@ class TestCloudflareErrors:
         }
         with pytest.raises(ValueError, match="missing required.*sum"):
             fetch(days=7, _query_fn=lambda q, v: no_sum)
+
+    def test_incomplete_country_row_rejected(self, monkeypatch):
+        """A country row with only clientCountryName and requests (missing threats/bytes)."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["countryMap"] = [
+            {"clientCountryName": "US", "requests": 100}
+        ]
+        with pytest.raises(ValueError, match="Country row missing required field"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_incomplete_status_row_rejected(self, monkeypatch):
+        """A status row with only edgeResponseStatus (missing requests)."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["responseStatusMap"] = [
+            {"edgeResponseStatus": 200}
+        ]
+        with pytest.raises(ValueError, match="Status row missing required field"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_boolean_in_numeric_field_rejected(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["requests"] = True
+        with pytest.raises(ValueError, match="boolean"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_status_codes_capped(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+        from scripts.analytics.schemas import CAPS
+
+        many_statuses = _fixture_response()
+        many_statuses["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["responseStatusMap"] = [
+            {"edgeResponseStatus": 200 + i, "requests": 100 - i}
+            for i in range(CAPS["cf_status_codes"] + 10)
+        ]
+        result = fetch(days=7, _query_fn=lambda q, v: many_statuses)
+        assert len(result["statusCodes"]) <= CAPS["cf_status_codes"]

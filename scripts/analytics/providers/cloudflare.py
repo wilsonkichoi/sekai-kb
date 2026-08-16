@@ -20,6 +20,8 @@ def _require_env(name: str) -> str:
 
 
 def _validate_numeric(value: Any, field: str) -> int | float:
+    if isinstance(value, bool):
+        raise ValueError(f"Field '{field}' is a boolean, expected a number")
     if isinstance(value, str):
         raise ValueError(f"Field '{field}' is a numeric string '{value}', expected a number")
     if not isinstance(value, (int, float)):
@@ -158,17 +160,23 @@ def fetch(*, days: int = 7, _query_fn=None) -> dict:
             name = c.get("clientCountryName", "Unknown")
             if name not in countries:
                 countries[name] = {"requests": 0, "threats": 0, "bytes": 0}
-            countries[name]["requests"] += _validate_numeric(
-                c.get("requests", 0), "country.requests"
-            )
-            countries[name]["threats"] += _validate_numeric(
-                c.get("threats", 0), "country.threats"
-            )
-            countries[name]["bytes"] += _validate_numeric(c.get("bytes", 0), "country.bytes")
+            if "requests" not in c:
+                raise ValueError("Country row missing required field 'requests'")
+            if "threats" not in c:
+                raise ValueError("Country row missing required field 'threats'")
+            if "bytes" not in c:
+                raise ValueError("Country row missing required field 'bytes'")
+            countries[name]["requests"] += _validate_numeric(c["requests"], "country.requests")
+            countries[name]["threats"] += _validate_numeric(c["threats"], "country.threats")
+            countries[name]["bytes"] += _validate_numeric(c["bytes"], "country.bytes")
 
         for r in s.get("responseStatusMap", []) or []:
-            code = r.get("edgeResponseStatus", 0)
-            count = _validate_numeric(r.get("requests", 0), "status.requests")
+            if "edgeResponseStatus" not in r:
+                raise ValueError("Status row missing required field 'edgeResponseStatus'")
+            if "requests" not in r:
+                raise ValueError("Status row missing required field 'requests'")
+            code = r["edgeResponseStatus"]
+            count = _validate_numeric(r["requests"], "status.requests")
             statuses[code] = statuses.get(code, 0) + count
 
     summary = {

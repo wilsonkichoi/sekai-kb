@@ -148,3 +148,34 @@ class TestSearchConsoleErrors:
         incomplete = {"rows": [{"clicks": 100}]}
         with pytest.raises(ValueError, match="missing required field"):
             fetch(days=28, _service=_fixture_service(totals=incomplete))
+
+    def test_boolean_in_numeric_field_rejected(self, monkeypatch):
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")
+        bad_totals = {"rows": [{"clicks": True, "impressions": 1000, "ctr": 0.01, "position": 5.0}]}
+        with pytest.raises(ValueError, match="boolean"):
+            fetch(days=28, _service=_fixture_service(totals=bad_totals))
+
+    def test_page_urls_stripped_of_site_prefix(self, monkeypatch):
+        """URL-prefix properties must not leak SC_SITE_URL in normalized output."""
+        monkeypatch.setenv("SC_SITE_URL", "https://secret-site.example.com/")
+        pages = {
+            "rows": [
+                {"keys": ["https://secret-site.example.com/food/tacos"], "clicks": 10, "impressions": 100, "ctr": 0.1, "position": 3.0},
+            ]
+        }
+        result = fetch(days=28, _service=_fixture_service(pages=pages))
+        for p in result["topPages"]:
+            assert "secret-site.example.com" not in p["url"]
+            assert p["url"].startswith("/")
+
+    def test_top_pages_capped(self, monkeypatch):
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")
+        from scripts.analytics.schemas import CAPS
+        big_pages = {
+            "rows": [
+                {"keys": [f"https://example.com/page-{i}"], "clicks": 100 - i, "impressions": 1000, "ctr": 0.1, "position": 5.0}
+                for i in range(CAPS["sc_top_pages"] + 10)
+            ]
+        }
+        result = fetch(days=28, _service=_fixture_service(pages=big_pages))
+        assert len(result["topPages"]) <= CAPS["sc_top_pages"]

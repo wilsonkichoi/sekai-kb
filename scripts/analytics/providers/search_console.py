@@ -45,6 +45,8 @@ def _load_credentials():
 
 
 def _validate_numeric(value: Any, field: str) -> int | float:
+    if isinstance(value, bool):
+        raise ValueError(f"Field '{field}' is a boolean, expected a number")
     if isinstance(value, str):
         raise ValueError(f"Field '{field}' is a numeric string '{value}', expected a number")
     if not isinstance(value, (int, float)):
@@ -57,6 +59,25 @@ def _require_field(row: dict, key: str, context: str) -> Any:
     if key not in row:
         raise ValueError(f"Provider response missing required field '{key}' in {context}")
     return row[key]
+
+
+def _strip_site_prefix(url: str, site_url: str) -> str:
+    """Convert an absolute page URL to a relative path by stripping the site URL prefix.
+
+    For domain properties (sc-domain:example.com), strip https://example.com.
+    For URL-prefix properties (https://example.com/), strip that prefix.
+    """
+    if site_url.startswith("sc-domain:"):
+        domain = site_url[len("sc-domain:"):]
+        for scheme in ("https://", "http://"):
+            prefix = scheme + domain
+            if url.startswith(prefix):
+                return url[len(prefix):] or "/"
+    else:
+        prefix = site_url.rstrip("/")
+        if url.startswith(prefix):
+            return url[len(prefix):] or "/"
+    return url
 
 
 def fetch(*, days: int = 28, _service=None) -> dict:
@@ -119,8 +140,10 @@ def fetch(*, days: int = 28, _service=None) -> dict:
 
     top_pages = []
     for r in pages_raw.get("rows", [])[:CAPS["sc_top_pages"]]:
+        raw_url = r["keys"][0]
+        page_url = _strip_site_prefix(raw_url, site_url)
         top_pages.append({
-            "url": r["keys"][0],
+            "url": page_url,
             "clicks": _validate_numeric(_require_field(r, "clicks", "page row"), "topPages.clicks"),
             "impressions": _validate_numeric(_require_field(r, "impressions", "page row"), "topPages.impressions"),
             "ctr": round(_validate_numeric(_require_field(r, "ctr", "page row"), "topPages.ctr"), 4),

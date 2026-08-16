@@ -213,6 +213,36 @@ class TestNoCredentialsInOutput:
         assert "sc-domain:secret-site.test" not in captured.err
         assert "[REDACTED:" in captured.err
 
+    def test_stderr_redacts_service_account_fields(self, monkeypatch, output_dir, capsys):
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+
+        import json as json_mod
+        sa_json = json_mod.dumps({
+            "client_email": "planted@example.invalid",
+            "private_key_id": "planted-key-id-abc123",
+            "project_id": "planted-project",
+        })
+        monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", sa_json)
+        monkeypatch.setenv("GA4_PROPERTY_ID", "12345")
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:x.test")
+        monkeypatch.setenv("CF_API_TOKEN", "tok")
+        monkeypatch.setenv("CF_ZONE_ID", "zone")
+
+        with patch("scripts.analytics.providers.ga4.fetch",
+                   side_effect=RuntimeError("Error for planted@example.invalid with key planted-key-id-abc123")), \
+             patch("scripts.analytics.providers.search_console.fetch", return_value=_sc_fixture()), \
+             patch("scripts.analytics.providers.cloudflare.fetch", return_value=_cf_fixture()):
+            run(days=7)
+
+        captured = capsys.readouterr()
+        assert "planted@example.invalid" not in captured.err
+        assert "planted-key-id-abc123" not in captured.err
+
 
 class TestSchemaValidation:
     """Validates required fields, ISO timestamps, and period structure."""

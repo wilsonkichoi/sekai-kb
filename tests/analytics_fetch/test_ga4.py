@@ -180,3 +180,55 @@ class TestGa4Errors:
 
         with pytest.raises(ValueError, match="non-numeric"):
             fetch(days=7, _client=client)
+
+
+class TestGa4TrafficSourcesCap:
+    def test_traffic_sources_capped(self, monkeypatch):
+        monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
+        from scripts.analytics.schemas import CAPS
+
+        client = MagicMock()
+        overall_resp = MagicMock()
+        overall_resp.rows = [_make_row(metrics=[100, 50, 1000, 500, 60.0, 0.5])]
+        overall_resp.metric_headers = [
+            _make_metric_header("activeUsers"),
+            _make_metric_header("newUsers"),
+            _make_metric_header("screenPageViews"),
+            _make_metric_header("sessions"),
+            _make_metric_header("averageSessionDuration"),
+            _make_metric_header("engagementRate"),
+        ]
+
+        pages_resp = MagicMock()
+        pages_resp.rows = []
+
+        sources_resp = MagicMock()
+        sources_resp.rows = [
+            _make_row(dimensions=[f"source-{i} / medium"], metrics=[100 - i, 50 - i])
+            for i in range(CAPS["ga4_traffic_sources"] + 10)
+        ]
+
+        client.run_report = MagicMock(side_effect=[overall_resp, pages_resp, sources_resp])
+        result = fetch(days=7, _client=client)
+        assert len(result["trafficSources"]) <= CAPS["ga4_traffic_sources"]
+
+    def test_traffic_source_item_has_required_fields(self, monkeypatch):
+        monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
+        result = fetch(days=7, _client=_fixture_client())
+        for src in result["trafficSources"]:
+            assert "sourceMedium" in src
+            assert "sessions" in src
+            assert "activeUsers" in src
+            assert isinstance(src["sessions"], (int, float))
+            assert isinstance(src["activeUsers"], (int, float))
+
+    def test_top_page_item_has_required_fields(self, monkeypatch):
+        monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
+        result = fetch(days=7, _client=_fixture_client())
+        for page in result["topPages"]:
+            assert "path" in page
+            assert "title" in page
+            assert "views" in page
+            assert "activeUsers" in page
+            assert isinstance(page["views"], (int, float))
+            assert isinstance(page["activeUsers"], (int, float))

@@ -42,7 +42,9 @@ def _load_credentials():
 
 
 def _validate_numeric(value: Any, field: str) -> int | float:
-    """Reject numeric strings; accept only real numbers."""
+    """Reject numeric strings and booleans; accept only real numbers."""
+    if isinstance(value, bool):
+        raise ValueError(f"Field '{field}' is a boolean, expected a number")
     if isinstance(value, str):
         raise ValueError(f"Field '{field}' is a numeric string '{value}', expected a number")
     if not isinstance(value, (int, float)):
