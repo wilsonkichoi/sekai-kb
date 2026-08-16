@@ -19,6 +19,35 @@ from pathlib import Path
 from . import schemas
 
 
+SA_SECRET_FIELDS = (
+    "client_email",
+    "private_key_id",
+    "private_key",
+    "client_id",
+    "token_uri",
+    "project_id",
+)
+
+
+def _redact_sa_fields(text: str, raw_json: str) -> str:
+    """Redact individual service-account field values found in a JSON document.
+
+    A service-account document that is absent, unparsable, or not a JSON object
+    carries no field values to redact, so the text is returned unchanged.
+    """
+    try:
+        sa_data = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return text
+    if not isinstance(sa_data, dict):
+        return text
+    for key in SA_SECRET_FIELDS:
+        val = sa_data.get(key)
+        if isinstance(val, str) and val:
+            text = text.replace(val, f"[REDACTED:SA_{key}]")
+    return text
+
+
 def _redact_error(msg: str) -> str:
     """Strip known credential patterns from error messages before output."""
     redacted = msg
@@ -32,18 +61,16 @@ def _redact_error(msg: str) -> str:
     cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     if cred_path:
         redacted = redacted.replace(cred_path, "[REDACTED:CREDENTIALS_PATH]")
+        try:
+            cred_raw = Path(cred_path).expanduser().read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            cred_raw = ""
+        if cred_raw:
+            redacted = _redact_sa_fields(redacted, cred_raw)
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     if sa_json:
         redacted = redacted.replace(sa_json, "[REDACTED:SERVICE_ACCOUNT]")
-        try:
-            sa_data = json.loads(sa_json)
-            for key in ("client_email", "private_key_id", "private_key",
-                        "client_id", "token_uri", "project_id"):
-                val = sa_data.get(key, "")
-                if val and val in redacted:
-                    redacted = redacted.replace(val, f"[REDACTED:SA_{key}]")
-        except (json.JSONDecodeError, TypeError):
-            pass
+        redacted = _redact_sa_fields(redacted, sa_json)
     redacted = re.sub(r"Bearer [A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", redacted)
     return redacted
 

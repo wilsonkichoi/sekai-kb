@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 
 from scripts.analytics.fetch_all import run, _write_atomic
 from scripts.analytics import schemas
+from tests.analytics_fetch.normalized_schema import NORMALIZED_SCHEMA, assert_normalized
 
 
 def _ga4_fixture():
@@ -32,7 +33,7 @@ def _sc_fixture():
         "period": {"start": "2026-07-17", "end": "2026-08-13", "days": 28},
         "summary": {"clicks": 850, "impressions": 12000, "ctr": 0.0708, "averagePosition": 8.3},
         "topQueries": [{"query": "tacos", "clicks": 120, "impressions": 3000, "ctr": 0.04, "position": 5.2}],
-        "topPages": [{"url": "https://example.com/food/tacos", "clicks": 200, "impressions": 5000, "ctr": 0.04, "position": 4.5}],
+        "topPages": [{"url": "/food/tacos", "clicks": 200, "impressions": 5000, "ctr": 0.04, "position": 4.5}],
     }
 
 
@@ -243,6 +244,92 @@ class TestNoCredentialsInOutput:
         assert "planted@example.invalid" not in captured.err
         assert "planted-key-id-abc123" not in captured.err
 
+    @pytest.mark.parametrize("sa_value", ["[]", '"a string"', "null", "17", "not json at all"])
+    def test_non_object_service_account_json_does_not_abort_the_run(
+        self, monkeypatch, output_dir, capsys, sa_value
+    ):
+        """Redaction must never become a second failure source.
+
+        A GOOGLE_SERVICE_ACCOUNT_JSON that is not a JSON object still has to leave the
+        remaining providers able to write their valid outputs, and the run still exits 1.
+        """
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+
+        monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", sa_value)
+
+        with patch("scripts.analytics.providers.ga4.fetch",
+                   side_effect=RuntimeError("credential load failed")), \
+             patch("scripts.analytics.providers.search_console.fetch", return_value=_sc_fixture()), \
+             patch("scripts.analytics.providers.cloudflare.fetch", return_value=_cf_fixture()):
+            code = run(days=7)
+
+        assert code == 1
+        assert not (output_dir / "ga4.json").exists()
+        assert (output_dir / "search-console.json").exists()
+        assert (output_dir / "cloudflare.json").exists()
+        assert "credential load failed" in capsys.readouterr().err
+
+    def test_stderr_redacts_credentials_file_service_account_fields(
+        self, monkeypatch, output_dir, tmp_path, capsys
+    ):
+        """GOOGLE_APPLICATION_CREDENTIALS names a service-account file; its values leak too."""
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+
+        cred_file = tmp_path / "service-account.json"
+        cred_file.write_text(json.dumps({
+            "client_email": "planted-file@example.invalid",
+            "private_key_id": "planted-file-key-id",
+            "project_id": "planted-file-project",
+        }))
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(cred_file))
+
+        with patch("scripts.analytics.providers.ga4.fetch",
+                   side_effect=RuntimeError(
+                       "JWT for planted-file@example.invalid "
+                       "(key planted-file-key-id, project planted-file-project) rejected"
+                   )), \
+             patch("scripts.analytics.providers.search_console.fetch", return_value=_sc_fixture()), \
+             patch("scripts.analytics.providers.cloudflare.fetch", return_value=_cf_fixture()):
+            run(days=7)
+
+        captured = capsys.readouterr()
+        assert "planted-file@example.invalid" not in captured.err
+        assert "planted-file-key-id" not in captured.err
+        assert "planted-file-project" not in captured.err
+
+    def test_unreadable_credentials_file_does_not_abort_the_run(
+        self, monkeypatch, output_dir, tmp_path, capsys
+    ):
+        """A path that does not exist is a provider error, never a redaction crash."""
+        monkeypatch.setattr(schemas, "OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(schemas, "OUTPUT_FILES", {
+            "ga4": output_dir / "ga4.json",
+            "search-console": output_dir / "search-console.json",
+            "cloudflare": output_dir / "cloudflare.json",
+        })
+
+        monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "absent.json"))
+
+        with patch("scripts.analytics.providers.ga4.fetch",
+                   side_effect=RuntimeError("credentials path does not exist")), \
+             patch("scripts.analytics.providers.search_console.fetch", return_value=_sc_fixture()), \
+             patch("scripts.analytics.providers.cloudflare.fetch", return_value=_cf_fixture()):
+            code = run(days=7)
+
+        assert code == 1
+        assert (output_dir / "search-console.json").exists()
+        assert (output_dir / "cloudflare.json").exists()
+
 
 class TestSchemaValidation:
     """Validates required fields, ISO timestamps, and period structure."""
@@ -291,29 +378,8 @@ class TestSchemaValidation:
             assert "days" in period, f"{name} period missing days"
             assert isinstance(period["days"], int), f"{name} period.days not int"
 
-    def test_ga4_summary_has_all_required_fields(self, monkeypatch, output_dir):
+    def test_written_files_satisfy_the_full_normalized_contract(self, monkeypatch, output_dir):
+        """Every required field, exact key sets, and every JSON type, on disk."""
         results = self._run_and_read(monkeypatch, output_dir)
-        ga4 = results["ga4.json"]
-        required = {"activeUsers", "newUsers", "pageViews", "sessions",
-                    "averageSessionDurationSeconds", "engagementRate"}
-        assert set(ga4["summary"].keys()) == required
-
-    def test_sc_summary_has_all_required_fields(self, monkeypatch, output_dir):
-        results = self._run_and_read(monkeypatch, output_dir)
-        sc = results["search-console.json"]
-        required = {"clicks", "impressions", "ctr", "averagePosition"}
-        assert set(sc["summary"].keys()) == required
-
-    def test_cf_summary_has_all_required_fields(self, monkeypatch, output_dir):
-        results = self._run_and_read(monkeypatch, output_dir)
-        cf = results["cloudflare.json"]
-        required = {"requests", "pageViews", "visits", "bytes", "threats"}
-        assert set(cf["summary"].keys()) == required
-
-    def test_all_numeric_values_are_numbers(self, monkeypatch, output_dir):
-        results = self._run_and_read(monkeypatch, output_dir)
-        for name, data in results.items():
-            for key, val in data.get("summary", {}).items():
-                assert isinstance(val, (int, float)), (
-                    f"{name} summary.{key} is {type(val).__name__}, not a number"
-                )
+        for source, spec in NORMALIZED_SCHEMA.items():
+            assert_normalized(results[spec["file"]], source)

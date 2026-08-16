@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from scripts.analytics.providers.search_console import fetch
+from tests.analytics_fetch.normalized_schema import assert_normalized
 
 
 def _fixture_service(totals=None, queries=None, pages=None):
@@ -68,6 +69,13 @@ class TestSearchConsoleSuccess:
 
         for key, val in result["summary"].items():
             assert isinstance(val, (int, float)), f"summary.{key} is {type(val)}"
+
+    def test_output_satisfies_the_normalized_contract(self, monkeypatch):
+        """Every required field and JSON type of real fetcher output, arrays included."""
+        monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")
+        result = fetch(days=28, _service=_fixture_service())
+
+        assert_normalized(result, "search-console")
 
     def test_top_queries_descending_by_clicks(self, monkeypatch):
         monkeypatch.setenv("SC_SITE_URL", "sc-domain:example.com")

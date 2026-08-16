@@ -3,6 +3,7 @@
 import pytest
 
 from scripts.analytics.providers.cloudflare import fetch
+from tests.analytics_fetch.normalized_schema import assert_normalized
 
 
 def _fixture_response():
@@ -76,6 +77,14 @@ class TestCloudflareSuccess:
 
         for key, val in result["summary"].items():
             assert isinstance(val, (int, float)), f"summary.{key} is {type(val)}"
+
+    def test_output_satisfies_the_normalized_contract(self, monkeypatch):
+        """Every required field and JSON type of real fetcher output, arrays included."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+        result = fetch(days=7, _query_fn=lambda q, v: _fixture_response())
+
+        assert_normalized(result, "cloudflare")
 
     def test_summary_aggregation(self, monkeypatch):
         monkeypatch.setenv("CF_API_TOKEN", "test-token")
@@ -224,6 +233,60 @@ class TestCloudflareErrors:
             {"edgeResponseStatus": 200}
         ]
         with pytest.raises(ValueError, match="Status row missing required field"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_absent_country_map_rejected(self, monkeypatch):
+        """A day with every summary metric but no countryMap must not report zero countries."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        for day in bad["viewer"]["zones"][0]["httpRequests1dGroups"]:
+            del day["sum"]["countryMap"]
+        with pytest.raises(ValueError, match="missing required field 'countryMap'"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_absent_response_status_map_rejected(self, monkeypatch):
+        """Same for responseStatusMap: absence is an incomplete response, not empty traffic."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        for day in bad["viewer"]["zones"][0]["httpRequests1dGroups"]:
+            del day["sum"]["responseStatusMap"]
+        with pytest.raises(ValueError, match="missing required field 'responseStatusMap'"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_null_country_map_rejected(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["countryMap"] = None
+        with pytest.raises(ValueError, match="'countryMap' is not a list"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_country_row_without_name_rejected(self, monkeypatch):
+        """An unnamed country row must fail, never be aggregated under a placeholder name."""
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["countryMap"] = [
+            {"requests": 100, "threats": 0, "bytes": 1000}
+        ]
+        with pytest.raises(ValueError, match="missing required field 'clientCountryName'"):
+            fetch(days=7, _query_fn=lambda q, v: bad)
+
+    def test_numeric_string_status_code_rejected(self, monkeypatch):
+        monkeypatch.setenv("CF_API_TOKEN", "test-token")
+        monkeypatch.setenv("CF_ZONE_ID", "test-zone-id")
+
+        bad = _fixture_response()
+        bad["viewer"]["zones"][0]["httpRequests1dGroups"][0]["sum"]["responseStatusMap"] = [
+            {"edgeResponseStatus": "200", "requests": 100}
+        ]
+        with pytest.raises(ValueError, match="numeric string"):
             fetch(days=7, _query_fn=lambda q, v: bad)
 
     def test_boolean_in_numeric_field_rejected(self, monkeypatch):

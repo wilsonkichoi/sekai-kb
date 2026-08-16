@@ -149,6 +149,16 @@ def fetch(*, days: int = 7, _query_fn=None) -> dict:
             raise ValueError("Cloudflare response missing required field 'threats' in sum")
         if "uniques" not in uniq:
             raise ValueError("Cloudflare response missing required field 'uniques' in uniq")
+        if "countryMap" not in s:
+            raise ValueError("Cloudflare response missing required field 'countryMap' in sum")
+        if "responseStatusMap" not in s:
+            raise ValueError(
+                "Cloudflare response missing required field 'responseStatusMap' in sum"
+            )
+        if not isinstance(s["countryMap"], list):
+            raise ValueError("Cloudflare response field 'countryMap' is not a list")
+        if not isinstance(s["responseStatusMap"], list):
+            raise ValueError("Cloudflare response field 'responseStatusMap' is not a list")
 
         total_requests += _validate_numeric(s["requests"], "requests")
         total_page_views += _validate_numeric(s["pageViews"], "pageViews")
@@ -156,26 +166,28 @@ def fetch(*, days: int = 7, _query_fn=None) -> dict:
         total_bytes += _validate_numeric(s["bytes"], "bytes")
         total_threats += _validate_numeric(s["threats"], "threats")
 
-        for c in s.get("countryMap", []) or []:
-            name = c.get("clientCountryName", "Unknown")
-            if name not in countries:
-                countries[name] = {"requests": 0, "threats": 0, "bytes": 0}
+        for c in s["countryMap"]:
+            if "clientCountryName" not in c:
+                raise ValueError("Country row missing required field 'clientCountryName'")
             if "requests" not in c:
                 raise ValueError("Country row missing required field 'requests'")
             if "threats" not in c:
                 raise ValueError("Country row missing required field 'threats'")
             if "bytes" not in c:
                 raise ValueError("Country row missing required field 'bytes'")
+            name = c["clientCountryName"]
+            if name not in countries:
+                countries[name] = {"requests": 0, "threats": 0, "bytes": 0}
             countries[name]["requests"] += _validate_numeric(c["requests"], "country.requests")
             countries[name]["threats"] += _validate_numeric(c["threats"], "country.threats")
             countries[name]["bytes"] += _validate_numeric(c["bytes"], "country.bytes")
 
-        for r in s.get("responseStatusMap", []) or []:
+        for r in s["responseStatusMap"]:
             if "edgeResponseStatus" not in r:
                 raise ValueError("Status row missing required field 'edgeResponseStatus'")
             if "requests" not in r:
                 raise ValueError("Status row missing required field 'requests'")
-            code = r["edgeResponseStatus"]
+            code = _validate_numeric(r["edgeResponseStatus"], "status.code")
             count = _validate_numeric(r["requests"], "status.requests")
             statuses[code] = statuses.get(code, 0) + count
 

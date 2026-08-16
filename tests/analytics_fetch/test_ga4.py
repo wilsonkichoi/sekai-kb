@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from scripts.analytics.providers.ga4 import fetch
+from tests.analytics_fetch.normalized_schema import assert_normalized
 
 
 def _make_metric_value(val):
@@ -79,6 +80,13 @@ class TestGa4Success:
 
         for key, val in result["summary"].items():
             assert isinstance(val, (int, float)), f"summary.{key} is {type(val)}"
+
+    def test_output_satisfies_the_normalized_contract(self, monkeypatch):
+        """Every required field and JSON type of real fetcher output, arrays included."""
+        monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
+        result = fetch(days=7, _client=_fixture_client())
+
+        assert_normalized(result, "ga4")
 
     def test_top_pages_descending_order(self, monkeypatch):
         monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
