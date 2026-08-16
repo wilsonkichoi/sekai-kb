@@ -551,8 +551,8 @@ bug. What the helper does with each answer:
   itself failed the message says that instead, and only then does the tree need you.
   Fix what the hook objected to and re-run this step **without creating a commit** —
   the conclusion is resolved from whatever `HEAD` is then, so a fix commit makes it a
-  SHA GitHub has never seen and the step polls to `--timeout-seconds` (default 1800)
-  before exit 3. If you do need a commit, push it first and let CI go green on it.
+  SHA GitHub has never seen, and the step exits 3 at once saying the merge was never
+  pushed. If you do need a commit, push it first and let CI go green on it.
 - **No conclusion readable (exit 3)** → says which case it hit (no remote
   configured, `gh` unavailable, the API unreachable, GitHub has never seen this SHA
   so the merge was never pushed, no workflow run and no check run at all — Actions

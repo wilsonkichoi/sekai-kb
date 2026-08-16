@@ -519,8 +519,8 @@ fi
 #     pre-commit hook refused (the marker and its index entry are put back first, and
 #     the message says so). Read the message, not just the code. Re-run WITHOUT making
 #     a commit: the conclusion is resolved from whatever HEAD is then, so a fix commit
-#     becomes a SHA GitHub never saw and the step polls to --timeout-seconds (default
-#     1800) before exit 3. Needing a commit means pushing it and letting CI run on it.
+#     becomes a SHA GitHub never saw, and the step exits 3 at once saying the merge was
+#     never pushed. Needing a commit means pushing it and letting CI run on it.
 #     Exit 3 = no conclusion could be read at all: no remote, gh
 #     unavailable, the API unreachable, a SHA GitHub has never seen (you did not
 #     push), no workflow run and no check run at all (Actions disabled, or no workflow
