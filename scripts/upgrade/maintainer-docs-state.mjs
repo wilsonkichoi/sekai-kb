@@ -382,9 +382,25 @@ function reconcile(repo, override) {
         failures.push({ path, status, attribute });
         continue;
       }
-      git(repo, ['checkout', rev, '--', path]);
+      // "Restore the pre-merge state" is not always "check the file out". A path the
+      // instance had DELETED before the merge does not exist at `rev`, so
+      // `git checkout rev -- path` matches no pathspec and dies -- which is exactly
+      // what happened on the first real v1.1.6 adoption, where the instance had
+      // deleted an ADR the framework still carries and the merge raised a
+      // modify/delete conflict. Absence is a state the instance owns like any other,
+      // so restore it by removing the path rather than by resurrecting the
+      // framework's copy. `-e` asks whether the blob exists at `rev` without
+      // materializing it.
+      const existedBefore = git(repo, ['cat-file', '-e', `${rev}:${path}`], { allowFailure: true }) !== null;
+      if (existedBefore) {
+        git(repo, ['checkout', rev, '--', path]);
+      } else {
+        // `--ignore-unmatch` because a conflicted delete may already be gone from the
+        // worktree; the index entry is the part that always needs clearing.
+        git(repo, ['rm', '-q', '-f', '--ignore-unmatch', '--', path]);
+      }
       staged = true;
-      restored.push(`${path} (${status})`);
+      restored.push(`${path} (${status}${existedBefore ? '' : ', restored as absent'})`);
     }
     kept.push(rel);
   }

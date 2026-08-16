@@ -43,6 +43,43 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **v1.1.6 could not be adopted at all: three gates asserted framework-authoring rules
+  against instance-owned documents.** Every one keyed on *file presence* instead of the
+  `.sekai-template` marker, on the premise that "adoption removes the whole `dev_docs/`
+  tree". That premise is false for the shape that matters: ADR 008 leaves the first
+  instance its **own** `dev_docs/`, so `dev_docs/SPEC.md` is present, `merge=ours`, and
+  deliberately does not restate the framework's upgrade sequence. Presence-keying read
+  that as the framework's own spec.
+
+  - `check-upgrade-sequence-docs.mjs` asserted the framework's sequence against any
+    `dev_docs/SPEC.md` it found. The assertion is now template-only, matching the scope
+    rule its own changelog check already used.
+  - Its `--selftest` skipped the spec defect class on file absence rather than on
+    whether the assertion runs, so an instance planted a defect the gate was never going
+    to look at and then reported it undetected.
+  - `check-upgrade-state.sh` cases 18 and 19 read `$ROOT/CHANGELOG.md` — the host
+    repository's own file — expecting a framework release entry with an `### Upgrade
+    note`. An instance's changelog is its own work history. Both cases are now
+    template-only.
+
+  Both pass summaries now name only what the run actually asserted, so a green line in
+  an instance cannot read as a guarantee it never checked.
+
+- **The upgrade could not reconcile a maintainer doc the instance had deleted.**
+  `maintainer-docs-state.mjs` restored an owned path with `git checkout <rev> -- <path>`,
+  which matches no pathspec when the path does not exist at that revision. An instance
+  that had deleted a framework ADR it no longer carries hit a modify/delete conflict and
+  reconcile died with `pathspec ... did not match any file(s)`, leaving the operator to
+  resolve by hand. Absence is a state the instance owns like any other, so it is now
+  restored by removing the path. Pinned by case 14b, which reproduces that conflict and
+  fails with the original error against the previous helper.
+
+  **Upgrade note:** nothing to do. These are gate-scoping and reconcile fixes with no
+  configuration surface; an instance blocked from adopting v1.1.6 can now adopt v1.1.7
+  directly.
+
 ## [1.1.6] — 2026-08-15
 
 /sekai-upgrade bumps FRAMEWORK-VERSION only after the instance's CI is green, sweeps the corpus artifact stranded at its pre-v1.1.5 path, and the upgrade-sequence gate stays non-vacuous once a release is cut.

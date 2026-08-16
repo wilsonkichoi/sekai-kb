@@ -89,11 +89,20 @@ const DECLARATION = /##\s*The verified sequence\s*\n+```text\n([\s\S]*?)\n```/;
 const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
 
 /**
- * The spec is a framework maintainer document, and adoption removes the whole
- * `dev_docs/` tree (ADR 008/009). The two adopter-facing documents are always
- * checked; the spec assertion is required where this repository authors that text --
- * template mode -- and reported as skipped in an adopted instance, the same scope rule
+ * The spec is a framework maintainer document. The two adopter-facing documents are
+ * always checked; the spec assertion is required where this repository AUTHORS that
+ * text -- template mode -- and skipped everywhere else, the same scope rule
  * `check-scan-root-docs.mjs` and the schema-docs gates apply.
+ *
+ * Scope is decided by the `.sekai-template` marker and NEVER by whether
+ * `dev_docs/SPEC.md` happens to exist. An earlier version keyed on presence, on the
+ * premise that "adoption removes the whole dev_docs/ tree". That premise is false for
+ * the shape that matters most: ADR 008 leaves the first instance its OWN `dev_docs/`
+ * as rebuild history, so the file is present, `merge=ours`, and deliberately does not
+ * restate the framework's upgrade sequence. Presence-keying therefore asserted a
+ * framework-authoring rule against an instance-owned document and failed a legitimate
+ * adoption -- v1.1.6 could not be adopted at all. The marker is the only thing that
+ * answers "does this repository author the framework's text".
  */
 const TEMPLATE_MODE = existsSync(join(ROOT, '.sekai-template'));
 const readOptional = (rel) => (existsSync(join(ROOT, rel)) ? read(rel) : null);
@@ -403,11 +412,13 @@ export function check({ skill, spec, runbook, changelog }) {
   }
   checkSkillBody(skill, declaration);
   checkPreflightExemptsSweptArtifact(skill, declaration);
-  if (spec === null) {
-    if (TEMPLATE_MODE) {
-      failure(`${SPEC}: missing in a template checkout, where the framework authors it`);
-    }
-    skippedNotes.push(`${SPEC} (adopted instance: adoption removes the maintainer docs)`);
+  if (!TEMPLATE_MODE) {
+    // Not the template: this repository does not author the framework's spec, so it
+    // has nothing to say about that file whether or not one exists here. An instance
+    // that keeps its own `dev_docs/SPEC.md` (ADR 008) owns that document outright.
+    skippedNotes.push(`${SPEC} (instance mode: the framework's spec is authored in the template)`);
+  } else if (spec === null) {
+    failure(`${SPEC}: missing in a template checkout, where the framework authors it`);
   } else if (!spec.includes(declaration.sequence)) {
     failure(
       `${SPEC}: does not carry the sequence the skill declares. Expected verbatim:\n`
@@ -421,6 +432,21 @@ export function check({ skill, spec, runbook, changelog }) {
 }
 
 /* -- Non-vacuity: every failure mode above must be reachable ---------------- */
+
+/**
+ * The changelog as it looks AFTER a release: whatever is pending under
+ * `## [Unreleased]` is dropped and the bare placeholder is left behind, so the newest
+ * CONTENTFUL entry is the release entry that carries the Upgrade note handoffs.
+ *
+ * Every changelog defect class below plants into that entry, so each must be planted
+ * against this shape rather than against the raw file. Otherwise adding any pending
+ * Unreleased entry -- which introduces no new helper, so the handoff check correctly
+ * returns early -- silently makes all of them vacuous, and the selftest reports the
+ * planted defects undetected instead of proving anything.
+ */
+function releasedShape(changelog) {
+  return changelog.replace(/^## \[Unreleased\][\s\S]*?(?=^## \[)/m, '## [Unreleased]\n\n');
+}
 
 const SELFTEST_DEFECTS = [
   {
@@ -508,7 +534,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: docs.changelog.replace(
+      changelog: releasedShape(docs.changelog).replace(
         /STALE_HELPER="\$\(git rev-parse --git-dir\)[\s\S]*?node "\$STALE_HELPER" sweep/,
         'the upgrade removes it for you',
       ),
@@ -519,7 +545,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: docs.changelog.replace('node "$STALE_HELPER" sweep', 'node "$SWEEP_HELPER" sweep'),
+      changelog: releasedShape(docs.changelog).replace('node "$STALE_HELPER" sweep', 'node "$SWEEP_HELPER" sweep'),
     }),
   },
   {
@@ -527,7 +553,7 @@ const SELFTEST_DEFECTS = [
     requiresTemplate: true,
     mutate: (docs) => ({
       ...docs,
-      changelog: docs.changelog.replace('node "$STALE_HELPER" sweep', 'node "$STALE_HELPER" clean'),
+      changelog: releasedShape(docs.changelog).replace('node "$STALE_HELPER" sweep', 'node "$STALE_HELPER" clean'),
     }),
   },
   {
@@ -537,7 +563,7 @@ const SELFTEST_DEFECTS = [
     // a bare line -- a mutation that silently matches nothing proves nothing.
     mutate: (docs) => ({
       ...docs,
-      changelog: docs.changelog.replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
+      changelog: releasedShape(docs.changelog).replace(/if git remote get-url origin[\s\S]*?\nfi\n/, ''),
     }),
   },
   {
@@ -553,15 +579,24 @@ const SELFTEST_DEFECTS = [
     // written against the pre-release shape and so cannot catch that regression.
     label: 'an empty Unreleased placeholder shadows the newest released entry',
     requiresTemplate: true,
-    mutate: (docs) => ({
-      ...docs,
-      changelog: docs.changelog
-        .replace(/^## \[Unreleased\]\n/m, '## [Unreleased]\n\n## [9.9.9] — 2026-01-01\n')
-        .replace(
+    mutate: (docs) => {
+      // Build the released shape deterministically rather than by inserting a heading
+      // at a fixed offset: drop whatever currently sits under `## [Unreleased]` and
+      // leave the bare placeholder behind, so the newest CONTENTFUL entry is the
+      // release entry that carries the handoff blocks. That is exactly what
+      // `prepare-release.mjs` produces, and it holds whether or not this repository
+      // happens to have pending entries right now. (An earlier version assumed the
+      // newest entry was the one with the handoffs; adding any new Unreleased entry
+      // silently made this class vacuous.)
+      const released = releasedShape(docs.changelog);
+      return {
+        ...docs,
+        changelog: released.replace(
           /STALE_HELPER="\$\(git rev-parse --git-dir\)[\s\S]*?node "\$STALE_HELPER" sweep/,
           'the upgrade removes it for you',
         ),
-    }),
+      };
+    },
   },
 ];
 
@@ -577,8 +612,15 @@ function selftest(docs) {
   let status = 0;
   let planted = 0;
   for (const defect of SELFTEST_DEFECTS) {
-    if (defect.requiresSpec && docs.spec === null) {
-      process.stdout.write(`  skipped (no ${SPEC} in this checkout): ${defect.label}\n`);
+    // Skip when the ASSERTION this defect targets does not run here, not when the file
+    // happens to be missing. An instance that keeps its own `dev_docs/SPEC.md` has the
+    // file and skips the assertion, so presence-keying planted a spec defect the gate
+    // was never going to look at and then reported it undetected -- turning a correct
+    // skip into a red selftest.
+    if (defect.requiresSpec && (!TEMPLATE_MODE || docs.spec === null)) {
+      process.stdout.write(
+        `  skipped (${TEMPLATE_MODE ? `no ${SPEC} in this checkout` : `instance mode: ${SPEC} is not asserted here`}): ${defect.label}\n`,
+      );
       continue;
     }
     if (defect.requiresTemplate && !TEMPLATE_MODE) {
@@ -625,7 +667,11 @@ if (process.argv[2] === '--selftest') {
   // The summary names only what this checkout actually asserted. A skipped assertion is
   // reported as skipped and never folded into the claim, so a passing line in an
   // adopted instance cannot read as a guarantee the instance never checked.
-  const describing = [RUNBOOK, ...(docs.spec === null ? [] : [SPEC])];
+  // Derived from what was actually skipped, not from whether the file exists on disk.
+  // Presence answers "is there a SPEC here", which in an instance that owns its own
+  // maintainer docs is yes while the assertion was skipped -- the summary would then
+  // claim an assertion this run never made.
+  const describing = [RUNBOOK, ...(skipped.some((note) => note.startsWith(SPEC)) ? [] : [SPEC])];
   const handoff = skipped.some((note) => note.startsWith(CHANGELOG))
     ? ''
     : `, and every upgrade helper the newest ${CHANGELOG} entry introduces is handed to`

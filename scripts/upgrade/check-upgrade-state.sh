@@ -331,6 +331,23 @@ fail() {
 
 ok() { echo "✓ $1"; }
 
+# Does THIS repository author the framework's release log?
+#
+# Cases 18 and 19 read `$ROOT/CHANGELOG.md` -- the host repository's own file, not a
+# fixture -- because the thing under test is that a real release hands its new upgrade
+# steps to the previous release's skill. That assertion only means anything where this
+# repository authors framework release entries, which is the template and nowhere else.
+# An adopted instance's `CHANGELOG.md` is its own work history (`merge=ours`), carries
+# no `### Upgrade note`, and owes the framework nothing -- so running these there failed
+# a legitimate v1.1.6 adoption over a document the instance is entitled to own.
+#
+# Scope on the marker, never on file presence: every repository has a `CHANGELOG.md`,
+# so presence answers a different question than "who authors this text".
+TEMPLATE_MODE=0
+[ -f "$ROOT/.sekai-template" ] && TEMPLATE_MODE=1
+
+skip_case() { echo "⊘ $1 -- instance mode: the framework release log is authored in the template"; }
+
 # ---------------------------------------------------------------------------
 # Harness-side contract predicates (independent of the implementation)
 # ---------------------------------------------------------------------------
@@ -2508,6 +2525,64 @@ EOF
 # The merge is shaped to AUTO-COMMIT, because that is the shape the defect was found
 # in on a real instance upgrade, and the only one that drives the amend path.
 # ---------------------------------------------------------------------------
+# Case 14b: the instance DELETED an owned maintainer-doc file before the merge, and the
+# framework modified that same file. Git raises a modify/delete conflict and leaves the
+# framework's version in the tree.
+#
+# "Restore the pre-merge state" here means restore ABSENCE. The pre-LB-101 helper only
+# knew how to restore content — `git checkout <rev> -- <path>` — which matches no
+# pathspec when the path does not exist at that revision, so reconcile died with
+# `pathspec ... did not match any file(s)` and left the operator to resolve by hand.
+# That is exactly what the first real v1.1.6 adoption hit: the instance had deleted a
+# framework ADR it no longer carries, and the upgrade could not reconcile itself.
+case_mdocs_owned_deleted_by_instance() { # workdir
+  local work="$1" fw inst owned dirty
+  fw="$work/fw"
+  inst="$work/instance"
+  mkdir -p "$work"
+  build_framework "$fw"
+  clone_at_v1 "$fw" "$inst"
+
+  owned="$(first_doc_file)"
+
+  append_maintainer_doc_attributes "$inst"
+  write_instance_agents_md "$inst/AGENTS.md" no-reference
+  git -C "$inst" rm -q -f VERSION
+  # The instance's own decision: this document does not belong in its tree.
+  git -C "$inst" rm -q -f "$owned"
+  git -C "$inst" add -A
+  git -C "$inst" commit -q -m "Instance deletes an owned maintainer doc"
+
+  [ ! -e "$inst/$owned" ] \
+    || fail "case 14b: fixture guard — $owned still exists after the instance deleted it"
+  ok "case 14b: fixture is the instance-deleted shape ($owned absent before the merge)"
+
+  assert_mdocs_classify "$inst" "case 14b" "$MAINTAINER_DOCS" ""
+
+  git -C "$inst" merge --no-edit fw-v2 >/dev/null 2>&1 || true
+  git -C "$inst" ls-files -u -- "$owned" | grep -q . \
+    || fail "case 14b: fixture guard — the merge produced no modify/delete conflict on $owned, so the absent-restore path is not exercised"
+  ok "case 14b: the merge raised a modify/delete conflict on $owned"
+
+  # The assertion this case exists for. Before the fix this exits 1 on the pathspec.
+  assert_mdocs_reconcile_ok "$inst" "case 14b"
+
+  [ ! -e "$inst/$owned" ] \
+    || fail "case 14b: reconcile resurrected $owned; the instance's deletion is a state it owns and must be preserved"
+  git -C "$inst" ls-files --error-unmatch -- "$owned" >/dev/null 2>&1 \
+    && fail "case 14b: reconcile left $owned in the index after restoring its absence"
+  ok "case 14b: reconcile restored the absence in both the working tree and the index"
+
+  finalize_merge "$inst" "case 14b"
+  git -C "$inst" cat-file -e "HEAD:$owned" 2>/dev/null \
+    && fail "case 14b: the merge commit carries $owned, so the instance's deletion did not survive the upgrade"
+  ok "case 14b: the merge commit does not carry the deleted document"
+
+  dirty="$(git -C "$inst" status --porcelain)"
+  [ -z "$dirty" ] || fail "case 14b: reconcile left the merge uncommitted: $(echo "$dirty" | tr '\n' ' ')"
+  ok "case 14b: the working tree is clean after reconcile"
+}
+
 case_mdocs_owned_ours_equals_base() { # workdir
   local work="$1" fw inst keep rel owned docdir dirty nonascii
   fw="$work/fw"
@@ -4152,6 +4227,9 @@ run_all_cases() {
   echo "── case 14: maintainer docs — the instance kept the framework's copy verbatim (ours == base) ──"
   case_mdocs_owned_ours_equals_base "$TMP/case14"
   echo ""
+  echo "── case 14b: an owned maintainer doc the instance DELETED before the merge ──"
+  case_mdocs_owned_deleted_by_instance "$TMP/case14b"
+  echo ""
   echo "── case 15a/15b: divergence report — planted divergence, both values, no writes ──"
   case_divergence_report "$TMP/case15a"
   echo ""
@@ -4177,10 +4255,18 @@ run_all_cases() {
   case_stale_corpus_artifact "$TMP/case17"
   echo ""
   echo "── case 18: the release-boundary handoff — both new steps run on the upgrade that ships them ──"
-  case_first_upgrade_handoff "$TMP/case18"
+  if [ "$TEMPLATE_MODE" -eq 1 ]; then
+    case_first_upgrade_handoff "$TMP/case18"
+  else
+    skip_case "case 18: the release-boundary handoff"
+  fi
   echo ""
   echo "── case 19: the documented sequence reaches the bump helper on an instance with no remote ──"
-  case_documented_no_remote_override "$TMP/case19"
+  if [ "$TEMPLATE_MODE" -eq 1 ]; then
+    case_documented_no_remote_override "$TMP/case19"
+  else
+    skip_case "case 19: the documented no-remote override"
+  fi
   echo ""
   echo "── option contract: reconcile rejects --from-tag ──"
   case_reconcile_rejects_from_tag "$TMP/case-options"
@@ -4194,7 +4280,16 @@ run_all_cases() {
   echo "── documented roots: the docs name every framework-owned root the report walks ──"
   case_divergence_roots_documented
   echo ""
-  echo "✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes), the CI-verified bump (green / red / every unreadable shape / recorded override), the stale corpus-artifact sweep, and the release-boundary handoff that makes a release apply its own new upgrade steps on the upgrade that ships them, hold on every fixture above."
+  # The summary names only what this run actually asserted. In instance mode cases 18
+  # and 19 are skipped, so the release-boundary clause is dropped rather than carried —
+  # a passing line must never claim a check this checkout never ran.
+  summary="✅ upgrade-state check passed: dev-plugin state (stripped / installed / mixed exit 3), maintainer-doc state (per-path owned / stripped, ours==base restore, instance-deleted absence restore, unclaimed-path stop, tag-derived first upgrade), the FRAMEWORK-VERSION bump contract, present and absent, the tag-first helper bootstrap, the pre-merge divergence report (both values, no writes, clean, unrelated-history, and converged shapes), the CI-verified bump (green / red / every unreadable shape / recorded override), and the stale corpus-artifact sweep"
+  if [ "$TEMPLATE_MODE" -eq 1 ]; then
+    summary="$summary, plus the release-boundary handoff that makes a release apply its own new upgrade steps on the upgrade that ships them, hold on every fixture above."
+  else
+    summary="$summary, hold on every fixture above. Skipped (instance mode): cases 18 and 19, which read this repository's own CHANGELOG.md and assert framework release-log rules."
+  fi
+  echo "$summary"
 }
 
 # Run one case with its load-bearing step skipped, in a subshell whose EXIT trap is
@@ -4229,6 +4324,7 @@ run_selftest() {
   expect_case_to_fail case_framework_version_absent_stays_absent "$TMP/selftest-case12c" "case 12c (absent FRAMEWORK-VERSION stays absent)"
   expect_case_to_fail case_helper_bootstrap_version_skew "$TMP/selftest-case13" "case 13 (helper version skew)"
   expect_case_to_fail case_mdocs_owned_ours_equals_base "$TMP/selftest-case14" "case 14 (maintainer docs, ours == base)"
+  expect_case_to_fail case_mdocs_owned_deleted_by_instance "$TMP/selftest-case14b" "case 14b (maintainer docs, instance-deleted path)"
   expect_case_to_fail case_divergence_report "$TMP/selftest-case15a" "case 15a (divergence report, planted divergence)"
   # 15f asserts mostly ABSENCES (no conflict claim, no empty differing region), and an
   # empty report satisfies every absence trivially. Running it here proves the case
@@ -4241,9 +4337,17 @@ run_selftest() {
   # sub-cases fail on their exit-code assertions rather than on the marker alone.
   expect_case_to_fail case_ci_verified_bump "$TMP/selftest-case16" "case 16 (CI-verified bump)"
   expect_case_to_fail case_stale_corpus_artifact "$TMP/selftest-case17" "case 17 (stale corpus artifact)"
-  expect_case_to_fail case_first_upgrade_handoff "$TMP/selftest-case18" "case 18 (release-boundary handoff)"
-  expect_case_to_fail case_documented_no_remote_override "$TMP/selftest-case19" "case 19 (documented no-remote override)"
-  echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 15a, 15f, 16, 17, 18 and 19 all fail when their load-bearing step is skipped."
+  # 18 and 19 read the host repository's own CHANGELOG.md, so they are template-only —
+  # the same scope the run above applies. In instance mode they are skipped rather than
+  # reported undetected, because a case that cannot run there proves nothing there.
+  if [ "$TEMPLATE_MODE" -eq 1 ]; then
+    expect_case_to_fail case_first_upgrade_handoff "$TMP/selftest-case18" "case 18 (release-boundary handoff)"
+    expect_case_to_fail case_documented_no_remote_override "$TMP/selftest-case19" "case 19 (documented no-remote override)"
+    echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 14b, 15a, 15f, 16, 17, 18 and 19 all fail when their load-bearing step is skipped."
+  else
+    skip_case "selftest cases 18 and 19"
+    echo "✅ SELFTEST OK: cases 1, 2, 6, 7, 8, 9, 10, 11, 12, 12c, 13, 14, 14b, 15a, 15f, 16 and 17 all fail when their load-bearing step is skipped (18 and 19 are template-only)."
+  fi
 }
 
 main() {
