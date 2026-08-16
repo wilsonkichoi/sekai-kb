@@ -88,9 +88,8 @@ The four upgrade gates are here because **this commit is the one that reshapes
 heading and leaves `## [Unreleased]` behind empty. All four exercise the upgrade path
 the release ships, and `upgrade-sequence:check` / `upgrade-sequence:selftest` do one
 thing more — they resolve *which entry is the newest*, which is precisely what the
-reshape changes. That is why a release commit, and no other commit, can newly fail
-them. Running all four before the branch is pushed turns a release-shape defect into
-a local failure rather than a red release PR.
+reshape changes. Running all four before the branch is pushed turns a release-shape
+defect into a local failure rather than a red release PR.
 
 Hard-stop unless exactly the four expected files changed and every command
 passes. Stage only those files and commit:
