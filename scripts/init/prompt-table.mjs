@@ -398,6 +398,22 @@ export const PROMPTS = [
   { id: 'features.chat', question: 'Enable chat (needs a worker)?', kind: 'boolean', default: false },
   { id: 'features.social', question: 'Show social links (footer + SEO)?', kind: 'boolean', default: false },
   { id: 'features.analytics', question: 'Enable analytics?', kind: 'boolean', default: false },
+  {
+    id: 'analytics.ga4MeasurementId',
+    question: 'GA4 measurement ID (e.g. G-XXXXXXXXXX, blank for none)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^G-[A-Z0-9]+$/.test(v) ? null : `"${v}" is not a GA4 measurement ID (G-XXXXXXXXXX)`,
+  },
+  {
+    id: 'analytics.cloudflareWebAnalyticsToken',
+    question: 'Cloudflare Web Analytics token (blank for none)',
+    kind: 'text',
+    default: '',
+    validate: (v) =>
+      v === '' || /^[a-f0-9]{32}$/.test(v) ? null : `"${v}" is not a 32-char hex token`,
+  },
   { id: 'features.og', question: 'Enable per-article OG images (needs a worker)?', kind: 'boolean', default: false },
   { id: 'features.mcp', question: 'Enable the remote MCP endpoint for AI clients (needs a worker)?', kind: 'boolean', default: false },
   {

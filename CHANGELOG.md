@@ -43,6 +43,19 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **Browser analytics collection (GA4 + Cloudflare Web Analytics) behind
+  `features.analytics`.** Each provider is independently gated: GA4 injects when
+  `analytics.ga4MeasurementId` is non-empty; Cloudflare Web Analytics injects when
+  `analytics.cloudflareWebAnalyticsToken` is non-empty. Neither fires unless
+  `features.analytics` is true. `docs/runbook/DEPLOY.md` §Analytics documents
+  property creation, domain verification, and the duplicate-beacon prevention rule.
+
+  **Upgrade note:** the optional `analytics` block in `place.config.ts` is
+  absent-safe. An existing instance that upgrades without adding the block sees no
+  change; analytics remains off until explicitly configured.
+
 ### Changed
 
 - **Phase 10 analytics now has a complete production-delivery contract.** ADR 012 selects

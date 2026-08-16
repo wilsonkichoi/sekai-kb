@@ -76,6 +76,7 @@
     "sounds:check": "node --experimental-strip-types scripts/ci/check-sounds.mjs",
     "sounds:selftest": "bash scripts/ci/check-sounds-selftest.sh",
     "snippet:publish": "node scripts/tools/snippet/publish.mjs",
+    "test:analytics": "node --experimental-strip-types --test tests/analytics-gate.test.mjs",
     "test:og": "node --experimental-strip-types --test tests/og-image-resolve.test.mjs",
     "test:embeddings": "node --experimental-strip-types --test tests/embeddings-chunker.test.mjs tests/embeddings-build.test.mjs",
     "test:chat": "node --experimental-strip-types --test tests/chat-gate.test.mjs tests/chat-eval.test.mjs tests/chat-contexts.test.mjs && node --test tests/chat-page.test.mjs",

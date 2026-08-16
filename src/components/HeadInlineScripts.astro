@@ -1,9 +1,10 @@
 ---
 /**
- * HeadInlineScripts — pre-paint <head> inline scripts (shot-mode + reader-settings).
+ * HeadInlineScripts — pre-paint <head> inline scripts (shot-mode + reader-settings)
+ * and analytics provider injection (GA4, Cloudflare Web Analytics).
  *
- * Both apply attributes before first paint (FOUC-safe). Extracted from Layout to
- * keep its structure clean.
+ * Both pre-paint scripts apply attributes before first paint (FOUC-safe).
+ * Extracted from Layout to keep its structure clean.
  *
  * Genericized (task 1.1a): the upstream shot branch for a retired page type was
  * removed; localStorage keys renamed from the upstream prefix to generic
@@ -13,7 +14,13 @@
  *   1. shot-mode init (?shot=1 → data-shot attr; used by the visual-regression
  *      capture scripts and the on-demand OG worker's ?shot render path)
  *   2. reader settings FOUC-safe early init (reads localStorage, applies data-theme)
+ *   3. analytics: GA4 gtag (async script + config) when enabled
+ *   4. analytics: Cloudflare Web Analytics beacon when enabled
  */
+import placeConfig from '../../place.config';
+import { resolveAnalytics } from '../lib/analytics';
+
+const { ga4, cloudflare } = resolveAnalytics(placeConfig);
 
 interface Props {
   /**
@@ -115,3 +122,17 @@ const { readerSettings } = Astro.props;
     } catch (_) {}
   })();
 </script>
+
+{ga4.enabled && (
+  <script async src={`https://www.googletagmanager.com/gtag/js?id=${ga4.measurementId}`}></script>
+  <script is:inline define:vars={{ ga4MeasurementId: ga4.measurementId }}>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', ga4MeasurementId);
+  </script>
+)}
+
+{cloudflare.enabled && (
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon={`{"token":"${cloudflare.token}"}`}></script>
+)}

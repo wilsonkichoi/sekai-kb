@@ -279,6 +279,68 @@ curl -sI https://your-domain.example | head -5
 
 ---
 
+## Analytics
+
+Browser analytics collection is independently gated behind `features.analytics`
+and per-provider identifiers in the `analytics` block of `place.config.ts`. Both
+providers are absent-safe: an instance that upgrades without configuring analytics
+sees no change.
+
+### GA4 (Google Analytics 4)
+
+1. **Create a GA4 property** in the [Google Analytics admin](https://analytics.google.com/):
+   Admin > Create Property. Name it after your instance.
+2. **Create a web data stream** for your domain. Copy the **Measurement ID**
+   (format: `G-XXXXXXXXXX`).
+3. **(Recommended) Verify the domain in Google Search Console** so GA4 links to
+   organic-search data: Search Console > Add Property > Domain > verify via DNS
+   TXT record.
+4. **Configure `place.config.ts`:**
+
+   ```ts
+   features: { analytics: true },
+   analytics: { ga4MeasurementId: 'G-XXXXXXXXXX' },
+   ```
+
+5. **Verify:** open the site, open Chrome DevTools Network tab, filter by
+   `collect?`. A `POST` to `https://www.google-analytics.com/g/collect?...`
+   confirms collection. Or use GA4 DebugView (Realtime > DebugView in the GA4
+   console; enable via the [GA Debugger extension](https://chrome.google.com/webstore/detail/google-analytics-debugger/jnkmfdileelhofjcijamephohjechhna)).
+
+### Cloudflare Web Analytics
+
+1. **Enable Web Analytics** in the Cloudflare dashboard:
+   Account Home > Web Analytics > Add a site > select "Manual setup with a JS
+   Beacon" (NOT the automatic proxy mode).
+2. Copy the **site token** (32-character hex string) from the snippet shown.
+3. **Configure `place.config.ts`:**
+
+   ```ts
+   features: { analytics: true },
+   analytics: { cloudflareWebAnalyticsToken: 'abcdef0123456789abcdef0123456789' },
+   ```
+
+4. **Verify:** open the site, open DevTools Network tab, filter by
+   `cloudflareinsights`. A request to
+   `https://static.cloudflareinsights.com/beacon.min.js` loads the beacon; a
+   subsequent request to `/cdn-cgi/rum` confirms a pageview was sent.
+
+### Preventing duplicate beacons
+
+The framework injects the GA4 gtag and/or Cloudflare beacon automatically when
+the config enables them. Do NOT also paste the provider snippets manually into
+your HTML or into a Cloudflare dashboard "automatic setup" that injects the same
+beacon via the proxy. Doing so causes double-counted pageviews. If you previously
+used Cloudflare's automatic injection, disable it before enabling the config key.
+
+### Both providers together
+
+Both providers are independently gated: set both IDs in the `analytics` block and
+both collect in parallel. Remove one ID (or set it to empty string) to disable
+that provider without touching the other.
+
+---
+
 ## Cloudflare Workers
 
 Dynamic capability runs on Cloudflare Workers, separate from the static site on

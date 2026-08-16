@@ -158,6 +158,10 @@ export interface PlaceConfig {
      */
     mcpRelevanceFloor?: number;
   };
+  analytics?: {
+    ga4MeasurementId?: string;
+    cloudflareWebAnalyticsToken?: string;
+  };
   seo: {
     defaultOgImage: string;
     twitterHandle?: string;

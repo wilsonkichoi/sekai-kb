@@ -201,6 +201,8 @@ jobs:
       # native `node --test <glob>` form does not (a zero-match glob exits 0).
       - name: Worker unit suites
         run: npm run test:workers
+      - name: Analytics injection gate
+        run: npm run test:analytics
       - name: OG image resolve matrix
         run: npm run test:og
       # Corpus embeddings: the chunker, the int8 quantization round-trip, the Workers
