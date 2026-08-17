@@ -87,6 +87,10 @@
    * dark one in dark; the single mid-tone hue cleared neither (3.6:1 / 4.3:1). */
   --color-rank-purple-ink: #6d28d9;
   --color-rank-indigo-ink: #4f46e5;
+  /* Zebra rows. Measured against --color-bg-alt, which is what the odd rows show:
+   * the table and its wrapper declare no background of their own. --color-bg-soft
+   * sits 0.05 dL* from it and made the striping vanish. */
+  --color-table-row-alt: #eef1f6;
   --color-accent: #3b82f6;
 
   /* === Reader font-size scale (2026-05-01 γ-late) ===
@@ -119,6 +123,7 @@
   --color-table-head-bg: #23232b;
   --color-rank-purple-ink: #c4b5fd;
   --color-rank-indigo-ink: #a5b4fc;
+  --color-table-row-alt: #17171c;
   --color-accent: #60a5fa;
   color-scheme: dark;
 }

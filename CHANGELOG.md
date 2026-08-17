@@ -64,6 +64,22 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ### Fixed
 
+- **The `pull_request_target` guard no longer has two silent bypasses.** Found in
+  review before it shipped. `triggerBlock()` terminated its lazy match with `\Z`,
+  which JavaScript has no support for and reads as a literal `Z`, so any capital Z in
+  a workflow's `on:` block — a comment, a branch glob, a cron note — truncated the
+  block, the trigger was never seen, and the gate exited 0 on the exact PR-head
+  checkout it exists to catch. This is the identical trap
+  `check-analytics-delivery.mjs` documents at its own `jobBlock()`. Separately, the
+  security decision was made by iterating parsed steps, and the step parser matched
+  only 6-space sequence indentation, so a valid 4-space workflow yielded zero steps
+  and bypassed the gate entirely. The decision is now made on the file text and the
+  step parse only supplies a location for the message. Three regression cases cover
+  both shapes plus `merge_commit_sha`, each written as a synthetic workflow rather
+  than a mutation of this repository's own file — mutating `deploy.yml` can only ever
+  exercise its own 6-space, Z-free style, which is why neither bypass surfaced.
+
+
 - **The analytics credential-boundary gate now scans the whole workflow file, not
   just the `build` job.** `scripts/ci/check-analytics-delivery.mjs` states as its
   property 2 that *every* analytics secret reference sits on a step carrying the
@@ -103,20 +119,23 @@ tags, never framework `main`** (ADR 004, SPEC
   64 live classes is untouched, and the four analytics-enabled production builds in
   `tests/analytics-delivery.test.mjs` assert the panels render identical values.
 
-- **Dashboard table header and rank chips are readable in dark mode.** The
-  article-health table header hardcoded `rgba(245, 245, 245, 0.95)` in both themes,
-  so dark mode rendered `--color-ink` on a near-white bar at **1.00:1** — invisible
-  — while light mode sat at 1.09:1 against its own rows. Four more rules in the same
-  component (header rule, row rules, wrapper border, zebra striping) were hardcoded
-  light-only and vanished on dark. The analytics rank chips separately failed AA in
-  *both* themes (3.59:1 and 3.78:1 light, 4.32:1 and 4.11:1 dark) by putting a
-  mid-tone hue on a 10% tint of the same hue. All now read from new
-  `--color-table-head-bg`, `--color-rank-purple-ink`, and `--color-rank-indigo-ink`
-  token pairs, chosen by measuring contrast and perceptual lightness rather than by
-  eye: 13.8:1 / 14.2:1 for the header, and 6.02:1 / 9.92:1 and 5.32:1 / 9.20:1 for
-  the chips. `scripts/visual/theme-surfaces.test.mjs` gains the two table-header
-  surfaces, verified non-vacuous by reintroducing the defect and watching the guard
-  fail.
+- **Dashboard table header, zebra rows, and rank chips are readable in dark mode.**
+  The article-health table header hardcoded `rgba(245, 245, 245, 0.95)` in both
+  themes, so dark mode rendered `--color-ink` on a near-white bar at **1.00:1** —
+  invisible — while light mode sat at 1.09:1 against its own rows. Four more rules in
+  the same component (header rule, row rules, wrapper border, zebra striping) were
+  hardcoded light-only and vanished on dark. The analytics rank chips separately
+  failed AA in *both* themes (3.75:1 and 3.95:1 light, 3.68:1 and 3.50:1 dark) by
+  putting a mid-tone hue on a 10% tint of the same hue.
+
+  All now read from new `--color-table-head-bg`, `--color-table-row-alt`,
+  `--color-rank-purple-ink`, and `--color-rank-indigo-ink` token pairs, each measured
+  against the surface it actually sits on: 13.8:1 / 14.2:1 for the header text, and
+  6.29:1 / 8.44:1 and 5.56:1 / 7.84:1 for the chips over `--color-surface-raised`.
+  Zebra rows are measured against `--color-bg-alt` — the table and its wrapper declare
+  no background, so that is what the odd rows show — at 3.17 and 5.15 dL*.
+  `scripts/visual/theme-surfaces.test.mjs` gains the two table-header surfaces,
+  verified non-vacuous by reintroducing the defect and watching the guard fail.
 
 ## [1.1.8] — 2026-08-16
 

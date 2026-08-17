@@ -207,7 +207,7 @@
   border-bottom: 1px solid var(--color-border);
 }
 .registry-table tbody tr:nth-child(even) {
-  background: var(--color-bg-soft);
+  background: var(--color-table-row-alt);
 }
 .registry-table tbody tr:hover {
   background: rgba(59, 130, 246, 0.04);
@@ -1321,15 +1321,8 @@
   font-size: 0.82rem;
   color: var(--color-ink-soft);
 }
-/* Search Console word cloud — d3-cloud SVG layout, 16:9 max aspect.
-     Container provides the dashed-purple "cloud field" background; the SVG
-     inside is auto-sized to fit. */
 
-@media (max-width: 540px) {
-}
 
-@media (max-width: 720px) {
-}
 .sc-query-row {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto auto auto auto;

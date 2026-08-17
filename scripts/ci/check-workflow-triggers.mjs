@@ -27,6 +27,8 @@
 // PR-head references, all of which resolve to attacker-authored code:
 //   github.event.pull_request.head.sha / .ref / .repo.*
 //   github.head_ref
+//   github.event.pull_request.merge_commit_sha (a merge OF the PR's code)
+//   github.event.pull_request.head.label
 //   refs/pull/<n>/head or /merge
 //
 // Failure modes exit 1. Success prints one summary line and exits 0.
@@ -50,6 +52,8 @@ const PR_HEAD_REFERENCES = [
   'github.event.pull_request.head.ref',
   'github.event.pull_request.head.repo',
   'github.head_ref',
+  'github.event.pull_request.merge_commit_sha',
+  'github.event.pull_request.head.label',
   'refs/pull/',
 ];
 
@@ -62,7 +66,11 @@ const fail = (message) => errors.push(message);
  * dependency -- consistent with the other gates under scripts/ci/.
  */
 function triggerBlock(source) {
-  const match = source.match(/^on:\s*$\n([\s\S]*?)(?=^[a-zA-Z][\w-]*:|\Z)/m);
+  // `\Z` does NOT exist in JavaScript: written that way it is a literal `Z`, and the
+  // lazy quantifier then ends the block at the first capital Z in the trigger body --
+  // a comment, a branch glob, a cron note. check-analytics-delivery.mjs carries the
+  // same trap and the same fix; `$(?![\s\S])` is true end-of-input.
+  const match = source.match(/^on:\s*$\n([\s\S]*?)(?=^[a-zA-Z][\w-]*:|$(?![\s\S]))/m);
   if (match) return match[0];
   // `on: [push, pull_request]` and `on: push` inline forms.
   const inline = source.match(/^on:.*$/m);
@@ -75,13 +83,13 @@ function parseSteps(source) {
   const steps = [];
   let current = null;
   for (const line of lines) {
-    if (/^\s{6}- /.test(line)) {
+    if (/^\s{2,}- /.test(line)) {
       if (current) steps.push(current);
       current = { text: line };
       continue;
     }
     if (current) {
-      if (line.trim() === '' || /^\s{6,}/.test(line)) {
+      if (line.trim() === '' || /^\s{2,}/.test(line)) {
         current.text += `\n${line}`;
         continue;
       }
@@ -102,11 +110,19 @@ function parseSteps(source) {
 function checkWorkflow(relativePath, source) {
   if (!triggerBlock(source).includes(TRIGGER)) return;
 
-  for (const step of parseSteps(source)) {
-    const hit = PR_HEAD_REFERENCES.find((reference) => step.text.includes(reference));
-    if (!hit) continue;
+  // Decide on the FILE, never on the step parse. YAML accepts any sequence indent, so
+  // a workflow written 4-space -- a marketplace README copy-paste -- yields zero steps
+  // from any fixed-indent parser, and a gate that iterates steps would pass it green.
+  // The step parse below only turns a hit into a location for the message.
+  const hits = PR_HEAD_REFERENCES.filter((reference) => source.includes(reference));
+  if (hits.length === 0) return;
+
+  const steps = parseSteps(source);
+  for (const hit of hits) {
+    const owner = steps.find((step) => step.text.includes(hit));
+    const where = owner ? `step '${owner.name}'` : 'this workflow';
     fail(
-      `${relativePath} uses '${TRIGGER}' and step '${step.name}' checks out PR-authored code ` +
+      `${relativePath} uses '${TRIGGER}' and ${where} checks out PR-authored code ` +
         `via '${hit}'. That trigger runs with this repository's secrets and a write-capable ` +
         'token, and does not withhold them from forks, so anyone opening a pull request would ' +
         'execute code with them. Check out the base branch instead, or use the ' +
@@ -142,6 +158,72 @@ function run(root) {
  * the first person who legitimately needs it.
  */
 const SELFTEST_CASES = [
+  {
+    // B1 regression: a capital Z anywhere in the `on:` block used to truncate it,
+    // so the trigger was never seen and the gate exited 0 on a PR-head checkout.
+    label: 'pull_request_target whose on: block contains a capital Z',
+    mustFail: true,
+    apply: (root) => {
+      writeFileSync(
+        join(root, WORKFLOW_DIR, 'synthetic-capital-z.yml'),
+        'name: Synthetic\n' +
+          'on:\n' +
+          '  push:\n' +
+          '    branches: [main]\n' +
+          '  # runs in the AZ and EU regions too\n' +
+          '  pull_request_target:\n' +
+          'jobs:\n' +
+          '  label:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - uses: actions/checkout@v5\n' +
+          '        with:\n' +
+          '          ref: ${{ github.event.pull_request.head.sha }}\n' +
+          '      - run: npm ci\n',
+      );
+    },
+  },
+  {
+    // B2 regression: YAML accepts any sequence indent. A 4-space workflow yielded
+    // zero steps from the fixed 6-space parser, so a step-iterating gate saw nothing.
+    label: 'pull_request_target in a 4-space-indented workflow',
+    mustFail: true,
+    apply: (root) => {
+      writeFileSync(
+        join(root, WORKFLOW_DIR, 'synthetic-four-space.yml'),
+        'name: Synthetic\n' +
+          'on:\n' +
+          '  pull_request_target:\n' +
+          'jobs:\n' +
+          '  label:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '    - uses: actions/checkout@v5\n' +
+          '      with:\n' +
+          '        ref: ${{ github.event.pull_request.head.sha }}\n' +
+          '    - run: npm ci && npm test\n',
+      );
+    },
+  },
+  {
+    label: 'pull_request_target checking out merge_commit_sha',
+    mustFail: true,
+    apply: (root) => {
+      writeFileSync(
+        join(root, WORKFLOW_DIR, 'synthetic-merge-sha.yml'),
+        'name: Synthetic\n' +
+          'on:\n' +
+          '  pull_request_target:\n' +
+          'jobs:\n' +
+          '  label:\n' +
+          '    runs-on: ubuntu-latest\n' +
+          '    steps:\n' +
+          '      - uses: actions/checkout@v5\n' +
+          '        with:\n' +
+          '          ref: ${{ github.event.pull_request.merge_commit_sha }}\n',
+      );
+    },
+  },
   {
     label: 'pull_request_target with an explicit PR-head checkout',
     mustFail: true,
