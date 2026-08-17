@@ -271,10 +271,35 @@ apart from the dashboard.
    domain — it drives canonical URLs, the sitemap, and RSS. Commit and push so
    the next deploy builds against the right origin.
 
+5. **Check which `robots.txt` the edge actually serves.** The build emits one at
+   `dist/robots.txt`, carrying the `Sitemap:` directive. A CDN proxying the origin
+   (Cloudflare among them) can serve its own managed file at that path instead,
+   and that file carries no `Sitemap:` line. Compare what the edge returns against
+   what you built:
+
+   ```bash
+   curl -s https://your-domain.example/robots.txt
+   ```
+
+   If the `Sitemap:` line is absent, the managed file is winning: disable it in the
+   CDN dashboard so the origin's file is served.
+
+6. **Submit the sitemap in Search Console.** Once the domain resolves and serves
+   HTTPS, add the property in [Google Search Console](https://search.google.com/search-console),
+   then Sitemaps → submit:
+
+   ```
+   https://your-domain.example/sitemap-index.xml
+   ```
+
+   Without this, the only discovery path is crawling, and the Search Console
+   analytics source (§Analytics) reports zero rows for an unindexed property.
+
 Verify end-to-end:
 
 ```bash
 curl -sI https://your-domain.example | head -5
+curl -s https://your-domain.example/sitemap-index.xml | head -5
 ```
 
 ---

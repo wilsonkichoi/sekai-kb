@@ -2,7 +2,9 @@
  * post-build-check.mjs — post-build smoke test.
  *
  * Catches silent build collapse (getStaticPaths returning 0 paths, empty catch
- * swallowing errors, a category hub rendering a placeholder instead of its cards).
+ * swallowing errors, a category hub rendering a placeholder instead of its cards)
+ * and silent absence of the crawl-discovery artifacts (`sitemap-index.xml`,
+ * `robots.txt`), which the framework advertises and no doc gate can derive.
  * Exit code 1 = CI must NOT deploy.
  *
  * Categories flow from place.config.ts (genericity gate). Scaled for any corpus
@@ -56,14 +58,51 @@ if (totalPages < MIN_TOTAL_PAGES) {
 
 // ── 2. Structural surfaces this task and the shell must produce ──
 const REQUIRED = [
-  ['home', 'index.html'],
-  ['explore', 'explore/index.html'],
-  ['latest', 'latest/index.html'],
-  ['ai', 'ai/index.html'],
-  ['404', '404.html'],
+  ['home page', 'index.html'],
+  ['explore page', 'explore/index.html'],
+  ['latest page', 'latest/index.html'],
+  ['ai page', 'ai/index.html'],
+  ['404 page', '404.html'],
+  ['sitemap index', 'sitemap-index.xml'],
+  ['robots.txt', 'robots.txt'],
 ];
 for (const [label, rel] of REQUIRED) {
-  if (!(await exists(join(DIST, rel)))) errors.push(`missing ${label} page (dist/${rel})`);
+  if (!(await exists(join(DIST, rel)))) errors.push(`missing ${label} (dist/${rel})`);
+}
+
+// ── 2a. robots.txt points crawlers at the sitemap this build emitted ──
+// The framework advertises both artifacts (`/about` copy, DEPLOY.md's `place.domain`
+// claim) and they were promised for a long time before they existed. Neither has a
+// prose source a doc gate can derive, so this is their guard: a missing file above, or
+// a `Sitemap:` host that drifted from place.config.ts, blocks the deploy. The host
+// comparison is what makes the "never a hardcoded host" property mechanical — an
+// instance that sets its own `place.domain` gets a robots.txt naming that domain or a
+// red build, not a silently wrong directive pointing at someone else's site.
+const robotsPath = join(DIST, 'robots.txt');
+if (await exists(robotsPath)) {
+  const robots = await readFile(robotsPath, 'utf-8');
+  const sitemapDirective = robots.match(/^Sitemap:[ \t]*(\S+)[ \t]*$/m);
+  if (!sitemapDirective) {
+    errors.push('dist/robots.txt carries no `Sitemap:` directive');
+  } else {
+    let host = null;
+    try {
+      host = new URL(sitemapDirective[1]).host;
+    } catch {}
+    if (host === null) {
+      errors.push(
+        `dist/robots.txt \`Sitemap: ${sitemapDirective[1]}\` is not an absolute URL; ` +
+          'a relative sitemap directive is ignored by crawlers',
+      );
+    } else if (host !== placeConfig.place.domain) {
+      errors.push(
+        `dist/robots.txt points at sitemap host ${host}, ` +
+          `but place.config.ts declares ${placeConfig.place.domain}`,
+      );
+    } else {
+      console.log(`  ✅ robots.txt: Sitemap: directive on ${host}`);
+    }
+  }
 }
 
 // ── 2b. /ai documents exactly the paths this instance serves ──

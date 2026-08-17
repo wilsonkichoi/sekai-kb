@@ -327,9 +327,17 @@ vendor-agnostic lazy-loading knowledge protocol: any browsing-capable AI reads `
 
 Routes under `src/pages/`: `index`, `[category]/index`, `[category]/[slug]`, `404`,
 `about`, `ai`, `changelog`, `chat`, `contribute`, `dashboard`, `explore`, `feed.xml`,
-`graph`, `latest`, `map`, `rss.xml`, `soundscape`, `system`.
+`graph`, `latest`, `map`, `robots.txt`, `rss.xml`, `soundscape`, `system`.
 Non-route build outputs: `llms.txt`, `/kb/agent.md`, and `/kb/*`, emitted by
-`build-kb-index.mjs` rather than by an Astro page. `/ai` documents every one of those
+`build-kb-index.mjs` rather than by an Astro page, plus `sitemap-index.xml` and its
+`sitemap-N.xml` chunks, emitted by the `@astrojs/sitemap` integration declared in
+`astro.config.ts`. That URL set is the `page`-typed routes only: the endpoints above
+never enter it, `404` is dropped by the integration, and the `public/` assets are not
+routes, so no `filter` is configured. `robots.txt` carries the `Sitemap:` directive
+pointing at that index, built from `place.domain` and never a hardcoded host.
+`postbuild:smoke` (`scripts/core/post-build-check.mjs`) fails the build when either
+`dist/sitemap-index.xml` or `dist/robots.txt` is missing, or when the `Sitemap:` host
+disagrees with `place.config.ts`. `/ai` documents every one of those
 machine paths that this instance actually serves, in the order `src/lib/ai-paths.ts`
 returns them (§MCP delivery, D4). `/map` is Leaflet; `/soundscape` is native HTML5
 audio with no player library. Phase 6 also adds the feedback widget (a component,
