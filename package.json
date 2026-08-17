@@ -52,6 +52,8 @@
     "corpus-refresh:selftest": "node scripts/ci/check-corpus-refresh.mjs --selftest",
     "analytics-delivery:check": "node scripts/ci/check-analytics-delivery.mjs",
     "analytics-delivery:selftest": "node scripts/ci/check-analytics-delivery.mjs --selftest",
+    "workflow-triggers:check": "node scripts/ci/check-workflow-triggers.mjs",
+    "workflow-triggers:selftest": "node scripts/ci/check-workflow-triggers.mjs --selftest",
     "corpus-workers": "node --experimental-strip-types scripts/deploy/corpus-workers.mjs",
     "roadmap-gates": "node scripts/ci/check-roadmap-exit-gates.mjs",
     "roadmap-gates:selftest": "node scripts/ci/check-roadmap-exit-gates.mjs --selftest",

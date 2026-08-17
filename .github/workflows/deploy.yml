@@ -112,6 +112,15 @@ jobs:
       - name: Self-test — the analytics delivery guard fails on every planted defect class
         run: npm run analytics-delivery:selftest
 
+      # pull_request_target runs with this repository's secrets and a write-capable
+      # token and does not withhold them from forks. Safe on its own; a repository
+      # compromise the moment such a workflow checks out the PR head. The gate is that
+      # combination, so the legitimate use of the trigger stays available.
+      - name: No pull_request_target workflow checks out PR-authored code
+        run: npm run workflow-triggers:check
+      - name: Self-test — the trigger guard catches the unsafe pattern and allows the safe ones
+        run: npm run workflow-triggers:selftest
+
       # ADR 004/005: every phase closes with a tagged release that instance #1 adopts.
       # Template mode only — an adopted instance has no framework ROADMAP to check.
       - name: ROADMAP exit-gate contract (tag, instance adoption, confirm, packet defined)

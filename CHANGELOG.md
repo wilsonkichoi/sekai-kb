@@ -43,6 +43,25 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Added
+
+- **`pull_request_target` guard (`npm run workflow-triggers:check`).** That trigger
+  runs a workflow with this repository's secrets and a write-capable token, and
+  unlike `pull_request` it does not withhold them from forks. It is safe on its own
+  — it exists so a workflow can label or comment on a fork's pull request, and its
+  default checkout is the repository's own base branch. It becomes a repository
+  compromise the moment such a workflow checks out the PR head, because
+  attacker-authored code then runs with those credentials, and `npm ci` postinstall
+  alone is enough. The gate is that combination, not the trigger, so the legitimate
+  use stays available: a `pull_request_target` workflow that references
+  `github.event.pull_request.head.*`, `github.head_ref`, or `refs/pull/` in any step
+  fails. `workflow-triggers:selftest` proves both directions — two unsafe patterns
+  caught, and two safe ones (a PR-head checkout under plain `pull_request`, and
+  `pull_request_target` checking out the base) deliberately not flagged, since a
+  guard that fires on the safe pattern gets deleted by the first person who needs it.
+  Fatal in an adopted instance as well as in template mode: a security boundary is
+  the class `AGENTS.md` iron rule 3 keeps fatal.
+
 ### Fixed
 
 - **The analytics credential-boundary gate now scans the whole workflow file, not
@@ -74,6 +93,15 @@ tags, never framework `main`** (ADR 004, SPEC
   id, suite green. Each path now clears its own flag only after its restore succeeds,
   so a later caller retries what failed, and the `after()` hook asserts the restore
   actually happened. Failures print the manual recovery command to stderr.
+
+- **Dead analytics CSS removed from `src/styles/dashboard.css`.** The dashboard
+  stylesheet carried 38 rules in the `ga-`, `sc-`, and `analytics-` namespaces whose
+  classes appear in no `.astro`, `.ts`, or `.js` source anywhere in `src/` — ported
+  from the pre-cut fork and never wired to markup. v1.1.8's retokenization pass
+  updated their colors along with the live rules, which made dead code look
+  maintained without making it render anything. 206 lines removed; every one of the
+  64 live classes is untouched, and the four analytics-enabled production builds in
+  `tests/analytics-delivery.test.mjs` assert the panels render identical values.
 
 ## [1.1.8] — 2026-08-16
 
