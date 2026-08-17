@@ -78,6 +78,18 @@ for (const [label, rel] of REQUIRED) {
 // comparison is what makes the "never a hardcoded host" property mechanical — an
 // instance that sets its own `place.domain` gets a robots.txt naming that domain or a
 // red build, not a silently wrong directive pointing at someone else's site.
+//
+// The host comparison is case-insensitive because the two sides normalize differently:
+// `new URL(...).host` lowercases per WHATWG, while the init wizard's `place.domain`
+// validator (`scripts/init/prompt-table.mjs`) accepts mixed case. An adopter who
+// answered `Example.Com` would otherwise fail every build on a message that reads like
+// a real mismatch. The error text still prints `place.domain` as written.
+//
+// The last check derives the `dist/` path from the directive itself rather than from a
+// second `sitemap-index.xml` literal: the entry in REQUIRED above proves the build
+// emitted a sitemap index (DoD 5), and this proves robots.txt points at a file this
+// build actually wrote. A renamed route or a `sitemap({ filenameBase })` that made the
+// two disagree would send every crawler to a 404 while both halves still passed.
 const robotsPath = join(DIST, 'robots.txt');
 if (await exists(robotsPath)) {
   const robots = await readFile(robotsPath, 'utf-8');
@@ -85,22 +97,33 @@ if (await exists(robotsPath)) {
   if (!sitemapDirective) {
     errors.push('dist/robots.txt carries no `Sitemap:` directive');
   } else {
-    let host = null;
+    let sitemapUrl = null;
     try {
-      host = new URL(sitemapDirective[1]).host;
+      sitemapUrl = new URL(sitemapDirective[1]);
     } catch {}
-    if (host === null) {
+    let targetIsFile = false;
+    if (sitemapUrl !== null) {
+      try {
+        targetIsFile = (await stat(join(DIST, sitemapUrl.pathname))).isFile();
+      } catch {}
+    }
+    if (sitemapUrl === null) {
       errors.push(
         `dist/robots.txt \`Sitemap: ${sitemapDirective[1]}\` is not an absolute URL; ` +
           'a relative sitemap directive is ignored by crawlers',
       );
-    } else if (host !== placeConfig.place.domain) {
+    } else if (sitemapUrl.host !== placeConfig.place.domain.toLowerCase()) {
       errors.push(
-        `dist/robots.txt points at sitemap host ${host}, ` +
+        `dist/robots.txt points at sitemap host ${sitemapUrl.host}, ` +
           `but place.config.ts declares ${placeConfig.place.domain}`,
       );
+    } else if (!targetIsFile) {
+      errors.push(
+        `dist/robots.txt points at ${sitemapUrl.pathname}, ` +
+          `but this build emitted no file at dist${sitemapUrl.pathname}`,
+      );
     } else {
-      console.log(`  ✅ robots.txt: Sitemap: directive on ${host}`);
+      console.log(`  ✅ robots.txt: Sitemap: directive on ${sitemapUrl.host}${sitemapUrl.pathname}`);
     }
   }
 }

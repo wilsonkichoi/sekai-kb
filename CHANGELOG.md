@@ -61,10 +61,13 @@ tags, never framework `main`** (ADR 004, SPEC
 - **`postbuild:smoke` fails the build when either artifact is missing.** The
   regression that shipped this gap was silence, so `scripts/core/post-build-check.mjs`
   now requires `dist/sitemap-index.xml` and `dist/robots.txt`, and requires the
-  `Sitemap:` directive to be an absolute URL whose host equals `place.domain`. That
-  last check is what keeps the host mechanical rather than conventional: an instance
-  whose robots.txt pointed at another site's sitemap would get a red build, not a
-  quiet wrong answer. `postbuild` is an npm lifecycle of `build`, which the `build`
+  `Sitemap:` directive to be an absolute URL whose host equals `place.domain` and
+  whose path names a file the build actually emitted. Those last checks are what keep
+  the directive mechanical rather than conventional: an instance whose robots.txt
+  pointed at another site's sitemap, or at a sitemap path this build never wrote,
+  would get a red build rather than a quiet wrong answer. The host comparison is
+  case-insensitive, because the init wizard accepts a mixed-case `place.domain` and
+  a URL host is lowercased. `postbuild` is an npm lifecycle of `build`, which the `build`
   job of `.github/workflows/deploy.yml` runs, so the gate is in CI on every pull
   request and every push to `main`.
 - **`docs/runbook/DEPLOY.md` gains two operator steps** under the custom-domain
