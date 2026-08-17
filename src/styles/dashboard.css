@@ -1214,24 +1214,9 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.5rem;
 }
-.analytics-full {
-  grid-column: 1 / -1;
-}
-.ga-pages-list-2col {
-  display: flex;
-  gap: 1.5rem;
-}
-.ga-pages-list-col {
-  flex: 1;
-  min-width: 0;
-}
 @media (max-width: 720px) {
   .analytics-detail-grid {
     grid-template-columns: 1fr;
-  }
-  .ga-pages-list-2col {
-    flex-direction: column;
-    gap: 0;
   }
 }
 .analytics-pages,
@@ -1291,30 +1276,12 @@
   color: var(--color-ink-soft);
   flex-shrink: 0;
 }
-.ga-country-flag {
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
 .ga-page-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--color-border);
-}
-a.ga-page-row-link {
-  text-decoration: none;
-  color: inherit;
-  transition: background-color 0.15s ease;
-  padding-left: 0.4rem;
-  padding-right: 0.4rem;
-  border-radius: 6px;
-}
-a.ga-page-row-link:hover {
-  background: rgba(139, 92, 246, 0.08);
-}
-a.ga-page-row-link:hover .ga-page-name {
-  color: #8b5cf6;
 }
 .ga-page-rank {
   width: 22px;
@@ -1348,190 +1315,19 @@ a.ga-page-row-link:hover .ga-page-name {
   color: var(--color-ink-soft);
   flex-shrink: 0;
 }
-.ga-callouts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.8rem;
-}
-.ga-callout {
-  padding: 0.95rem;
-  border-radius: 10px;
-  background: var(--color-bg-soft);
-  border: 1px solid var(--color-border);
-}
-.ga-callout-title {
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--color-ink);
-  margin-bottom: 0.35rem;
-}
-.ga-callout-body {
-  font-size: 0.82rem;
-  line-height: 1.55;
-  color: var(--color-ink-soft);
-}
-.ga-callout-meta,
-.ga-subtle {
-  margin-top: 0.45rem;
-  font-size: 0.75rem;
-  color: var(--color-ink-soft);
-}
-.ga-mini-list {
-  margin-top: 0.7rem;
-}
-.ga-mini-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.ga-mini-label {
-  flex: 1;
-  font-size: 0.82rem;
-  color: var(--color-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ga-mini-meta,
-.ga-kpi-strip {
-  font-size: 0.76rem;
-  color: var(--color-ink-soft);
-  flex-shrink: 0;
-}
-.ga-kpi-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  margin: 0.45rem 0 0.75rem;
-  font-weight: 600;
-}
 .ga-block-title {
   margin: 1rem 0 0.3rem;
   font-size: 0.82rem;
   color: var(--color-ink-soft);
 }
-.ga-stale-hint {
-  display: inline-block;
-  color: #f59e0b;
-  font-size: 0.6rem;
-  vertical-align: middle;
-  margin-left: 0.3rem;
-  cursor: help;
-}
 /* Search Console word cloud — d3-cloud SVG layout, 16:9 max aspect.
      Container provides the dashed-purple "cloud field" background; the SVG
      inside is auto-sized to fit. */
-.sc-wordcloud-container {
-  margin-top: 0.4rem;
-  padding: 0.75rem;
-  background: rgba(99, 102, 241, 0.03);
-  border: 1px dashed rgba(99, 102, 241, 0.15);
-  border-radius: 12px;
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  max-width: 100%;
-}
-.sc-wordcloud-container[aria-busy='true'] {
-  min-height: 320px;
-}
-.sc-wordcloud-loading,
-.sc-wordcloud-fallback {
-  font-size: 0.85rem;
-  color: var(--color-ink-soft);
-  font-style: italic;
-}
-.sc-wordcloud-svg {
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  display: block;
-}
-.sc-word {
-  cursor: default;
-  transition:
-    fill 0.15s ease,
-    opacity 0.15s ease;
-}
-.sc-word:hover {
-  fill: #4338ca !important;
-  opacity: 1;
-}
-.sc-wordcloud-svg:hover .sc-word:not(:hover) {
-  opacity: 0.5;
-}
 
-/* Search Console 7d — richer per-query row */
-/* Brand vs non-brand pills (2026-04-17 δ) */
-.sc-brand-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  margin: 0.6rem 0 0.4rem;
-}
-.sc-brand-pill {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.5rem 0.7rem;
-  border-radius: 0.5rem;
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  background: color-mix(in srgb, currentColor 4%, transparent);
-}
-.sc-brand-pill-brand {
-  border-color: color-mix(in srgb, #8b7355 25%, transparent);
-  background: color-mix(in srgb, #8b7355 6%, transparent);
-}
-.sc-brand-pill-nonbrand {
-  border-color: color-mix(in srgb, #4a8a5c 28%, transparent);
-  background: color-mix(in srgb, #4a8a5c 6%, transparent);
-}
-.sc-brand-label {
-  font-size: 0.8rem;
-  opacity: 0.75;
-  font-weight: 600;
-}
-.sc-brand-value {
-  font-size: 1rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.sc-brand-ctr {
-  font-size: 0.85rem;
-  opacity: 0.85;
-  font-variant-numeric: tabular-nums;
-}
-.sc-brand-note {
-  grid-column: 1 / -1;
-  font-size: 0.75rem;
-  opacity: 0.6;
-  font-style: italic;
-  margin-top: 0.1rem;
-}
 @media (max-width: 540px) {
-  .sc-brand-split {
-    grid-template-columns: 1fr;
-  }
 }
 
-.sc-queries-grid {
-  margin-top: 0.7rem;
-  display: flex;
-  gap: 1.5rem;
-}
-.sc-queries-col {
-  flex: 1;
-  min-width: 0;
-}
 @media (max-width: 720px) {
-  .sc-queries-grid {
-    flex-direction: column;
-    gap: 0;
-  }
 }
 .sc-query-row {
   display: grid;
@@ -1585,10 +1381,6 @@ a.ga-page-row-link:hover .ga-page-name {
   }
   .ga-stat-value {
     font-size: 1.35rem;
-  }
-  .ga-mini-row {
-    flex-direction: column;
-    gap: 0.2rem;
   }
   .sc-query-row {
     grid-template-columns: 22px minmax(0, 1fr) auto;
