@@ -598,6 +598,17 @@ verified `main` SHA. The run changes no repository content and never pushes a br
    describe how the framework is built, not how an instance is operated. They are stripped
    at adoption and gated against dangling references (ADR 008); an adopter who wants
    product docs writes their own.
+8. **GitHub Actions tag mutability (accepted, LB-110).** Workflow actions are pinned by
+   tag (`@v5`), not commit SHA. A moved tag in a third-party action (`astral-sh/setup-uv`)
+   is a supply-chain vector: the `build` job uses it and holds the five analytics secrets.
+   Accepted because: (a) `actions/*` is GitHub's own org, materially harder to compromise;
+   (b) SHA pins without Dependabot rot silently and stop receiving security patches,
+   trading one risk for another; (c) `astral-sh/setup-uv` is a widely-adopted action with
+   a narrow scope (installs uv), and a malicious tag move there would be detected quickly
+   by the broader community; (d) adopters inherit both the pins and the Dependabot PR
+   noise, and the ongoing cost outweighs the residual risk for a solo repository. Revisit
+   if Dependabot is adopted for another reason (the marginal cost of adding
+   `github-actions` drops to near zero).
 
 ## Deployment
 
