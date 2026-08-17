@@ -43,6 +43,26 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Fixed
+
+- **The analytics credential-boundary gate now scans the whole workflow file, not
+  just the `build` job.** `scripts/ci/check-analytics-delivery.mjs` states as its
+  property 2 that *every* analytics secret reference sits on a step carrying the
+  push-to-`main` condition, but it only ever read the `build` job. A reference added
+  to `genericity`, `test`, or `init-check` — all of which run on `pull_request` — or
+  to a workflow-level `env:` block passed the gate untouched, which would hand a
+  Google service-account key or a Cloudflare API token to pull-request-authored code
+  (`npm ci` postinstall, the test suite itself). The gate now accounts for every
+  occurrence of each required secret in `.github/workflows/deploy.yml` and fails on
+  any outside the gated build-job analytics steps, naming the offending job and
+  count. Job names are read from the file, so a job added later is covered without
+  editing a list. A 13th self-test case plants exactly this defect and proves the
+  gate catches it.
+
+  The workflow itself was already correct: all ten `secrets.*` references live on
+  gated `build`-job steps. This closes the gap between what the guard claimed and
+  what it checked.
+
 ## [1.1.8] — 2026-08-16
 
 Analytics ship end to end: browser collection, three normalized signal fetchers, and a credential-gated production-build fetch rendering independently degrading dashboard panels.
