@@ -19,9 +19,11 @@
 //      not merely in the build job -- lives on a gated analytics step, and
 //      `GOOGLE_SERVICE_ACCOUNT_JSON` in particular appears only on the step that
 //      materializes it, never in the fetch step's environment and never written to a
-//      workspace path. The account is by dotted name, so the two spellings that would
+//      workspace path. The account is by dotted name, so two spellings that would
 //      evade it, `secrets[...]` and `secrets: inherit`, are refused outright rather
-//      than counted.
+//      than counted. That refusal list is not exhaustive -- `toJSON(secrets)` also
+//      escapes a dotted-name account -- so this property is stated as what it checks:
+//      every dotted reference, plus those two forms.
 //   3. RUNNER-TEMPORARY KEY STORAGE. The service-account key is written under
 //      `runner.temp` and nowhere else, and a removal step guarded by `always()`
 //      deletes exactly that path.

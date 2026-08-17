@@ -83,8 +83,10 @@
    * and the dark value below is where the flip belongs. */
   --color-table-head-bg: #e2e8f0;
   /* Rank chips in the analytics panels. The chip background is a 10% tint of the
-   * same hue, so the ink has to clear AA against a pale tint in light and a very
-   * dark one in dark; the single mid-tone hue cleared neither (3.6:1 / 4.3:1). */
+   * same hue over --color-surface-raised, so the ink has to clear AA against a pale
+   * tint in light and a very dark one in dark; the single mid-tone hue cleared
+   * neither, at 3.75 / 3.95 light and 3.68 / 3.50 dark. These clear both:
+   * 6.29 / 5.56 light, 8.44 / 7.84 dark. */
   --color-rank-purple-ink: #6d28d9;
   --color-rank-indigo-ink: #4f46e5;
   /* Zebra rows. Measured against --color-bg-alt, which is what the odd rows show:
