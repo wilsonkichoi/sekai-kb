@@ -987,32 +987,71 @@ const ANALYTICS_SNAPSHOT = new Map(
   ANALYTICS_DIR_EXISTED ? filesUnder(ANALYTICS_DIR).map((path) => [path, readFileSync(path)]) : [],
 );
 
-let repositoryMutated = false;
+/* One flag per mutated path, each cleared only after that path's restore actually
+ * succeeds. A single flag cleared up front made every later call a no-op, so the
+ * "second attempt" this file relies on could not happen: whichever of the exit
+ * handler, the after() hook, or a signal handler ran first consumed the only try. */
+let placeConfigMutated = false;
+let analyticsDirMutated = false;
 
+/**
+ * Restore both mutated paths and return the failures, newest attempt last. Never
+ * throws: this runs from process.on('exit') and from signal handlers, where a throw
+ * would replace the real exit reason. Reporting is the caller's job -- the after()
+ * hook turns a non-empty result into a failed suite, which is what stops a silently
+ * dirty `place.config.ts` from passing as green.
+ */
 function restoreRepository() {
-  if (!repositoryMutated) return;
-  repositoryMutated = false;
-  try {
-    writeFileSync(PLACE_CONFIG_PATH, PLACE_CONFIG_SNAPSHOT);
-  } catch {
-    // The exit handler must not throw; the after() hook gets a second attempt.
-  }
-  try {
-    rmSync(ANALYTICS_DIR, { recursive: true, force: true });
-    if (ANALYTICS_DIR_EXISTED) {
-      mkdirSync(ANALYTICS_DIR, { recursive: true });
-      for (const [path, contents] of ANALYTICS_SNAPSHOT) {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, contents);
-      }
+  const failures = [];
+
+  if (placeConfigMutated) {
+    try {
+      writeFileSync(PLACE_CONFIG_PATH, PLACE_CONFIG_SNAPSHOT);
+      placeConfigMutated = false;
+    } catch (error) {
+      failures.push(`${PLACE_CONFIG_PATH}: ${error.message}`);
     }
-  } catch {
-    // Same reason.
   }
+
+  if (analyticsDirMutated) {
+    try {
+      rmSync(ANALYTICS_DIR, { recursive: true, force: true });
+      if (ANALYTICS_DIR_EXISTED) {
+        mkdirSync(ANALYTICS_DIR, { recursive: true });
+        for (const [path, contents] of ANALYTICS_SNAPSHOT) {
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, contents);
+        }
+      }
+      analyticsDirMutated = false;
+    } catch (error) {
+      failures.push(`${ANALYTICS_DIR}: ${error.message}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    // Loud on stderr even when a later attempt may still succeed: this block edits
+    // tracked repository files, and the operator needs the manual recovery command
+    // if every attempt fails.
+    console.error(
+      '\nFAILED to restore the repository after the analytics build tests:\n' +
+        `  ${failures.join('\n  ')}\n` +
+        '  Recover with: git checkout -- place.config.ts && rm -rf src/data/analytics\n',
+    );
+  }
+
+  return failures;
 }
 
 process.on('exit', restoreRepository);
-after(restoreRepository);
+after(() => {
+  const failures = restoreRepository();
+  assert.equal(
+    failures.length,
+    0,
+    `the repository was left mutated by this block: ${failures.join('; ')}`,
+  );
+});
 
 // A killed run is the one path an exit handler misses, and this block is slow enough to
 // be worth interrupting. Restore, then re-raise the signal with the handler removed so the
@@ -1057,13 +1096,13 @@ function writePlaceConfig(enabled) {
   const text = original
     .replace(FEATURES_ANALYTICS_OFF, enabled ? FEATURES_ANALYTICS_ON : FEATURES_ANALYTICS_OFF)
     .replace(PUBLIC_IDS_ANCHOR, `${PUBLIC_IDS_BLOCK}${PUBLIC_IDS_ANCHOR}`);
-  repositoryMutated = true;
+  placeConfigMutated = true;
   writeFileSync(PLACE_CONFIG_PATH, text);
 }
 
 /** Install exactly the given fixture files under the repository's analytics data dir. */
 function writeAnalyticsData(files) {
-  repositoryMutated = true;
+  analyticsDirMutated = true;
   rmSync(ANALYTICS_DIR, { recursive: true, force: true });
   mkdirSync(ANALYTICS_DIR, { recursive: true });
   for (const [id, contents] of Object.entries(files)) {

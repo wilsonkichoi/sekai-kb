@@ -63,6 +63,18 @@ tags, never framework `main`** (ADR 004, SPEC
   gated `build`-job steps. This closes the gap between what the guard claimed and
   what it checked.
 
+- **A failed repository restore in the analytics build tests can no longer pass as
+  green.** `tests/analytics-delivery.test.mjs` mutates tracked `place.config.ts` and
+  `src/data/analytics/` for its four production builds. `restoreRepository()` cleared
+  its `repositoryMutated` flag *before* attempting either write, so whichever of the
+  `after()` hook, the `process.on('exit')` handler, or a signal handler ran first
+  consumed the only attempt — the documented "second attempt" could not happen — and
+  both `catch` blocks swallowed the error, ending the run with a tracked
+  `place.config.ts` still carrying `analytics: true` and an injected test measurement
+  id, suite green. Each path now clears its own flag only after its restore succeeds,
+  so a later caller retries what failed, and the `after()` hook asserts the restore
+  actually happened. Failures print the manual recovery command to stderr.
+
 ## [1.1.8] — 2026-08-16
 
 Analytics ship end to end: browser collection, three normalized signal fetchers, and a credential-gated production-build fetch rendering independently degrading dashboard panels.
