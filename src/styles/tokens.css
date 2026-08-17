@@ -77,6 +77,16 @@
   --color-surface-raised: #ffffff;
   --color-border: rgba(15, 23, 42, 0.08);
   --color-border-visible: #e2e8f0;
+  /* Table header band. A header has to read as distinct from BOTH the page
+   * behind the table and the rows inside it, which a near-white tint cannot do
+   * on a white surface. Carried as a token because dashboard.css is token-only
+   * and the dark value below is where the flip belongs. */
+  --color-table-head-bg: #e2e8f0;
+  /* Rank chips in the analytics panels. The chip background is a 10% tint of the
+   * same hue, so the ink has to clear AA against a pale tint in light and a very
+   * dark one in dark; the single mid-tone hue cleared neither (3.6:1 / 4.3:1). */
+  --color-rank-purple-ink: #6d28d9;
+  --color-rank-indigo-ink: #4f46e5;
   --color-accent: #3b82f6;
 
   /* === Reader font-size scale (2026-05-01 γ-late) ===
@@ -103,6 +113,12 @@
   --color-surface-raised: #1a1a1f;
   --color-border: rgba(241, 245, 249, 0.16);
   --color-border-visible: rgba(241, 245, 249, 0.12);
+  /* Raised just enough above --color-surface (#141418) to band, nowhere near
+   * the light value: the previous hardcoded #f5f5f5 put near-white ink on a
+   * near-white bar at 1.00:1. This is 14.2:1 against --color-ink. */
+  --color-table-head-bg: #23232b;
+  --color-rank-purple-ink: #c4b5fd;
+  --color-rank-indigo-ink: #a5b4fc;
   --color-accent: #60a5fa;
   color-scheme: dark;
 }

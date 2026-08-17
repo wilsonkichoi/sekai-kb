@@ -90,6 +90,16 @@ const SURFACES = [
   // Dashboard
   ['/dashboard/', '.dashboard', 'background-color', 'Dashboard: page bg'],
   ['/dashboard/', '.vital-card', 'background-color', 'Dashboard: vital card bg'],
+  // The article-health table header shipped a hardcoded rgba(245,245,245,.95) in
+  // both themes, so dark mode rendered near-white ink on a near-white bar at
+  // 1.00:1. Neither surface was listed here, which is why the guard stayed green.
+  ['/dashboard/', '.registry-table thead', 'background-color', 'Dashboard: table header bg'],
+  ['/dashboard/', '.registry-table th', 'color', 'Dashboard: table header text'],
+  // The analytics rank chips are deliberately NOT listed. They render only when
+  // features.analytics is true, and this guard builds from a dist where the demo
+  // config leaves it false, so the rows would be skipped every run -- the quietly
+  // vacuous coverage the AI-access note above exists to avoid. Their contrast is
+  // held by the token values in tokens.css instead.
 
   // About
   ['/about/', '.vision-block', 'background-color', 'About: vision block bg'],

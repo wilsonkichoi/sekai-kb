@@ -103,6 +103,21 @@ tags, never framework `main`** (ADR 004, SPEC
   64 live classes is untouched, and the four analytics-enabled production builds in
   `tests/analytics-delivery.test.mjs` assert the panels render identical values.
 
+- **Dashboard table header and rank chips are readable in dark mode.** The
+  article-health table header hardcoded `rgba(245, 245, 245, 0.95)` in both themes,
+  so dark mode rendered `--color-ink` on a near-white bar at **1.00:1** — invisible
+  — while light mode sat at 1.09:1 against its own rows. Four more rules in the same
+  component (header rule, row rules, wrapper border, zebra striping) were hardcoded
+  light-only and vanished on dark. The analytics rank chips separately failed AA in
+  *both* themes (3.59:1 and 3.78:1 light, 4.32:1 and 4.11:1 dark) by putting a
+  mid-tone hue on a 10% tint of the same hue. All now read from new
+  `--color-table-head-bg`, `--color-rank-purple-ink`, and `--color-rank-indigo-ink`
+  token pairs, chosen by measuring contrast and perceptual lightness rather than by
+  eye: 13.8:1 / 14.2:1 for the header, and 6.02:1 / 9.92:1 and 5.32:1 / 9.20:1 for
+  the chips. `scripts/visual/theme-surfaces.test.mjs` gains the two table-header
+  surfaces, verified non-vacuous by reintroducing the defect and watching the guard
+  fail.
+
 ## [1.1.8] — 2026-08-16
 
 Analytics ship end to end: browser collection, three normalized signal fetchers, and a credential-gated production-build fetch rendering independently degrading dashboard panels.
