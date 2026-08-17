@@ -137,6 +137,21 @@ tags, never framework `main`** (ADR 004, SPEC
   `scripts/visual/theme-surfaces.test.mjs` gains the two table-header surfaces,
   verified non-vacuous by reintroducing the defect and watching the guard fail.
 
+### Removed
+
+- **161 dead class selectors removed from `src/styles/dashboard.css`.** The file
+  carried 189 CSS rule blocks whose selectors referenced only classes absent from
+  every `.astro`, `.ts`, and `.js` source under `src/` — ported from the pre-cut
+  fork and never wired to markup. The dead rules included `.registry-search`,
+  `.registry-filter`, `.cat-badge`, `.lang-dot*`, `.contributors-area*`, `.feed-*`,
+  `.matrix-cell*`, `.translation-matrix*`, `.organ-bar`, `.ca-*`, `.queue-*`,
+  `.growth-*`, `.health-svg-*`, `.donut-*`, `.cit-*`, and `.nextstep-*`. They
+  carried 140 of the file's 154 hardcoded color declarations, all light-only values
+  that would render invisible or glaring in dark mode if any of the markup ever came
+  back. Rendered `/dashboard` HTML is byte-identical before and after (verified via
+  content-hash-normalized comparison); the built CSS bundle drops from 24.7 KB to
+  8.6 KB with zero rules added or changed.
+
 ## [1.1.8] — 2026-08-16
 
 Analytics ship end to end: browser collection, three normalized signal fetchers, and a credential-gated production-build fetch rendering independently degrading dashboard panels.
