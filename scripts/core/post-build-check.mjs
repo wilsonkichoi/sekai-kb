@@ -150,6 +150,54 @@ if (await exists(aiPage)) {
   console.log(`  ✅ /ai: ${rendered.length} AI consumption path(s) documented`);
 }
 
+// ── 2c. The sitemap advertises exactly the feature pages this instance serves ──
+// The five feature pages always build, so `dist/` cannot tell an enabled page from a
+// disabled one and neither can the sitemap integration: what it sees is a rendered
+// route either way. The Header and Footer already act on the difference by omitting
+// the nav link, and `astro.config.ts`'s `filter` teaches the sitemap the same answer
+// from the same predicate (`src/lib/feature-pages.ts`). This is that filter's guard,
+// and it is both halves, like 2b: a page this instance has switched off must not be
+// submitted to crawlers, AND a page it serves must not be missing. A filter that
+// silently stopped matching, and one that swallowed every page, both block the deploy.
+const { unadvertisedPaths } = await import(resolve(ROOT, 'src/lib/feature-pages.ts'));
+const FEATURE_PAGES = ['/chat/', '/map/', '/graph/', '/soundscape/', '/dashboard/'];
+const withheld = unadvertisedPaths(placeConfig);
+const served = FEATURE_PAGES.filter((path) => !withheld.includes(path));
+
+const sitemapChunks = (await readdir(DIST)).filter((name) => /^sitemap-\d+\.xml$/.test(name));
+const sitemapPaths = [];
+for (const chunk of sitemapChunks) {
+  const xml = await readFile(join(DIST, chunk), 'utf-8');
+  for (const match of xml.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+    try {
+      sitemapPaths.push(new URL(match[1]).pathname);
+    } catch {
+      errors.push(`dist/${chunk} carries a <loc> that is not an absolute URL: ${match[1]}`);
+    }
+  }
+}
+
+const wronglyAdvertised = withheld.filter((path) => sitemapPaths.includes(path));
+if (wronglyAdvertised.length > 0) {
+  errors.push(
+    `the sitemap advertises [${wronglyAdvertised.join(', ')}], which this config has ` +
+      'switched off; those pages render a "not enabled here" state and carry no nav link',
+  );
+}
+const wronglyWithheld = served.filter((path) => !sitemapPaths.includes(path));
+if (wronglyWithheld.length > 0) {
+  errors.push(
+    `the sitemap omits [${wronglyWithheld.join(', ')}], which this config serves; ` +
+      'the filter in astro.config.ts is dropping a live page',
+  );
+}
+if (wronglyAdvertised.length === 0 && wronglyWithheld.length === 0) {
+  console.log(
+    `  ✅ sitemap: ${sitemapPaths.length} URL(s), ${served.length} feature page(s) served, ` +
+      `${withheld.length} withheld`,
+  );
+}
+
 // ── 3. Every configured category has a hub; populated ones render cards ──
 for (const cat of CATEGORIES) {
   const catDir = join(DIST, cat);

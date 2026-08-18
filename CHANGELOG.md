@@ -54,10 +54,22 @@ tags, never framework `main`** (ADR 004, SPEC
   path. The integration is now wired, and a new `src/pages/robots.txt.ts` route
   emits `User-agent: *`, `Allow: /`, and an absolute `Sitemap:` directive built
   from `place.domain`, so an adopter's file names the adopter's own host with no
-  configuration. No `filter` is configured: the integration collects only
-  `page`-typed routes, so the `feed.xml`, `robots.txt`, and `rss.xml` endpoints
+  configuration. Most of the exclusion set needs no rule: the integration collects
+  only `page`-typed routes, so the `feed.xml`, `robots.txt`, and `rss.xml` endpoints
   never enter the URL set, `404` is dropped by the integration itself, and
   `llms.txt` plus `/kb/*` are `public/` assets rather than routes.
+- **The sitemap withholds feature pages this instance has switched off.** `/chat`,
+  `/map`, `/graph`, `/soundscape`, and `/dashboard` always build; the flag decides
+  whether each renders its live state or a "not enabled here" state, and the Header
+  and Footer already omit the nav link in the second case. A sitemap is the crawler's
+  version of that nav link, so without a rule an instance with `features.chat` off
+  would submit a page reading "chat is not enabled here" to search engines. The new
+  `src/lib/feature-pages.ts` owns the page-to-flag mapping, `astro.config.ts` passes
+  it to the integration as a `filter`, and `postbuild:smoke` fails the build if the
+  sitemap advertises a switched-off page or omits a served one. `/chat` resolves
+  through `resolveChat()`, so a flag turned on without an endpoint counts as off, and
+  every flag is read absent-safe: a config predating a key withholds that page rather
+  than advertising it.
 - **`postbuild:smoke` fails the build when either artifact is missing.** The
   regression that shipped this gap was silence, so `scripts/core/post-build-check.mjs`
   now requires `dist/sitemap-index.xml` and `dist/robots.txt`, and requires the
