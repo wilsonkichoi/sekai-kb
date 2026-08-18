@@ -41,7 +41,7 @@ are always the same repository:
   no flag and no bare-`#N` ambiguity. A packet about an instance's own content, config,
   feature flags, or `/sekai-upgrade` adoption names that instance and runs there.
 - **`/dev:plan`** runs in the repository whose ROADMAP carries the phase being
-  decomposed, and amends that ROADMAP there. Phases 6-11 are framework phases: plan them
+  decomposed, and amends that ROADMAP there. Phases 6-12 are framework phases: plan them
   here against `dev_docs/ROADMAP.md`. A constraint that lands on the other repository is
   recorded in the packet and surfaced to the maintainer, never written into the other
   repository's ROADMAP from this side.
@@ -67,10 +67,10 @@ governs its own — and the disagreement is a defect to report, not a choice to 
   star, non-goals.
 - **Engineering SSOT:** `dev_docs/SPEC.md` + `dev_docs/adr/` — architecture, contracts, risk
   controls, negative requirements, and accepted decisions.
-- **Delivery SSOT:** `dev_docs/ROADMAP.md` — phases 6-11 task blocks, amendments, ordering
+- **Delivery SSOT:** `dev_docs/ROADMAP.md`: phases 6-12 task blocks, amendments, ordering
   rules, and exit gates. `/dev:plan` converts packets from those blocks and amends this
   file, not a sibling checkout.
-- **Research provenance:** `dev_docs/research/` — the platform research the phase 7-11
+- **Research provenance:** `dev_docs/research/`: the platform research the phase 7-11
   contracts were derived from, ported de-placed from the pre-cut instance. Reference,
   not contract: a constraint that binds implementation is promoted into `dev_docs/SPEC.md`,
   and time-sensitive claims there carry an as-of date and must be re-verified before use.
@@ -92,12 +92,13 @@ governs its own — and the disagreement is a defect to report, not a choice to 
 - **Upgrade mechanics:** `docs/runbook/UPGRADE.md` + the `/sekai-upgrade` skill; ADR 004
   (tagged-release topology).
 
-**Active architecture delta, Phase 10 (ADR 012).** Analytics is fetched ephemerally into
-ignored `src/data/analytics/` during a production Pages build of `main`; no snapshot enters
-git. `dev_docs/SPEC.md` §Analytics owns the provider schemas, config keys, credential
-boundary, and per-source unavailable states. `dev_docs/ROADMAP.md` splits delivery into
-10.2a fetchers and 10.2b CI/rendering. Future task 11.5 schedules the same verified-main
-rebuild and does not open an empty data PR.
+**Active architecture delta, Phases 11-12 (ADR 013).** Operational automation is
+independent of deferred Phase 8: deterministic schedules use GitHub Actions and agentic
+work uses native Claude Code cloud Routines. The repository ships committed skills plus
+`docs/runbook/AUTOMATION.md`, never a shadow ROUTINE.md registry or custom `/schedule`.
+Phase 11 is next: review/health, analytics refresh, trends, rewrite, and live proof. Phase
+12 is unscheduled behind its own gates: exact-plan human approval for feedback and a real
+account + idempotent adapter for social publishing. Neither phase reads `semiont/`.
 
 ## Intent sources
 

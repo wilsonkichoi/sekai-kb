@@ -3,6 +3,11 @@
 **Status:** Accepted (2026-07-07, maintainer session decision)
 **Deciders:** Wilson Choi, with Fable 5 as architect
 
+> **Scheduler clauses superseded by ADR 013 (2026-08-18).** Phase 11 uses native
+> Claude Code cloud Routines plus GitHub Actions, has no Phase 8 dependency, and ships no
+> ROUTINE.md registry or custom `/schedule` skill. The PR-only shipping rule and the
+> delivered Phase 9 and 10 architecture stay accepted.
+
 > **Moved to sekai-kb (2026-07-28, ADR 008).** Phases 9-11 are framework feature phases
 > executed in this repository, so the decision that scheduled them lives here.
 

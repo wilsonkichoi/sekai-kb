@@ -2,6 +2,12 @@
 
 **Status:** Accepted (2026-08-12)
 **Deciders:** Wilson Choi
+
+> **Phase 11 scheduling superseded by ADR 013 (2026-08-18).** Phase 8 remains deferred,
+> but Phase 11 is now active on native Claude Code Routines plus GitHub Actions and no
+> longer depends on Phase 8. Task 9.4 and this ADR's corpus-refresh security bounds stay
+> accepted.
+
 **Amends:** ADR 005 in its delivery-schedule half, and ADR 003 in nothing but its date. The
 organ architecture, the routine substrate, the hybrid scheduler choice, and the analytics
 stack all stand exactly as decided; what changes is when, and in one case whether, they are

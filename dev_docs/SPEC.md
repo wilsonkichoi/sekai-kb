@@ -52,6 +52,12 @@ diagrams (SSOT): `dev_docs/diagrams/architecture.drawio`, `data-flow.drawio`,
   figures are recorded in
   `dev_docs/research/platform-notes.md §2.10`, dated, and must be re-verified before use.
   Pinning a model identifier from archived research would ship a stale contract.
+- **Operational automation (optional)** uses GitHub Actions for deterministic jobs and
+  native Claude Code cloud Routines for agentic jobs. Routines are a research-preview,
+  subscription-backed operator capability, not a site runtime or hosting dependency. Their
+  availability, version floor, triggers, branch behavior, run semantics, and limits are
+  revalidated against the official documentation when Phase 11 is planned and released
+  (ADR 013, platform facts checked 2026-08-18).
 
 ## Repo topology
 
@@ -464,7 +470,7 @@ sentence fails CI.
    `semiont/`. Core is MEMORY + REFLEXES with a boot read below 150 lines. Other organs
    are opt-in and may not read one another's files.
 
-## Extension capabilities — Phases 9-11 (ROADMAP blocks govern detail; ADR 005)
+## Extension capabilities: Phases 9-12 (ROADMAP blocks govern detail; ADR 005/013)
 
 ### MCP delivery (`workers/mcp/`, Phase 9)
 
@@ -560,34 +566,89 @@ missing or invalid source file produces a named unavailable state for that sourc
 other panels and the existing article-health dashboard continue to render. Chart.js remains
 optional; static cards, lists, and tables are the default.
 
-### Autonomous routines (Phase 11 — DEFERRED, unscheduled)
+### Operational automation (Phase 11, next scheduled)
 
-**Deferred with Phase 8, which it depends on (ADR 011).** The contract below stands as
-specified and is what a future Phase 11 builds; nothing in the framework claims to deliver it
-in the meantime, and a document implying otherwise is a defect. The one exception is the
-embeddings/index refresh pipeline, which moved to task 9.4 because its dependencies were 7.2a
-and 9.1 rather than the organ layer, and because both chat and MCP would otherwise retrieve
-against a corpus that only refreshes on a manual deploy. That task is also the narrow
-exception to the hand-deploy rule for Workers: CI may deploy the workers bundling
-`workers/lib/vectors.json`, push-to-`main` only, opt-in through a secret whose absence keeps
-the job green, least-privilege permissions, blast radius documented in the runbook
-(ADR 011 (c)).
+**Independent of Phase 8 (ADR 013).** Semiont remains deferred and optional. It carries no
+ROUTINE organ, owns no operational state, and is not a prerequisite for this section.
 
-Hybrid substrate (ADR 005): deterministic pipelines (embeddings/index refresh, analytics
-fetch) run as GitHub Actions cron/push-triggers; AI routines (maintainer, feedback-triage,
-trend-discovery, social-publish, rewrite) run as Claude Code native scheduled tasks on the
-operator's machine. `semiont/organs/routine/ROUTINE.md` is the SSOT — each routine =
-`{id, substrate, schedule, skill, model, depends, ship-mode}`; the `/schedule` skill
-registers/unregisters against the declared substrate. Lifecycle contract (five stages with
-PR discipline replacing direct push): sync main → run skill → ship via PR per
-ship-mode (`auto-merge-data` for data-only artifacts, `human-merge` for content) → finale
-writes the MEMORY organ. Kill switch: disabling the routine organ in
-`semiont/config.json` stops all routines.
+The substrate is split by execution type:
 
-ADR 012 amends the analytics half of that substrate. Analytics JSON is an ignored build
-projection, so a refresh cannot be a data-only PR. Phase 10 fetches during each production
-build; if Phase 11 is scheduled, task 11.5 adds a scheduled rebuild/deploy of the current
-verified `main` SHA. The run changes no repository content and never pushes a branch.
+- deterministic repository and deployment work runs in GitHub Actions through schedule or
+  repository-event triggers;
+- agentic work runs as native Claude Code cloud Routines using committed `sekai-*` skills,
+  repository instructions, and only the connectors and environment access declared for the
+  individual routine.
+
+Native routine configuration is the operational source of truth: saved prompt, repository,
+model, environment, connectors, triggers, pause state, and run history. The framework does
+not duplicate that state in ROUTINE.md and does not ship a `/schedule` skill that collides
+with Claude Code's native command. `docs/runbook/AUTOMATION.md` is the reproducible setup
+contract. For every supported routine it records the native registration steps, trigger,
+committed skill, required repository, connector/environment allowlist, ship mode, observable
+success evidence, manual fallback, pause, and removal procedure. The runbook is not a
+registry and may not claim an account-owned routine exists without the live Phase 11 proof.
+
+As of the 2026-08-18 platform check, each cloud run clones the default branch and can write
+to a `claude/`-prefixed branch; Routines have no approval prompts; a green run state means
+only that the session exited without an infrastructure error. Therefore:
+
+1. A repository-changing routine opens a pull request from its `claude/` branch. It never
+   pushes the protected default branch. Content uses human merge, always.
+2. Acceptance checks the named effect, such as the posted review, opened issue, pull request,
+   deployed timestamp, or changed external record. Native green status alone is not evidence.
+3. Each routine receives only the repository, connectors, environment variables, and network
+   access it needs. Connectors are removed from the routine unless the task names them.
+4. Pause or deletion in the native routine control plane is the kill switch. With Routines
+   unavailable or disabled, manual skills still work and the site still builds and deploys.
+5. Phase 11 planning and the release proof revalidate the research-preview platform contract.
+   A material loss of capability returns to architecture; it does not trigger a custom
+   compatibility scheduler.
+
+Phase 11 delivers these flows:
+
+- A pull-request-triggered content-review routine invokes a committed review skill. The
+  skill inspects the changed paths and exits without comment when no `knowledge/**` article
+  changed; otherwise it posts the editorial and fact-check review sourced from the playbook.
+- A scheduled maintenance routine runs the internal-link and article-health audits and files
+  idempotently titled GitHub issues for regressions. Those issues are the rewrite queue.
+- GitHub Actions schedules the Phase 10 analytics fetch/build/deploy against the current
+  default-branch SHA. The run changes no branch and its deployed source timestamps are the
+  success evidence.
+- A trend-discovery routine reads an instance-owned `knowledge/_SOURCES.md` plus analytics
+  signals when present, and opens a pull request adding sourced proposals to
+  `knowledge/INBOX.md`. It never writes an article.
+- A rewrite routine selects one open maintenance issue, runs the canonical rewrite pipeline,
+  and opens a human-merge content pull request whose health score exceeds the prior score and
+  which receives the content-review routine's review.
+
+Task 9.4 remains the narrow exception to the hand-deploy rule for workers that bundle
+`workers/lib/vectors.json`; ADR 011's push-to-main, absent-safe secret, least-privilege, and
+documented-blast-radius bounds remain unchanged.
+
+### Gated integrations (Phase 12, deferred and unscheduled)
+
+**Independent of Phase 8 (ADR 013).** Phase 12 contains integrations blocked by their own
+human or external-account gates, never by Semiont.
+
+Feedback triage preserves `/sekai-triage-feedback`'s exact-plan approval contract. A
+scheduled cloud Routine invokes `--dry-run`, displays the complete plan, and stops. The
+maintainer opens that run and explicitly approves the exact plan in the same session. Only
+then may the skill re-read D1, re-read GitHub state, prove the plan is byte-identical, and
+execute the already specified writes. The saved routine prompt, its schedule, a GitHub event,
+silence, or a standing instruction is never approval. No contact field enters the plan or
+routine transcript.
+
+Social publishing stays blocked until a real instance enables `features.social` and has a
+real account on one selected platform. That trigger selects the platform and its current API;
+the framework does not build speculative adapters. The reviewed adapter keeps credentials in
+the routine environment, consumes only entries a human changed to `approved`, uses the queue
+entry id as an idempotency key or proves an equivalent remote lookup, and returns the existing
+post URL on retry. The routine opens a pull request recording `posted` plus that URL; a failed
+or conflicting repository update must not duplicate the external post.
+
+Phase 12 exits only after one feedback plan is approved and applied through its routine run,
+one approved snippet is posted exactly once through the live adapter, the release ships, and
+instance #1 adopts it cleanly. No Phase 12 acceptance criterion reads `semiont/`.
 
 ## Risk controls
 
@@ -632,7 +693,9 @@ verified `main` SHA. The run changes no repository content and never pushes a br
 ## Deployment
 
 GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` from
-`workers/`, documented in the runbook. No paid services.
+`workers/`, documented in the runbook. Optional native Claude Code cloud Routines execute
+in the operator's account and are registered from the automation runbook; they are not part
+of the site runtime. No paid hosting or infrastructure services.
 
 ## Negative requirements
 
@@ -662,10 +725,10 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   (the deploy job only on push to `main`), so every task PR gets CI.
 - **Feature phases depend on the framework cut**: no instance features before the
   framework ships (ADR 002, held in instance #1's history; `Risk controls`).
-- **Routines never push main directly** (Phase 11, ADR 005): every routine ships via a
-  PR behind CI — `auto-merge-data` on green for data-only artifacts, `human-merge` for
-  content. The dev-plugin iron rule (no work done outside a verified merge) applies to
-  automation, not just humans.
+- **Routines never push main directly** (Phases 11-12, ADR 005/013): every
+  repository-changing routine ships through a PR behind CI, and content always waits for
+  human merge. Deterministic rebuild/deploy jobs that change no branch use their workflow
+  run plus deployed-state verification as evidence.
 - **A framework gate may not fail an adopter's build on ownership grounds** (ADR 010): in
   instance mode a check running in an adopter's repository exits nonzero only for something
   that harms a party other than the person editing — account-scoped collisions (a Worker
@@ -688,6 +751,15 @@ GitHub Pages via Actions + Cloudflare DNS/CDN. Workers deploy via `wrangler` fro
   `scripts/ci/check-framework-docs.mjs`).
 
 ## Change log
+
+- **2026-08-18, ADR 013 native operations substrate:** Phase 11 becomes active and loses
+  its Phase 8 dependency. Native Claude Code cloud Routines own agentic scheduling, account
+  state, run history, and pause controls; GitHub Actions owns deterministic schedules. The
+  custom `/schedule`, ROUTINE.md registry, routine organ, MEMORY finale, and always-on-machine
+  dependency are removed. Approval-gated feedback triage and real-account-gated social
+  publishing move to an unscheduled Phase 12 with no Phase 8 dependency. §Stack,
+  §Operational automation, §Gated integrations, and §Negative requirements freeze the new
+  contracts. Architecture approval recorded 2026-08-18.
 
 - **2026-08-15, ADR 012 Phase 10 analytics delivery:** selected an ephemeral production-build
   fetch over committed analytics snapshots. §Analytics now freezes the two public config

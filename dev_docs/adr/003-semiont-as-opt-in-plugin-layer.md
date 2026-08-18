@@ -3,6 +3,11 @@
 **Status:** Accepted (2026-07-04)
 **Deciders:** Wilson Choi, with Fable 5 as architect
 
+> **Amended by ADR 013 (2026-08-18).** The optional ROUTINE organ is removed. Native
+> Claude Code Routines and GitHub Actions own operational scheduling without a Phase 8
+> dependency. The remaining Semiont identity, memory, reflex, manifesto, diary, and
+> introspection architecture stays accepted.
+
 > **Moved to sekai-kb (2026-07-28, ADR 008).** This decision governs framework code,
 > so it now lives beside that code. It was written before the framework was cut, when
 > one repository held both the framework and instance #1; references to "the instance"

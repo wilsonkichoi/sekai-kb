@@ -4,8 +4,9 @@
 feature phases. Milestones are tracker project milestones, one per phase. Task packets
 are converted from this document's detailed blocks by `/dev:plan`, never re-derived;
 their Steps/Acceptance text governs packet detail.
-Every phase transition is a maintainer gate — `/dev:plan` for phase n+1 runs only after
-the maintainer confirms phase n closed. Estimates use `AI implement+review | Human`.
+Every phase transition is a maintainer gate: `/dev:plan` for the next scheduled phase runs
+only after the maintainer confirms the current scheduled phase closed. Estimates use
+`AI implement+review | Human`.
 
 > **Stripped at adoption.** `npm run init` removes this file along with `dev_docs/PRD.md`,
 > `dev_docs/SPEC.md`, and `dev_docs/adr/`. It plans the framework's own development, not an
@@ -15,7 +16,7 @@ the maintainer confirms phase n closed. Estimates use `AI implement+review | Hum
 cut the framework out of it. That history — the extraction map, the inherited-fork
 disposition, the per-task packet-shaping notes, and the phase-0-through-5 table — is
 instance #1's rebuild record and stays in its repository. What moved here are the phases
-whose code executes in `sekai-kb`: **6 through 11**, plus the amendments and ordering
+whose code executes in `sekai-kb`: **6 through 12**, plus the amendments and ordering
 rules that govern them. The tracker remains a single project spanning both repositories,
 so task ids (`LB-*`) are continuous across the split.
 
@@ -26,9 +27,10 @@ so task ids (`LB-*`) are continuous across the split.
 | 8 | Semiont plugin layer | **DEFERRED — unscheduled (2026-08-12 amendment, D1).** Organ architecture in sekai-kb (config.json manifest, core organs); instance #1 enables core + MANIFESTO | 8.1 · 8.2 · 8.3 | Site builds with `semiont/` deleted and organs toggle via config only; tag released; instance #1 adopts clean (8.3); maintainer phase confirm | AI 5h \| Human 0.5h |
 | 9 | MCP + AI delivery | Remote MCP server (`workers/mcp/`) exposing list_topics/get_article/search/semantic_search; AI-access page + `/kb/agent.md` boot file; adopter upgrade playbook; CI corpus refresh so retrieval never goes stale | 9.1 · 9.2 · 9.3 · 9.4 · 9.5 | An MCP client connected to the instance's `/mcp` endpoint answers a question about its place via tools, no clone; tag released; instance #1 adopts clean (9.5); maintainer phase confirm | AI 9h \| Human 1h |
 | 10 | Perception (analytics) | GA4 + Search Console + Cloudflare Web Analytics live behind `features.analytics`; signal fetchers ported; dashboard analytics panels | 10.1 · 10.2a · 10.2b · 10.3 | Dashboard renders real traffic/search data from a fetch run, zero analytics IDs in `src/` outside place.config; tag released; instance #1 adopts clean (10.3); maintainer phase confirm | AI 9.25h \| Human 1.75h |
-| 11 | Autonomous routines | **DEFERRED — unscheduled (2026-08-12 amendment, D1); 11.2 pulled forward to 9.4 (D2).** ROUTINE organ activated: routine contract + `/schedule` skill; maintainer (content PR review + link/health audits); feedback-triage; data-refresh; trend-discovery; social-publish; rewrite | 11.1 · 11.3-11.9 | Two routines live >= 1 week shipping only via PRs, zero direct pushes to main; tag released; instance #1 adopts clean (11.9); maintainer phase confirm | AI 15.5h \| Human 1.25h |
+| 11 | Operational automation | **NEXT: independent of Phase 8 (2026-08-18 amendment; ADR 013).** Native Claude Code cloud Routines + GitHub Actions contract and runbook; content PR review; link/health audit; scheduled analytics rebuild; trend discovery; rewrite maintenance | 11.1 · 11.3 · 11.5 · 11.6 · 11.8 · 11.9 | Two routines live >= 1 week, every repository change through a PR and zero direct pushes to main; scheduled analytics refresh proven; tag released; instance #1 adopts clean (11.9); maintainer phase confirm | AI 12.5h \| Human 1.25h |
+| 12 | Gated integrations | **DEFERRED: unscheduled until its own gates are satisfied; no Phase 8 dependency (2026-08-18 amendment; ADR 013).** Human-approved feedback triage and real-account social publishing | 12.1 · 12.2 · 12.3 | One feedback plan approved and applied through its routine run; one approved snippet posted exactly once through a live adapter; tag released; instance #1 adopts clean (12.3); maintainer phase confirm | AI 7.5h \| Human 1.25h |
 
-**Exit-gate shape (uniform for phases 6-11).** Every `Exit gate` cell above states the same
+**Exit-gate shape (uniform for phases 6-12).** Every `Exit gate` cell above states the same
 four things in the same order, and a phase is not closed until all four hold:
 
 1. **The feature proof** — the phase-specific demonstration, run against something real.
@@ -39,32 +41,31 @@ four things in the same order, and a phase is not closed until all four hold:
    never a squash, instance-owned files untouched, the instance's own CI green on the
    merged tree, and `FRAMEWORK-VERSION` bumped only after that verification. Tracked as the
    phase's terminal packet, named in the cell.
-4. **Maintainer phase confirm** — the gate `/dev:plan` for phase n+1 waits on.
+4. **Maintainer phase confirm**: the gate `/dev:plan` for the next scheduled phase waits on.
 
-Part 3 is why every phase has a terminal packet (6.4, 7.4, 8.3, 9.5, 10.3, 11.9): adoption
+Part 3 is why every phase has a terminal packet (6.4, 7.4, 8.3, 9.5, 10.3, 11.9, 12.3): adoption
 is real work with human steps, so it is tracked as a task rather than asserted as a
 property. Those packets execute in the instance repository; the tag they adopt is cut in
 `sekai-kb` at verify of the phase's last framework task.
 
-**Totals for these phases:** the active scope is phases 6, 7, 9, and 10 —
-**AI ≈ 53h | Human ≈ 8.25h** (6: 20.25/3, 7: 14.5/2.5, 9: 9/1, 10: 9.25/1.75). Phases 8 and 11
-are deferred and unscheduled (2026-08-12 amendment, D1), carrying **AI ≈ 20.5h | Human ≈
-1.75h** they will cost whenever a maintainer schedules them (8: 5/0.5, 11: 15.5/1.25, the
-latter reduced by 11.2's move to 9.4). Everything sums to AI ≈ 73.5h | Human ≈ 10h across
-all six phases. Phase 6's numbers are the 2026-07-29 planning amendment's as revised by the
-three later Phase 6 amendments, not the original block estimates; phases 7, 8, 10, and 11
-gained a terminal adoption packet in the 2026-08-04 exit-gate amendment; Phase 7's are the
-2026-08-05 planning amendment's; Phase 9's are this amendment's. **Every figure in this
-paragraph is summed from the per-phase subtotals below** — an earlier revision's totals did
-not reconcile with them (a stated AI ≈ 62.5h against an actual 67h) because each amendment
-updated its own phase's row without re-summing. Phases 0-5, and therefore the grand totals
-for the whole programme, are recorded in instance #1's roadmap.
+**Totals for these phases:** the active scope is phases 6, 7, 9, 10, and 11:
+**AI ≈ 65.5h | Human ≈ 9.5h** (6: 20.25/3, 7: 14.5/2.5, 9: 9/1, 10: 9.25/1.75,
+11: 12.5/1.25). Phases 8 and 12 are deferred and unscheduled, carrying **AI ≈ 12.5h |
+Human ≈ 1.75h** they will cost whenever their independent gates are satisfied (8: 5/0.5,
+12: 7.5/1.25). Everything sums to **AI ≈ 78h | Human ≈ 11.25h** across all seven phases.
+Phase 6's numbers are the 2026-07-29 planning amendment's as revised by the three later
+Phase 6 amendments, not the original block estimates; phases 7, 8, 10, 11, and 12 have
+terminal adoption packets; Phase 7's are the 2026-08-05 planning amendment's; Phase 9's
+are the 2026-08-12 amendment's; phases 11 and 12 are the 2026-08-18 re-range amendment's.
+**Every figure in this paragraph is summed from the per-phase subtotals below.** Phases 0-5,
+and therefore the grand totals for the whole programme, are recorded in instance #1's
+roadmap.
 
 **Language policy:** every phase ships English-only. The framework carries no
 CJK/multi-language code path, language profile, or gate — in ANY code tree (`src/`,
 `scripts/`, `tests/`, `workers/`, `.agents/skills/`), test fixtures included, never just
 the directory a DoD happens to name. Language support is a post-project revisit after
-Phase 11 (PRD non-goals). `/dev:plan` must not emit packets that retain CJK code for
+Phase 12 (PRD non-goals). `/dev:plan` must not emit packets that retain CJK code for
 hypothetical adopters. Enforcement is machine: the genericity gate scans all code trees
 and CI includes a CJK-codepoint scan.
 **Adopter-facing boundary:** the adopter docs (README, the wizard-emitted `AGENTS.md`,
@@ -77,32 +78,32 @@ schema seams (`place.locale`, `place.languages[]`) stay declared but dormant.
 **Ordering rules (structural, not preference):** Phases 6 and 7 depend on the framework
 cut — the framework ships before instance fun-features (ADR 002, held in instance #1's
 history; SPEC `Risk controls`). Phase 9 depends on 7.2c (the inherited-fork
-disposition's named MCP trigger); Phase 11 depends on 8.1 (ROUTINE organ architecture)
-plus per-routine feature deps. Reordering is a scope change requiring the maintainer's
-explicit call.
+disposition's named MCP trigger). Phase 11 depends on capabilities delivered in phases 6,
+7, 9, and 10, but not on Phase 8. Phase 12 depends on 11.1 plus its own human-approval and
+real-account gates, but not on Phase 8. Reordering is a scope change requiring the
+maintainer's explicit call.
 
-**Execution order as of 2026-08-12: 6 → 7 → 9 → 10, then nothing scheduled.** The maintainer
-made that call in the 2026-08-12 amendment below (D1): phases 8 and 11 are deferred
-indefinitely, not dropped. No dependency was broken to do it — Phase 9 depends only on 7.2c,
-which shipped, and Phase 10 on a live domain, which exists. Phase 11 is the only block that
-depends on Phase 8, which is why deferring 8 parks 11 with it, and why the one Phase 11 task
-whose dependencies are 7.2a + 9.1 rather than 8.1 came forward instead of waiting (D2).
+**Execution order as of 2026-08-18: 6 → 7 → 9 → 10 → 11.** Phase 8 remains deferred and
+unscheduled. Phase 12 is separately deferred until its feedback-approval and social-account
+gates are satisfied. ADR 013 removes the old 8 → 11 dependency rather than routing around
+it: native Claude Code cloud Routines and GitHub Actions own operational scheduling, while
+Semiont remains an optional identity and memory layer.
 
 **Execution repo flow (post-cut ownership rule, ADR 004/005):** every
 code task in these phases executes in the `sekai-kb` repository; each phase closes with a
 tagged sekai-kb release (CHANGELOG entry + upgrade note for any config-schema addition),
 and instance #1 adopts it via `/sekai-upgrade` — that pull is part 3 of each phase's exit
-gate above, tracked as the phase's terminal packet (6.4, 7.4, 8.3, 9.3, 10.3, 11.9). The
+gate above, tracked as the phase's terminal packet (6.4, 7.4, 8.3, 9.5, 10.3, 11.9, 12.3). The
 only instance-side commits are instance-owned: feature flags in `place.config.ts`,
-analytics IDs, ROUTINE.md entries, wrangler secrets. New `place.config` keys must be
+analytics IDs, native routine registration, and wrangler secrets. New `place.config` keys must be
 absent-safe (missing key = feature off) so existing adopter instances upgrade without
 config surgery.
 
 The instance side of every one of those packets is the same four-step sequence, defined
 once in instance #1's ROADMAP under "Phases 6-11" along with a per-phase table of the flags
 it flips and the inputs only it has. The packets here reference that sequence rather than
-restating it, so the two documents cannot drift into disagreement about what "adopts it
-clean" means.
+restating it; Phase 12 reuses the same sequence and adds its two gated integrations. The
+two documents cannot drift into disagreement about what "adopts it clean" means.
 
 ---
 
@@ -475,6 +476,49 @@ Phase 10 blocks below carry them inline; ADR 012 records the contested delivery 
 
 ---
 
+## Phase 11/12 re-range amendment, approved 2026-08-18
+
+Records the maintainer's decision to keep Phase 8 unscheduled, make Phase 11 the next
+active phase, and move only independently gated integrations to Phase 12. ADR 013 records
+the architecture decision; the blocks below carry it inline.
+
+- **D1: operational scheduling no longer belongs to Semiont.** Phase 8 remains deferred,
+  but its ROUTINE organ and its downstream relationship to Phase 11 are removed. Any future
+  MEMORY integration belongs to Phase 8 or a separately approved post-Phase-8 milestone.
+  Neither Phase 11 nor Phase 12 reads `semiont/`.
+- **D2: Phase 11 uses native Claude Code cloud Routines plus GitHub Actions.** Native
+  Routines own prompts, repositories, environments, connectors, triggers, pause state, and
+  run history. The repository ships committed `sekai-*` skills and
+  `docs/runbook/AUTOMATION.md`; it does not ship ROUTINE.md or a custom `/schedule` that
+  collides with the native command. Deterministic jobs remain GitHub Actions. Platform
+  behavior is research-preview state and is revalidated at planning and release.
+- **D3: two old Phase 11 blocks move to Phase 12.** Old 11.4 becomes 12.1 because
+  feedback writes still require explicit approval of an exact plan. Old 11.7 becomes 12.2
+  because no real platform adapter or enabled first-instance social account exists. New
+  12.3 is the Phase 12 release, adoption, and live-integration gate. Those are scope moves,
+  not cuts.
+- **D4: feedback approval stays human and exact.** The scheduled routine runs
+  `/sekai-triage-feedback --dry-run` and stops. The maintainer explicitly approves that
+  exact plan in the same routine session; the skill then performs its existing byte-exact
+  revalidation before writes. A saved prompt, trigger, silence, or standing instruction is
+  never approval.
+- **D5: social publishing waits for evidence, not Phase 8.** A real account selects the
+  platform and current API. The adapter must preserve the queue's human `approved` gate and
+  make retries idempotent before automation can post. Phase 12 stays unscheduled until that
+  trigger and the feedback-approval readiness gate are both explicit.
+- **D6: success is an external effect, not a green routine badge.** Native documentation
+  states that green means the session exited without an infrastructure error. Each block
+  therefore names the pull request, review, issue, deployment timestamp, D1 row, or remote
+  post that proves success. Repository-changing routines use `claude/` branches and PRs;
+  content always waits for human merge.
+- **Estimates:** Phase 11 becomes AI ≈ 12.5h | Human ≈ 1.25h. Its native-platform contract
+  is 2.5h AI; content review/health is 3h; analytics refresh is 1.25h; trend discovery is
+  2.5h; rewrite is 2.5h; exit is 0.75h. Phase 12 is AI ≈ 7.5h | Human ≈ 1.25h: feedback
+  approval bridge 3.75h, social adapter/routine 3h, exit 0.75h. The totals paragraph above
+  is re-summed from these subtotals.
+
+---
+
 ## Detailed task blocks: Phases 6-8
 
 These are the active source blocks for `/dev:plan`. Model names are advisory and
@@ -497,7 +541,7 @@ names the instance in its own `Execution repo:` line.
        runbook.
   Acceptance: a curl POST against the deployed worker lands a row in D1; honeypot and
     rate-limit paths are verified
-  Downstream: 6.1b, 11.4
+  Downstream: 6.1b, 12.1
 
 [6.1b] Feedback frontend: widget behind features.feedback + workers.feedback
   Effort: S | Model: Opus | Depends: 6.1a
@@ -520,7 +564,7 @@ names the instance in its own `Execution repo:` line.
     2. Gate every write behind explicit human approval, as /sekai-seed-articles does.
   Acceptance: triage produces a GitHub issue; a duplicate comments instead of filing a
     second one
-  Downstream: 6.4, 11.4
+  Downstream: 6.4, 12.1
 
 [6.2] Snippet pipeline: skill + inbox + adapter interface + manual-sink runner
   Effort: M | Model: Sonnet | Depends: framework cut
@@ -535,7 +579,7 @@ names the instance in its own `Execution repo:` line.
   Acceptance: /sekai-snippet <article> yields an approved-queue entry; the runner marks it
     posted through the manual sink; publish posts to a platform after an account and
     adapter are wired
-  Downstream: 6.4, 11.7
+  Downstream: 6.4, 12.2
 
 [6.3] Soundscape page + manifest contract + demo audio
   Effort: M | Model: Sonnet | Depends: framework cut
@@ -732,18 +776,19 @@ now re-sums from)
   Acceptance: the deployed instance answers the evaluation set from its own articles with
     citations; og:image renders per-article cards in a real social preview; a scanned
     location code opens /chat with that location's greeting; maintainer phase confirm
-  Downstream: Phase 8 entry
+  Downstream: Phase 9 entry; Phase 8 remains independently schedulable
 ```
 
 _Phase 7 subtotal: AI 14.5h | Human 2.5h_
 
 **Phase 8: Semiont plugin layer — DEFERRED, unscheduled**
 
-**Deferred by the 2026-08-12 amendment (D1); ADR 011.** The blocks below are unchanged and
-stay convertible: `/dev:plan` runs against them whenever a maintainer schedules this phase.
+**Deferred by the 2026-08-12 amendment (D1); amended by ADR 013.** The blocks stay
+convertible: `/dev:plan` runs against them whenever a maintainer schedules this phase.
 Nothing in phases 9 or 10 requires the organ layer, and `AGENTS.md` §Semiont probe already
 requires every skill and script to no-op gracefully while `semiont/config.json` is absent.
-Phase 11 is the only phase that depends on 8.1, and it is deferred with this one.
+ADR 013 removes the ROUTINE organ and every downstream operations dependency. No scheduled
+phase depends on 8.1.
 
 The agent-toolkit migration amendment above controls the `AGENTS.md` boot-hook location
 and supersedes the original `CLAUDE.md` loader wording.
@@ -753,7 +798,7 @@ and supersedes the original `CLAUDE.md` loader wording.
   Effort: M | Model: Opus | Depends: framework cut
   Est: AI 2.5h + 0.5h review
   Steps:
-    1. Add semiont/config.json plus organs/{memory,reflexes,manifesto,diary,routine,
+    1. Add semiont/config.json plus organs/{memory,reflexes,manifesto,diary,
        introspection}/ scaffolds. The site build never imports semiont/; CI must prove a
        build succeeds with the directory absent.
     2. Seed a stable one-paragraph boot hook into starter AGENTS.md. It reads config.json,
@@ -762,9 +807,9 @@ and supersedes the original `CLAUDE.md` loader wording.
     3. Enforce ADR 003: no organ reads another organ's files; every skill probes for organ
        existence and no-ops gracefully when absent.
   Acceptance: site builds with semiont/ absent; disabling an organ removes its boot cost
-  Downstream: 8.2, 11.1
+  Downstream: 8.2
 
-[8.2] Instance #1 enables core + MANIFESTO; DIARY and ROUTINE stay off
+[8.2] Instance #1 enables core + MANIFESTO; DIARY and INTROSPECTION stay off
   Effort: S | Model: Sonnet | Depends: 8.1
   Est: AI 1h + 0.25h review
   Steps:
@@ -785,22 +830,22 @@ and supersedes the original `CLAUDE.md` loader wording.
     2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
        instance CI green, FRAMEWORK-VERSION bumped after verification).
     3. Turn on memory, reflexes, and manifesto in the instance's semiont/config.json;
-       leave diary and routine off.
+       leave diary and introspection off.
   Acceptance: the instance builds with semiont/ deleted and with it present; its enabled
     organ set matches its config and nothing else loads; maintainer phase confirm
-  Downstream: Phase 9 entry
+  Downstream: none; no scheduled phase depends on Phase 8
 ```
 
 _Phase 8 subtotal: AI 5h | Human 0.5h_
 
 ---
 
-## Detailed task blocks: Phases 9-11
+## Detailed task blocks: Phases 9-12
 
 `/dev:plan` converts packets from here; Steps/Acceptance text governs packet detail.
 Model policy: all execution Opus (2026-07-07); reviews follow `.agent-toolkit/dev.md`
 defaults. Decisions behind these blocks (scheduler substrate, ship mode, analytics stack,
-release train): ADR 005.
+release train): ADR 005 as amended by ADR 011, ADR 012, and ADR 013.
 
 **Phase 9: MCP + AI delivery**
 ```
@@ -1024,121 +1069,212 @@ _Phase 9 subtotal: AI 9h | Human 1h_
 
 _Phase 10 subtotal: AI 9.25h | Human 1.75h_
 
-**Phase 11: Autonomous routines — DEFERRED, unscheduled**
+**Phase 11: Operational automation - NEXT**
 
-**Deferred by the 2026-08-12 amendment (D1); ADR 011.** It depends on 8.1, which is deferred
-with it. The blocks below are unchanged apart from 11.2, which moved to 9.4 (D2) because its
-dependencies were 7.2a + 9.1 and its absence would have left chat and MCP retrieving against
-a manually-deployed snapshot. Scheduling Phase 8 is what unblocks the rest.
+**Re-ranged by the 2026-08-18 amendment; ADR 013.** This phase uses native Claude Code
+cloud Routines plus GitHub Actions and has no Phase 8 dependency. Old 11.4 and 11.7 move
+to Phase 12 because their blockers are human approval and a real social account, not
+Semiont. Task 11.2 remains delivered as 9.4.
 
 ```
-[11.1] Routine substrate + contract (ROUTINE organ activation + /schedule skill)
-  Effort: M | Model: Opus | Depends: 8.1
-  Est: AI 2.5h + 0.5h review | Human 0.25h (first scheduled-task registration)
+[11.1] Native automation contract + operator runbook
+  Effort: M | Model: Opus | Depends: Phase 10 exit; not Phase 8
+  Est: AI 2h + 0.5h review | Human 0.25h (register and pause the proof routine)
+  Decision: native Claude Code cloud Routines own agentic scheduling and account state;
+    GitHub Actions owns deterministic jobs. The repository ships no ROUTINE.md registry
+    and no custom /schedule skill (2026-08-18 amendment, D1/D2; ADR 013).
   Steps:
-    1. Implement the hybrid substrate (ADR 005): deterministic pipelines = GitHub Actions
-       cron/push-triggers; AI routines = Claude Code native scheduled tasks on the
-       operator's machine.
-    2. semiont/organs/routine/ROUTINE.md is SSOT: each routine = {id, substrate:
-       gh-actions|claude-cron, schedule, skill, model, depends, ship-mode:
-       auto-merge-data|human-merge}. /schedule skill registers/unregisters against the
-       declared substrate (writes the GH workflow or the native scheduled task).
-    3. Routine lifecycle contract (five stages, PR discipline replacing direct
-       push): sync main → run skill → ship via PR per ship-mode → finale writes MEMORY
-       organ entry. Routines NEVER push main directly.
-    4. Kill switch: routine organ disabled in semiont/config.json = no routine fires.
-       Collision rule: spacing documented in ROUTINE.md.
-  Acceptance: a demo no-op routine registered on each substrate fires once, opens a PR,
-    logs to MEMORY; disabling the organ stops both
-  Downstream: 11.3, 11.4, 11.5, 11.6, 11.7, 11.8
+    1. Revalidate current native Routine availability, CLI version floors, schedule and
+       GitHub triggers, default-branch clone behavior, claude/ branch behavior, run status
+       semantics, pause/removal controls, connector/environment scoping, and limits against
+       official documentation. Record the as-of date in docs/runbook/AUTOMATION.md.
+    2. Write AUTOMATION.md as a reproducible registration guide. Every routine template
+       names its trigger, committed skill, repository, model, connector/environment
+       allowlist, ship mode, observable success evidence, manual fallback, pause, and
+       removal procedure. It is not a shadow registry.
+    3. Amend AGENTS.md's Semiont probe and adopter-emitted copy: Semiont carries identity
+       and memory only; operations have no semiont/ dependency. Preserve the absent-safe
+       probe for every skill and script.
+    4. Prove the contract with one no-op cloud Routine: register, run, inspect its transcript,
+       pause it, prove it does not run, then remove it. A green badge alone is not success.
+  Acceptance: the runbook can reproduce the no-op routine from a fresh operator account;
+    its run transcript proves execution; pause stops it; removal leaves no claimed registry
+    state in the repository; the site builds with semiont/ absent
+  Downstream: 11.3, 11.5, 11.6, 11.8, 12.1, 12.2
+
 [11.2] MOVED to 9.4 by the 2026-08-12 amendment (D2). Its dependencies were 7.2a + 9.1,
-  never 8.1, and deferring it would have shipped 9.1's semantic_search against a corpus
-  that only refreshes on a manual deploy. Nothing remains here; the block lives in Phase 9.
-[11.3] Maintainer routine: content PR review + link/health audit
+  never Phase 8, and deferring it would have shipped 9.1's semantic_search against a corpus
+  that only refreshed on a manual deploy. Nothing remains here; the block lives in Phase 9.
+
+[11.3] Content PR review + scheduled link/health audit
   Effort: M | Model: Opus | Depends: 11.1, quality tooling
   Est: AI 2.5h + 0.5h review
   Steps:
-    1. Content PR review workflow on pull_request touching knowledge/** — editorial +
-       factcheck rubric sourced from the playbook, review comment posted; flips
-       .agent-toolkit/dev.md review_action_installed: true. Least-privilege permissions per
-       .agent-toolkit/rules/github-actions-least-privilege.md.
-    2. Scheduled maintainer routine (claude-cron): internal-link audit + article-health
-       sweep; regressions filed as tracker stubs, feeding the 11.8 rewrite queue.
-  Acceptance: a contributor PR receives an automated editorial review; a planted broken
-    link produces an issue
+    1. Add a committed content-review skill and a native pull-request-triggered Routine
+       registration template. The skill inspects changed paths and exits without comment
+       when no knowledge/** article changed; otherwise it posts one editorial + fact-check
+       review sourced from the playbook. Draft PRs stay excluded.
+    2. Add a scheduled maintenance skill and Routine template that runs the internal-link
+       check plus article-health sweep. File idempotently titled GitHub issues labeled
+       content-maintenance for regressions; those issues are the 11.8 rewrite queue.
+    3. Scope the review routine to the repository only. Scope the maintenance routine to
+       repository + GitHub issue writes only. Neither receives unrelated connectors or
+       permission to push the default branch.
+  Acceptance: a contributor content PR receives the playbook-based review; a non-content
+    PR receives none; a planted broken link produces one content-maintenance issue and a
+    rerun does not duplicate it
   Downstream: 11.8
-[11.4] Feedback-triage routine
-  Effort: S | Model: Opus | Depends: 11.1, 6.1b
-  Est: AI 1h + 0.25h review
-  Steps:
-    1. Register 6.1b's triage skill as a claude-cron routine (daily): read D1,
-       dedupe/classify, file GitHub issues linking the article.
-  Acceptance: a seeded D1 row becomes a GitHub issue on the next scheduled run
-  Downstream: none
-[11.5] Data-refresh routine
+
+[11.4] MOVED to 12.1 by the 2026-08-18 amendment (D3). Feedback writes require explicit
+  approval of the exact dry-run plan; Phase 12 preserves that gate without Phase 8.
+
+[11.5] Scheduled analytics refresh
   Effort: S | Model: Opus | Depends: 11.1, 10.2b
   Est: AI 1h + 0.25h review
   Decision: ADR 012 makes analytics JSON an ignored production-build projection. A
-    data-only PR cannot carry it and would be empty, so the routine schedules a rebuild of
-    the current verified main SHA instead; it changes no branch and pushes nothing.
+    data-only PR cannot carry it and would be empty, so GitHub Actions schedules a rebuild
+    and deploy of the current default-branch SHA; it changes no branch and pushes nothing.
   Steps:
-    1. Register the 10.2a fetchers plus 10.2b build/deploy path as a gh-actions routine
-       (daily): check out current main SHA → fetch → build → deploy that same SHA.
-  Acceptance: a scheduled run changes no branch, deploys from the current main SHA, and the
-    dashboard shows the new source timestamps
+    1. Add a daily schedule trigger to the 10.2b production path. Resolve the current
+       default-branch SHA once, then check out, fetch, build, and deploy that same SHA.
+    2. Preserve 10.2b's credential boundary: no pull-request credential path; absent secrets
+       skip green; incomplete credentials or provider failures stay visible; least-privilege
+       permissions and concurrency prevent overlapping deploys.
+    3. Extend workflow contract tests for the schedule trigger, immutable-SHA flow, no-branch
+       mutation, credential gates, and deployed timestamp evidence.
+  Acceptance: a scheduled run changes no branch, deploys from one recorded default-branch
+    SHA, and the live dashboard shows newer source timestamps; absent-secret checkout green
   Downstream: 11.6
-[11.6] Trend-discovery routine (news-lens for the instance)
+
+[11.6] Trend-discovery routine (news lens for the instance)
   Effort: M | Model: Opus | Depends: 11.1; 10.2b enriches, not required
-  Est: AI 2h + 0.5h review | Human 0.25h (approve first proposals)
+  Est: AI 2h + 0.5h review | Human 0.25h (approve the first proposal PR)
   Steps:
-    1. Weekly claude-cron routine: scan configured local sources (the source list is a
-       place-generic mechanism — knowledge/SOURCES.md; an instance seeds its own city
-       news, event calendars, community forums) + analytics signals when present.
-    2. Propose article ideas and snippet candidates → INBOX.md entries + tracker Backlog
-       stubs with source links. Proposals only — never writes articles directly.
-  Acceptance: a run yields >=3 sourced proposals in INBOX.md; zero direct article commits
-  Downstream: 11.7 feed, 11.8 feed
-[11.7] Social-publish routine
-  Effort: S | Model: Opus | Depends: 11.1, 6.2 + a first instance account exists (named
-    trigger, per 6.2's adapter contract)
-  Est: AI 1h + 0.25h review
-  Steps:
-    1. Register a claude-cron routine publishing approved SNIPPET-INBOX entries via the
-       6.2 platform adapter; publish log appended to the inbox entry.
-  Acceptance: an approved snippet posts to the wired platform on schedule;
-    pending/unapproved entries never post
-  Downstream: none
+    1. Add a /sekai-discover-trends skill plus a framework template for instance-owned
+       knowledge/_SOURCES.md. The leading underscore keeps the source manifest out of the
+       article scanners. No configured sources means a named no-op, never invented sources.
+    2. Add a weekly cloud Routine template that reads configured local news, event, and
+       community sources plus analytics signals when present. It must cite every proposal's
+       source and deduplicate against existing articles and INBOX entries.
+    3. Open a PR adding sourced article and snippet candidates to knowledge/INBOX.md.
+       Proposals only: never write an article and never push the default branch.
+  Acceptance: a live run yields at least three sourced, non-duplicate proposals in one
+    human-reviewed INBOX PR; zero direct article commits; the absent-source fixture no-ops
+  Downstream: 11.8 feed, 11.9
+
+[11.7] MOVED to 12.2 by the 2026-08-18 amendment (D3). No first-instance platform adapter
+  or enabled social account exists; the named Phase 6 trigger is unsatisfied, not Phase 8.
+
 [11.8] Rewrite routine (KB freshness)
   Effort: M | Model: Opus | Depends: 11.1, 11.3
-  Est: AI 2h + 0.5h review | Human 0.25h (merge first rewrite PR)
+  Est: AI 2h + 0.5h review | Human 0.25h (merge the first rewrite PR)
   Steps:
-    1. Scheduled claude-cron routine: pick the lowest-health/stalest article from the
-       11.3 sweep queue; rewrite per playbook (editorial bar, sources, lastVerified bump).
-    2. Open a content PR (human-merge ship-mode), which the 11.3 review workflow then
-       reviews.
-  Acceptance: a run produces a rewrite PR whose article-health score exceeds the prior
-    score; the PR carries the automated review
+    1. Add a scheduled cloud Routine template that selects one open content-maintenance
+       issue, chooses the lowest-health or stalest affected article, and invokes
+       /sekai-write through the canonical pipeline.
+    2. Open a human-merge content PR, link the maintenance issue, report the before/after
+       health score, and wait for the 11.3 content-review routine. Never merge or close the
+       issue before the human-merged PR proves the fix.
+  Acceptance: a live run produces one rewrite PR whose article-health score exceeds the
+    prior score; the PR carries the automated content review; the default branch changed
+    only through the human merge
   Downstream: 11.9
 
-[11.9] Phase 11 exit gate: ship the tag, adopt it in the instance, run the routines live
-  Effort: S | Model: Opus | Depends: 11.1-11.8
-  Est: AI 0.5h + 0.25h review | Human 0.5h (ROUTINE.md entries, first scheduled-task
-    registration, merge approval on the first rewrite PR)
+[11.9] Phase 11 exit gate: ship the tag, adopt it in the instance, run automation live
+  Effort: S | Model: Opus | Depends: 11.1, 11.3, 11.5, 11.6, 11.8
+  Est: AI 0.5h + 0.25h review | Human 0.5h (native routine registration and first rewrite
+    merge approval)
   Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
     last framework task.
   Steps:
-    1. Cut the sekai-kb release covering 11.1-11.8, with an upgrade note for the routine
-       organ and the /schedule skill.
+    1. Cut the sekai-kb release covering the Phase 11 framework tasks, with an upgrade note
+       for AUTOMATION.md, new skills/source template, and the analytics schedule opt-in.
     2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
        instance CI green, FRAMEWORK-VERSION bumped after verification).
-    3. Turn the routine organ on in the instance's semiont/config.json, write the
-       instance's own ROUTINE.md entries, and register the first scheduled tasks. Which
-       routines the instance runs, on what schedule, and in which ship-mode is
-       instance-owned work, not an adoption step.
-  Acceptance: two routines have run for >= 1 week on the live instance shipping only via
-    PRs, with zero direct pushes to main over that window (git log on main is the
-    evidence); maintainer phase confirm
-  Downstream: none — this closes the roadmap
+    3. Configure only the repositories, connectors, environment values, and triggers named
+       by AUTOMATION.md. Register the content review, maintenance, trend, and rewrite native
+       Routines; enable the GitHub Actions analytics schedule path.
+    4. Run at least two native Routines for one week. Inspect transcripts and named external
+       effects, not green badges alone. Verify every repository change arrived through a PR
+       and git history contains zero routine direct-push commits to the default branch.
+  Acceptance: two native Routines have run for at least one week with their named effects;
+    scheduled analytics refresh is proven on the live dashboard; every repository change
+    shipped through a PR; zero direct pushes to main; maintainer phase confirm
+  Downstream: Phase 12 entry when its independent gates are satisfied
 ```
 
-_Phase 11 subtotal: AI 15.5h | Human 1.25h_ (was 17.25h; 11.2's 1.75h moved to 9.4)
+_Phase 11 subtotal: AI 12.5h | Human 1.25h_
+
+**Phase 12: Gated integrations - DEFERRED, unscheduled**
+
+**Created by the 2026-08-18 amendment; ADR 013.** This phase has no Phase 8 dependency.
+It waits on its own gates: explicit human approval in feedback-triage runs, and a real
+enabled social account with a reviewed platform adapter.
+
+```
+[12.1] Feedback triage Routine with exact-plan human approval
+  Effort: M | Model: Opus | Depends: 11.1, 6.1b; not Phase 8
+  Est: AI 3h + 0.75h review | Human 0.25h (approve the first live plan)
+  Decision: native Routines have no approval prompt, so unattended execution cannot satisfy
+    /sekai-triage-feedback's explicit approval contract. The scheduled run produces the
+    plan and stops; the maintainer approves in that same run session (ADR 013).
+  Steps:
+    1. Add the daily native Routine template with only the instance repository, Cloudflare
+       environment values needed by Wrangler, and GitHub access needed by the existing
+       skill. Contact data remains unread and unprinted.
+    2. Invoke /sekai-triage-feedback --dry-run. If zero rows exist, exit successfully. If a
+       plan exists, stop after displaying it and require the maintainer to open that run and
+       explicitly approve the exact plan in the same session.
+    3. After approval, invoke live mode, preserve the skill's re-read and byte-identical plan
+       check, execute one row at a time, and verify every D1 result. A saved prompt, trigger,
+       silence, or standing approval is rejected.
+    4. Add network-free contract tests proving dry-run writes nothing, the first session turn
+       stops before writes, changed inputs invalidate approval, and contact never appears.
+  Acceptance: a seeded D1 row produces a complete no-write plan automatically; explicit
+    approval in that run leads to exactly one GitHub issue/comment and the verified D1 state;
+    no approval produces no GitHub or D1 write
+  Downstream: 12.3
+
+[12.2] Live social adapter + scheduled approved-snippet publishing
+  Effort: M | Model: Opus | Depends: 11.1, 6.2 + a real instance account exists and
+    features.social is enabled; not Phase 8
+  Est: AI 2.5h + 0.5h review | Human 0.5h (account/API setup and first post verification)
+  Decision: the real account selects one platform and its current API. No adapter is built
+    before that trigger. Human approval remains the pending-to-approved queue edit.
+  Steps:
+    1. Revalidate the selected platform's API, auth, scopes, rate limits, idempotency, and
+       content limits. Implement one reviewed adapter beside manual-adapter.mjs; credentials
+       come only from the native Routine environment.
+    2. Use the queue entry id as the platform idempotency key, or implement an equivalent
+       remote lookup that returns the original post URL on retry. A failed PR or rerun must
+       never duplicate an already-live post.
+    3. Add a scheduled native Routine template that invokes npm run snippet:publish only for
+       approved entries, opens a PR recording posted + URL, and leaves pending, rejected, and
+       posted entries untouched. Content is never drafted or approved by this routine.
+    4. Add fixture tests for auth failure, rate limit, remote success + local PR failure,
+       retry reconciliation, over-length refusal, and pending-entry non-reachability.
+  Acceptance: an approved snippet posts exactly once to the live account and its URL reaches
+    the queue through a PR; rerunning after a planted local failure records the same URL and
+    creates no second post; pending/unapproved entries never reach the adapter
+  Downstream: 12.3
+
+[12.3] Phase 12 exit gate: ship the tag, adopt it in the instance, prove both integrations
+  Effort: S | Model: Opus | Depends: 12.1, 12.2
+  Est: AI 0.5h + 0.25h review | Human 0.5h (feedback approval and live social post)
+  Execution repo: the instance (every commit); the tag is cut in sekai-kb at verify of the
+    last framework task.
+  Steps:
+    1. Cut the sekai-kb release covering 12.1-12.2, with upgrade notes for the feedback
+       Routine environment and selected social adapter credentials.
+    2. Adopt it with /sekai-upgrade (real merge commit, instance-owned files untouched,
+       instance CI green, FRAMEWORK-VERSION bumped after verification).
+    3. Register both native Routines with only their named access. Approve one feedback plan
+       in its run session and verify GitHub + D1. Approve one snippet by hand, let the social
+       Routine post it, merge its queue-update PR, and verify the remote URL.
+  Acceptance: feedback approval and writes match the exact plan; the approved snippet exists
+    once remotely and once in the merged queue record; no direct push to main; no Phase 8 or
+    semiont/ input; maintainer phase confirm
+  Downstream: none - this closes the roadmap
+```
+
+_Phase 12 subtotal: AI 7.5h | Human 1.25h_
