@@ -4,10 +4,13 @@
 **Deciders:** Wilson Choi
 **Executes:** LB-61 (sekai-kb side) + LB-62 (instance #1 side)
 
+> **Scope extended by ADR 013 (2026-08-18).** Phase 12 is also a framework phase and uses
+> the same `dev_docs/` ownership and planning boundary described here.
+
 ## Context
 
-Phases 6-11 are framework feature phases whose code executes in `sekai-kb` (ADR 004,
-ADR 005). Their product intent, architecture contracts, delivery blocks, and accepted
+Phases 6-12 are framework feature phases whose code executes in `sekai-kb` (ADR 004,
+ADR 005, ADR 013). Their product intent, architecture contracts, delivery blocks, and accepted
 decisions were all written in instance #1's repository, because that is where the
 framework was built before it was cut out (ADR 002, held there as its own history).
 
@@ -81,7 +84,7 @@ lands, which is the only routing information a session needs.
 ## Consequences
 
 - A framework session resolves its contracts from its own checkout. `/dev:plan` for
-  phases 6-11 reads and amends `sekai-kb/dev_docs/ROADMAP.md`.
+  phases 6-12 reads and amends `sekai-kb/dev_docs/ROADMAP.md`.
 - The two repositories hold the same four paths with different content and different
   owners. That is intended, and `merge=ours` on the instance side is what keeps it
   stable. Until LB-62 lands, both repositories carry copies; that intermediate state is

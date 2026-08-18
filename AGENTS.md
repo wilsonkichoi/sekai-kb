@@ -212,7 +212,7 @@ default):
 - [`dev_docs/SPEC.md`](dev_docs/SPEC.md) + [`dev_docs/adr/`](dev_docs/adr/) —
   engineering SSOT: architecture, contracts, risk controls, negative requirements,
   accepted decisions.
-- [`dev_docs/ROADMAP.md`](dev_docs/ROADMAP.md) — delivery SSOT: the phase 6-11 task
+- [`dev_docs/ROADMAP.md`](dev_docs/ROADMAP.md): delivery SSOT, the phase 6-12 task
   blocks `/dev:plan` converts packets from.
 - [`dev_docs/diagrams/`](dev_docs/diagrams/) — architecture diagrams (draw.io), the
   engineering source of truth.

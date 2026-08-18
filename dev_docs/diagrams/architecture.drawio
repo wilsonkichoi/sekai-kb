@@ -24,7 +24,7 @@
             <mxGeometry height="54" width="164" x="35" y="427" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="semiont/ plugin layer — optional&#xa;config.json + organs: memory, reflexes, manifesto,&#xa;diary, routine, introspection&#xa;RULE: site builds with this directory deleted" mermaidId="n:semiont" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="semiont/ plugin layer — optional&#xa;config.json + organs: memory, reflexes, manifesto,&#xa;diary, routine, introspection&#xa;RULE: site builds with this directory deleted" id="6">
+        <UserObject label="semiont/ plugin layer: optional&#xa;config.json + organs: memory, reflexes, manifesto,&#xa;diary, introspection&#xa;RULE: site builds with this directory deleted" mermaidId="n:semiont" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="semiont/ plugin layer: optional&#xa;config.json + organs: memory, reflexes, manifesto,&#xa;diary, introspection&#xa;RULE: site builds with this directory deleted" id="6">
           <mxCell parent="2" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="112" width="426" x="369" y="45" as="geometry" />
           </mxCell>
@@ -117,6 +117,11 @@
             <mxGeometry height="93" width="350" x="43" y="245" as="geometry" />
           </mxCell>
         </UserObject>
+        <UserObject label="Claude Code cloud Routines: optional&#xa;scheduled or GitHub-triggered agentic work&#xa;repository changes ship through PRs" mermaidId="n:routines" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Claude Code cloud Routines: optional&#xa;scheduled or GitHub-triggered agentic work&#xa;repository changes ship through PRs" id="44">
+          <mxCell parent="1" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
+            <mxGeometry height="93" width="350" x="43" y="100" as="geometry" />
+          </mxCell>
+        </UserObject>
         <UserObject label="Readers — humans" mermaidId="n:readers" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Readers — humans" id="20">
           <mxCell parent="1" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="54" width="192" x="1205" y="1390" as="geometry" />
@@ -142,6 +147,13 @@
               <Array as="points">
                 <mxPoint x="873" y="373" />
               </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
+        <UserObject label="PR-only maintenance" mermaidId="e:routines-&gt;knowledge#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=1;exitY=0.73;entryX=0;entryY=0.1;" mermaidBaseValue="PR-only maintenance" id="45">
+          <mxCell edge="1" parent="1" source="44" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=1;exitY=0.73;entryX=0;entryY=0.1;" target="4">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points" />
             </mxGeometry>
           </mxCell>
         </UserObject>

@@ -52,7 +52,7 @@ sequencing was itself a decision (ADR 002):
 | Readers of an adopted instance | Curated, fact-checked local knowledge at the inherited editorial bar; graph, map, and client-side search |
 | AI consumers of an adopted instance | `/llms.txt` → `/kb/topics.json` → `/kb/articles/{slug}.md`: a lazy-loading knowledge protocol, one HTTP request per article, no clone required (SPEC `Build pipeline`); tool-using MCP clients reach the same corpus over one remote MCP connection (`workers/mcp/`, Phase 9, ADR 005) |
 | Instance contributors | Plain-Markdown SSOT under `knowledge/`, quality tooling (article-health, link and frontmatter checks), and a tracker-driven contribution workflow |
-| Instance operators | An optional autonomous operations layer (Phase 11 routines) that maintains the instance without burnout, shipping only through verified PR merges. **Not yet delivered and unscheduled** (ADR 011); the framework ships no routine substrate today, and what an operator has in the meantime is the manual lifecycle the skills and runbook cover |
+| Instance operators | An optional operations layer that maintains the instance without burnout: GitHub Actions for deterministic jobs and native Claude Code cloud Routines for agentic work, shipping repository changes only through verified PR merges. **Not yet delivered; Phase 11 is next** (ADR 013). Phase 12 keeps approval-gated feedback triage and real-account-gated social publishing separate, with no dependency on Semiont |
 | Framework maintainers | One template repository, an immutable-tag release train, and a genericity gate that fails CI rather than a convention that erodes |
 
 ## North star
@@ -68,7 +68,7 @@ Phase-gated proof points rather than a single metric. Each is a ROADMAP exit gat
   the merged site verifies (ADR 004; part of every phase's exit gate).
 - **Genericity:** the machine gates pass in template mode over the whole tree, so the
   template provably ships zero place-specific strings and zero CJK codepoints.
-- **Operations (extension, ADR 005):** two autonomous routines live for at least one week,
+- **Operations (extension, ADR 005/013):** two autonomous routines live for at least one week,
   shipping only via verified PR merges with zero direct pushes to main.
 
 ## Non-goals
@@ -78,11 +78,11 @@ to conflict with a non-goal, surface the conflict to the maintainer (per
 `.agent-toolkit/dev.md`), never silently trim the packet.
 
 - **No paid hosting or infra services** (SPEC `Deployment`): GitHub Pages + Cloudflare
-  free tier + Workers free tier only. AI compute for development and Phase-11 routines
+  free tier + Workers free tier only. AI compute for development and Phase-11/12 routines
   rides an existing Claude subscription or API budget — the same cost class as the
-  development process itself, not an infra service (ADR 005).
+  development process itself, not an infra service (ADR 005/013).
 - **No direct-push automation**: routines never bypass the PR + CI gate; the inherited
-  fork's push-to-main routine model is explicitly not adopted (ADR 005).
+  fork's push-to-main routine model is explicitly not adopted (ADR 005/013).
 - **No fork continuation and no upstream merging** — improvements to the codebase the
   framework was extracted from are deliberate idea cherry-picks, never merges.
 - **No build-time OG generation, ever** — a static default image until the Phase 7
@@ -104,7 +104,8 @@ to conflict with a non-goal, surface the conflict to the maintainer (per
   is English-calibrated, Latin-script content largely works, CJK is unsupported until
   that revisit — stated plainly in the adopter docs.
 - **Semiont is optional**: the site must build with the `semiont/` directory deleted;
-  every organ beyond the minimal core is opt-in (ADR 003).
+  every organ beyond the minimal core is opt-in. Operational automation does not depend
+  on Semiont, and Semiont carries no ROUTINE organ (ADR 003/013).
 - **The framework does not own an instance's content, identity, or history.** Place
   identity flows only through `place.config.ts`, `knowledge/`, and `public/media/`; an
   instance's changelog, version, and agent instructions are instance-owned and survive
@@ -123,6 +124,12 @@ to conflict with a non-goal, surface the conflict to the maintainer (per
   conflict-free upgrades, not because the local edit is forbidden.
 
 ## Change log
+
+- **2026-08-18, ADR 013 operations decoupled from Semiont:** Phase 11 becomes the next
+  active phase on GitHub Actions plus native Claude Code cloud Routines. Phase 8 remains
+  deferred and loses its downstream relationship to operations. Approval-gated feedback
+  triage and real-account-gated social publishing move to an unscheduled Phase 12 that has
+  no Phase 8 dependency. The operations north star and PR-only shipping rule are unchanged.
 
 - **2026-08-10, LB-92 adopter edit rights:** "framework-owned" is now stated as a default
   plus an upgrade contract rather than an access boundary, with a single dividing line for
