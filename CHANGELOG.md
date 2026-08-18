@@ -43,6 +43,24 @@ tags, never framework `main`** (ADR 004, SPEC
 
 ## [Unreleased]
 
+### Changed
+
+- **The CI-enforcement paragraph in `.agent-toolkit/dev.md` now describes the
+  repository ruleset that exists.** It asserted, as of a 2026-07-25 check, that
+  `main` carried no branch protection and that no job was a GitHub *required status
+  check*. Repository ruleset `main` (id 19710528) now requires all four
+  `deploy.yml` jobs — `Genericity + English-only gates`, `Test`, `Build`,
+  `Init wizard self-check` — as status checks on the default branch, so they block
+  the merge as well as the deploy. The classic `branches/main/protection` endpoint
+  returns 404 under a ruleset, which is how the earlier check missed it, so the
+  paragraph now names `gh api repos/wilsonkichoi/sekai-kb/rulesets` as the query
+  and records that a required context is matched by job `name:` — renaming a job in
+  `deploy.yml` without updating the ruleset leaves every PR unmergeable. The job
+  graph (`build` needs `test`, `deploy` needs `build`) is still what the paragraph
+  relies on, because a ruleset is a repository setting changeable without a commit
+  here. No code or workflow changed. `.agent-toolkit/**` is stripped at adoption and
+  carries `merge=ours`, so this reaches no instance.
+
 ## [1.1.10] — 2026-08-17
 
 Wires @astrojs/sitemap and a generated robots.txt into every build, guarded by postbuild:smoke, and pins the dev-plugin rules action at dev-v0.0.78.

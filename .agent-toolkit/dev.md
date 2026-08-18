@@ -184,10 +184,15 @@ warns.
 The step lives in the `test` job of `.github/workflows/deploy.yml`, which runs on
 every pull request and every push to `main`. What enforces it is the job graph:
 `build` needs `test` and `deploy` needs `build`, so a red `test` blocks the Pages
-deploy no matter how branch protection is configured. (Checked 2026-07-25: `main`
-carried no branch protection, so no job was a GitHub *required status check*
-either. That is a repository setting, changeable without a commit here, which is
-why the job graph is what this paragraph relies on.)
+deploy no matter how branch protection is configured. (Checked 2026-08-17:
+repository ruleset `main` (id 19710528) requires all four of these jobs as status
+checks on the default branch, so they also block the merge. Query it with
+`gh api repos/wilsonkichoi/sekai-kb/rulesets` — the classic
+`branches/main/protection` endpoint returns 404 under a ruleset. That is a
+repository setting, changeable without a commit here, which is why the job graph
+is what this paragraph relies on. A required context is matched by job `name:`,
+so renaming a job in `deploy.yml` without updating the ruleset leaves every PR
+unmergeable.)
 
 The action detects `.agent-toolkit/dev.md` itself and skips with exit 0 when it is
 absent, so an adopter stripped by `npm run init` needs no shell guard on the gate;
